@@ -1,0 +1,10 @@
+Note! I haven't setup a working Makefile yet.
+
+1. Run the conda_create.sh
+   $ ./conda_create.sh
+
+2. Activate conda env
+   $ conda activate pdx
+
+3. Insall the reaining packages with Makefile
+   $ make requirements

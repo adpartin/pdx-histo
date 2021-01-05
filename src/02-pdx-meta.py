@@ -126,7 +126,9 @@ pprint(aa)
 
 c = 'tumor_site_from_data_src'
 print(df_mrg[c].nunique())
-tt = df_mrg.groupby([c]).agg({'patient_id': 'nunique', 'specimen_id': 'nunique', 'image_id': 'nunique'}).reset_index()
+tt = df_mrg.groupby([c]).agg({'patient_id': 'nunique', 
+                              'specimen_id': 'nunique', 
+                              'image_id': 'nunique'}).reset_index()
 pprint(tt)
 
 # print(df_mrg['simplified_tumor_site'].nunique())
@@ -134,7 +136,9 @@ pprint(tt)
 
 c = 'tumor_type_from_data_src'
 print(df_mrg[c].nunique())
-tt = df_mrg.groupby(['tumor_type_from_data_src']).agg({'patient_id': 'nunique', 'specimen_id': 'nunique', 'image_id': 'nunique'}).reset_index()
+tt = df_mrg.groupby(['tumor_type_from_data_src']).agg({'patient_id': 'nunique', 
+                                                       'specimen_id': 'nunique', 
+                                                       'image_id': 'nunique'}).reset_index()
 pprint(tt)
 
 # print(df_mrg['simplified_tumor_type'].nunique())
