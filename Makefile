@@ -18,3 +18,11 @@ clean:
 	# find -iname "*.pyc" -delete
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
+
+build:
+	python src/get_meta_from_slides.py
+	python src/merge_meta_files.py
+	python src/build_df.py
+
+tile:
+	python src/tiling.py
