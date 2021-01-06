@@ -40,7 +40,10 @@ print(dirpath)
 datapath = dirpath/'../data'
 slidespath = datapath/'doe-globus-pdx-data'  # path to raw WSI slides
 metapath = datapath/'meta'
-crossref_meta_fname = 'ImageID_PDMRID_CrossRef.csv'  # comes with the svs slides
+# crossref_meta_fname = 'ImageID_PDMRID_CrossRef.csv'  # comes with the svs slides
+crossref_meta_fname = '_ImageID_PDMRID_CrossRef.xlsx'  # comes with the svs slides
+
+import ipdb; ipdb.set_trace(context=11)
 
 # Glob slides
 slides_path_list = glob.glob(os.path.join(slidespath, '*.svs'))
@@ -49,7 +52,8 @@ print(f'Total slides: {len(slides_path_list)}')
 
 # Confirm that svs file names match and the 'Image ID' column in excel file
 s1 = set([int(os.path.basename(x).split('.')[0]) for x in slides_path_list])
-df_img = pd.read_csv(metapath/crossref_meta_fname)
+# df_img = pd.read_csv(metapath/crossref_meta_fname)
+df_img = pd.read_excel(metapath/'_ImageID_PDMRID_CrossRef.xlsx', engine='openpyxl', header=2)
 df_img = df_img.rename(columns={'Image ID': 'image_id'})
 df_img = df_img.dropna(axis=0, how='all').reset_index(drop=True)
 df_img['image_id'] = [int(x) if ~np.isnan(x) else x for x in df_img['image_id'].values]
