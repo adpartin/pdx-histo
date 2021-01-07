@@ -114,7 +114,15 @@ if __name__ == "__main__":
     data = data.merge(dd, left_on='Drug1', right_on='ID', how='inner').reset_index(drop=True)
     data = data.merge(meta.drop(columns=['patient_id', 'specimen_id', 'sample_id']), on='Sample', how='inner').reset_index(drop=True)
     data = data.sample(frac=1.0, random_state=0, axis=0).reset_index(drop=True)
-    print('Final dataframe', data.shape)
+    
+    def check_prfx(x):
+        return True if x.startswith('ge_') or x.startswith('dd_') else False
+        
+    # Re-org columns
+    meta_df = data.drop(columns=[c for c in data.columns if check_prfx(c)])
+    fea_df = data.drop(columns=meta_df.columns)
+    data = pd.concat([meta_df, fea_df], axis=1)
+    print('Final dataframe {}'.format(data.shape))
 
     # save
     data.to_csv(dirpath/'../data/data_merged.csv', index=False)
