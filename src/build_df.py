@@ -1,5 +1,7 @@
 """
-Build df from the following datasets:
+Build df and save in  ../data/data_merged.csv
+
+Use the following datasets to build the df:
     - pdx drug response data
     - rna expression
     - mordred drug descriptors
@@ -7,11 +9,12 @@ Build df from the following datasets:
 """
 
 import os
+import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
 import glob
 from pprint import pprint
+import pandas as pd
+import numpy as np
 
 
 dirpath = Path(__file__).resolve().parent

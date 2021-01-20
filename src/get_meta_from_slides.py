@@ -1,18 +1,20 @@
 """ 
-Extract metadata from wsi slides.
+Extract metadata from wsi slides and save the summary
+in ../data/meta/meta_from_wsi_slides.
 """
 
 import os
+import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
 import glob
 from pprint import pprint
+import pandas as pd
+import numpy as np
 
 import openslide
-from deephistopath.wsi import filter
+# from deephistopath.wsi import filter
 from deephistopath.wsi import slide
-from deephistopath.wsi import tiles
+# from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
 
@@ -108,6 +110,7 @@ if __name__ == "__main__":
         ignore_property = ['aperio.User', 'openslide.comment',
                            'openslide.quickhash-1', 'tiff.ImageDescription']
         meta = {pname: s.properties[pname] for pname in s.properties if pname not in ignore_property}
+        meta.update({'memory': os.path.getsize(sname)})  # get the disk memory the file takes
         meta_list.append(meta)  # append dict with slide meta to a list
         del s
         

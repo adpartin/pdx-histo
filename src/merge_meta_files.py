@@ -1,5 +1,5 @@
 """
-Merge three metadata files to create ../data/meta/meta_merged.csv:
+Merge 3 metadata files to create ../data/meta/meta_merged.csv:
 
 1. _ImageID_PDMRID_CrossRef.xlsx:  meta comes with PDX slides; crossref
 2. PDX_Meta_Information.csv:       meta from Yitan; pdx_meta
@@ -12,11 +12,12 @@ The missing samples either don't have response data or expression data.
 """
 
 import os
+import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
 import glob
 from pprint import pprint
+import pandas as pd
+import numpy as np
 
 
 dirpath = Path(__file__).resolve().parent
@@ -59,7 +60,7 @@ def _explore(cref, pdx):
     pprint(df_miss)
 
 
-def _stats(df_mrg):
+def stats(df_mrg):
     """ Local func to exolore intermediate data. """
 
     aa = df_mrg.groupby(['patient_id', 'specimen_id']).agg({'image_id': 'nunique'}).reset_index().sort_values(by=['patient_id', 'specimen_id'])
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     # import ipdb; ipdb.set_trace(context=11)
     # _explore(cref, pdx)
 
-    # 
+    #
     # Merge crossref and pdx_meta
     #
     df_mrg = cref.merge(pdx, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
@@ -175,7 +176,3 @@ if __name__ == "__main__":
 
     df_final.to_csv(metapath/'meta_merged.csv', index=False)
     print('\nDone.')
-
-
-
-

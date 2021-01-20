@@ -29,8 +29,10 @@ import sys
 from deephistopath.wsi import util
 from deephistopath.wsi.util import Time
 
+fpath = os.path.dirname(os.path.abspath(__file__))
+
 ## BASE_DIR = os.path.join(".", "data")  ## ap
-BASE_DIR = os.path.join("..", "data")  ## ap
+BASE_DIR = os.path.join(fpath, "..", "..", "..", "data")  ## ap
 # BASE_DIR = os.path.join(os.sep, "Volumes", "BigData", "TUPAC")
 ## TRAIN_PREFIX = "TUPAC-TR-"  ## ap
 TRAIN_PREFIX = "pdx-"  ## ap
@@ -38,7 +40,8 @@ SRC_TRAIN_DIR = os.path.join(BASE_DIR, "training_slides")
 SRC_TRAIN_EXT = "svs"
 DEST_TRAIN_SUFFIX = ""  # Example: "train-"
 DEST_TRAIN_EXT = "png"
-SCALE_FACTOR = 32
+## SCALE_FACTOR = 32
+SCALE_FACTOR = 16  ## ap
 DEST_TRAIN_DIR = os.path.join(BASE_DIR, "training_" + DEST_TRAIN_EXT)
 THUMBNAIL_SIZE = 300
 THUMBNAIL_EXT = "jpg"
@@ -141,7 +144,9 @@ def get_training_slide_path(slide_number):
   """
   ## padded_sl_num = str(slide_number).zfill(3)
   ## slide_filepath = os.path.join(SRC_TRAIN_DIR, TRAIN_PREFIX + padded_sl_num + "." + SRC_TRAIN_EXT)
+
   slide_filepath = os.path.join(SRC_TRAIN_DIR, str(slide_number) + "." + SRC_TRAIN_EXT) ## ap
+
   return slide_filepath
 
 

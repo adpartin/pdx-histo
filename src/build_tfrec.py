@@ -43,7 +43,10 @@ dirpath = Path(__file__).resolve().parent
 
 
 def calc_records_in_tfr_folder(tfr_dir):
-    """ Calc total number of examples (tiles) in all tfrecords. """
+    """
+    Calc and print the number of examples (tiles) in all tfrecords in the
+    input folder.
+    """
     count = 0
     for tfr_path in sorted(tfr_dir.glob('*.tfrec*')):
         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
@@ -51,7 +54,10 @@ def calc_records_in_tfr_folder(tfr_dir):
 
     
 def calc_examples_in_tfrecord(tfr_path):
-    """ Calc total number of examples (tiles) in all tfrecords. """
+    """
+    Calc and print the number of examples (tiles) in the input tfrecord
+    file provided by the path to the file.
+    """
     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
     print('Number of examples in the tfrecord:', count)
 
@@ -65,15 +71,20 @@ def show_img(img, title=None):
     
     
 def show_images(img_list, ncols=4):
-    """ Show  single image tile. """
+    """ Show a few image tiles. """
     fig, ax = plt.subplots(nrows=1, ncols=ncols, figsize=(15, 20))
     
     for i, img_id in enumerate(np.random.randint(0, len(img_list), ncols)):
-        ax[i].imshow(img_list[img_id]['image']); ax[i].axis("off"); ax[i].set_title(img_list[img_id]['slide'])
+        ax[i].imshow(img_list[img_id]['image']);
+        ax[i].axis("off");
+        ax[i].set_title(img_list[img_id]['slide'])
         
         
-def encode_type(df, label_name, label_value):
-    """ 
+def encode_categorical(df, label_name, label_value):
+    """
+    The label_name and label_value are columns in df which, respectively,
+    correspond to the name and value of a categorical variable.
+    
     Args:
         label_name:  name of the label
         label_value: numerical value assigned to the label
@@ -92,8 +103,7 @@ if __name__ == "__main__":
     import ipdb; ipdb.set_trace(context=11)
     
     data = pd.read_csv(datapath/'data_merged.csv')
-    csite_enc = encode_type(df=data, label_name='csite', label_value='csite_label')
-    ctype_enc = encode_type(df=data, label_name='ctype', label_value='ctype_label')
+    csite_enc = encode_categorical(df=data, label_name='csite', label_value='csite_label')
+    ctype_enc = encode_categorical(df=data, label_name='ctype', label_value='ctype_label')
     CSITE_NUM_CLASSES = len(csite_enc.keys())
     CTYPE_NUM_CLASSES = len(ctype_enc.keys())
-
