@@ -1,11 +1,9 @@
 """
-Build df and save in  ../data/data_merged.csv
-
-Use the following datasets to build the df:
-    - pdx drug response data
-    - rna expression
-    - mordred drug descriptors
-    - metadata
+Build df using the following files and save in ../data/data_merged.csv:
+* pdx drug response data
+* rna expression
+* mordred drug descriptors
+* metadata
 """
 
 import os
@@ -21,6 +19,7 @@ dirpath = Path(__file__).resolve().parent
 
 
 def load_rsp(rsp_dpath, verbose=False):
+    """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
 
     # Keep single drug samples
@@ -43,6 +42,7 @@ def load_rsp(rsp_dpath, verbose=False):
 
 
 def load_rna(rna_dpath, verbose=False):
+    """ Load RNA-Seq data. """
     rna = pd.read_csv(rna_dpath, sep='\t')
     rna = rna[ rna.Sample.map(lambda x: x.split('.')[0]) == 'NCIPDM' ].reset_index(drop=True)
     rna = rna.sort_values(by='Sample', ascending=True)
@@ -56,6 +56,7 @@ def load_rna(rna_dpath, verbose=False):
 
 
 def load_dd(dd_dpath, verbose=False):
+    """ Load drug descriptors. """
     dd = pd.read_csv(dd_dpath, sep='\t')
     
     if verbose:
@@ -65,6 +66,7 @@ def load_dd(dd_dpath, verbose=False):
 
 
 def load_meta(meta_dpath, verbose=False):
+    """ Load the combined metadata. """
     meta = pd.read_csv(meta_dpath)
 
     # Add the 'Sample' column
@@ -128,5 +130,6 @@ if __name__ == "__main__":
     print('Final dataframe {}'.format(data.shape))
 
     # save
+    print('\nSave merged dataframe in csv.')
     data.to_csv(dirpath/'../data/data_merged.csv', index=False)
-    print('\nDone.')
+    print('Done.')

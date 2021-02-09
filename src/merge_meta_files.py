@@ -174,5 +174,7 @@ if __name__ == "__main__":
     print('df_final:    {}\n'.format(df_final.shape))
     pprint(df_final[:3])
 
+    # Save
+    print('\nSave merged metadata in csv.')
     df_final.to_csv(metapath/'meta_merged.csv', index=False)
-    print('\nDone.')
+    print('Done.')

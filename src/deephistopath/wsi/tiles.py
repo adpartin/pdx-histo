@@ -143,11 +143,13 @@ def create_summary_pil_img(np_img, title_area_height, row_tile_size, col_tile_si
   """
   r = row_tile_size * num_row_tiles + title_area_height
   c = col_tile_size * num_col_tiles
+  # create placeholder for the summary image
   summary_img = np.zeros([r, c, np_img.shape[2]], dtype=np.uint8)
   # add gray edges so that tile text does not get cut off
   summary_img.fill(120)
   # color title area white
   summary_img[0:title_area_height, 0:summary_img.shape[1]].fill(255)
+  # insert the downsampled slide image into the summary image
   summary_img[title_area_height:np_img.shape[0] + title_area_height, 0:np_img.shape[1]] = np_img
   summary = util.np_to_pil(summary_img)
   return summary
@@ -179,8 +181,10 @@ def generate_tile_summaries(tile_sum, np_img, display=True, save_summary=False):
   draw_orig = ImageDraw.Draw(summary_orig)
 
   for t in tile_sum.tiles:
+    # determine border color of the tile based on percentage of tissue
     border_color = tile_border_color(t.tissue_percentage)
-    tile_border(draw, t.r_s + z, t.r_e + z, t.c_s, t.c_e, border_color)
+    # draw border around the tile
+    tile_border(draw,      t.r_s + z, t.r_e + z, t.c_s, t.c_e, border_color)
     tile_border(draw_orig, t.r_s + z, t.r_e + z, t.c_s, t.c_e, border_color)
 
   summary_txt = summary_title(tile_sum) + "\n" + summary_stats(tile_sum)
@@ -520,10 +524,16 @@ def summary_and_tiles(slide_num, display=True, save_summary=False, save_data=Tru
   np_img = slide.open_image_np(img_path)
 
   tile_sum = score_tiles(slide_num, np_img)
+
+  # Save tile info csv
   if save_data:
     save_tile_data(tile_sum)
-  generate_tile_summaries(tile_sum, np_img, display=display, save_summary=save_summary)
+
+  # generate heatmap image
+  generate_tile_summaries(    tile_sum, np_img, display=display, save_summary=save_summary)
   generate_top_tile_summaries(tile_sum, np_img, display=display, save_summary=save_summary)
+
+  # Finally, save each tile to png file
   if save_top_tiles:
     for tile in tile_sum.top_tiles():
       tile.save_tile()
@@ -557,6 +567,12 @@ def save_tile_data(tile_summary):
   csv_file = open(data_path, "w")
   csv_file.write(csv)
   csv_file.close()
+
+  # (ap) save csv in tabular format
+  import pandas as pd
+  df = pd.read_csv(data_path, header=12)
+  dpath = os.path.join(os.path.dirname(data_path), 'ap-' + data_path.split(os.sep)[-1])
+  df.to_csv(dpath, index=False)
 
   print("%-20s | Time: %-14s  Name: %s" % ("Save Tile Data", str(time.elapsed()), data_path))
 
@@ -636,6 +652,10 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
   Returns:
     TileSummary object which includes a list of Tile objects containing information about each tile.
   """
+  # o_w: original width
+  # o_h: original height
+  # w:   downsampled (new) width
+  # h:   downsampled (new) height
   if dimensions is None:
     img_path = slide.get_filter_image_result(slide_num)
     o_w, o_h, w, h = slide.parse_dimensions_from_image_filename(img_path)
@@ -645,10 +665,15 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
   if np_img is None:
     np_img = slide.open_image_np(img_path)
 
+  # obtain tile dimensions in the downsampled image space
+  # TODO (ap) shouldn't this be floor?? seem that round complicates the downstream analysis.
   row_tile_size = round(ROW_TILE_SIZE / slide.SCALE_FACTOR)  # use round?
   col_tile_size = round(COL_TILE_SIZE / slide.SCALE_FACTOR)  # use round?
 
-  num_row_tiles, num_col_tiles = get_num_tiles(h, w, row_tile_size, col_tile_size)
+  num_row_tiles, num_col_tiles = get_num_tiles(rows=h,
+                                               cols=w,
+                                               row_tile_size=row_tile_size,
+                                               col_tile_size=col_tile_size)
 
   tile_sum = TileSummary(slide_num=slide_num,
                          orig_w=o_w,
@@ -668,12 +693,15 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
   medium = 0
   low = 0
   none = 0
-  tile_indices = get_tile_indices(h, w, row_tile_size, col_tile_size)
+  tile_indices = get_tile_indices(rows=h,
+                                  cols=w,
+                                  row_tile_size=row_tile_size,
+                                  col_tile_size=col_tile_size)
   for t in tile_indices:
-      ## t = (starting row, ending row, starting column, ending column, row number, column number)
+      ## t = (start row, end row, start column, end column, row number, column number)
     count += 1  # tile_num
     r_s, r_e, c_s, c_e, r, c = t
-    np_tile = np_img[r_s:r_e, c_s:c_e]
+    np_tile = np_img[r_s:r_e, c_s:c_e]  # get a tile
     t_p = filter.tissue_percent(np_tile)
     amount = tissue_quantity(t_p)
     if amount == TissueQuantity.HIGH:
@@ -684,6 +712,9 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
       low += 1
     elif amount == TissueQuantity.NONE:
       none += 1
+    # Map a downsampled pixel width and height to the corresponding pixel of
+    # the original whole-slide image.
+    # original_col_start, original_row_start, original_col_end, original_row_end
     o_c_s, o_r_s = slide.small_to_large_mapping((c_s, r_s), (o_w, o_h))
     o_c_e, o_r_e = slide.small_to_large_mapping((c_e, r_e), (o_w, o_h))
 
@@ -696,8 +727,9 @@ def score_tiles(slide_num, np_img=None, dimensions=None, small_tile_in_tile=Fals
     score, color_factor, s_and_v_factor, quantity_factor = score_tile(np_tile, t_p, slide_num, r, c)
 
     np_scaled_tile = np_tile if small_tile_in_tile else None
-    tile = Tile(tile_sum, slide_num, np_scaled_tile, count, r, c, r_s, r_e, c_s, c_e, o_r_s, o_r_e, o_c_s,
-                o_c_e, t_p, color_factor, s_and_v_factor, quantity_factor, score)
+    tile = Tile(tile_sum, slide_num, np_scaled_tile, count,
+                r, c, r_s, r_e, c_s, c_e, o_r_s, o_r_e, o_c_s, o_c_e,
+                t_p, color_factor, s_and_v_factor, quantity_factor, score)
     tile_sum.tiles.append(tile)
 
   tile_sum.count = count
@@ -819,7 +851,8 @@ def image_range_to_tiles(start_ind, end_ind, display=False, save_summary=True, s
   return image_num_list, tile_summaries_dict
 
 
-def singleprocess_filtered_images_to_tiles(display=False, save_summary=True, save_data=True, save_top_tiles=True,
+def singleprocess_filtered_images_to_tiles(display=False, save_summary=True,
+                                           save_data=True, save_top_tiles=True,
                                            html=True, image_num_list=None):
   """
   Generate tile summaries and tiles for training images using a single process.
@@ -836,11 +869,18 @@ def singleprocess_filtered_images_to_tiles(display=False, save_summary=True, sav
   print("Generating tile summaries\n")
 
   if image_num_list is not None:
-    image_num_list, tile_summaries_dict = image_list_to_tiles(image_num_list, display, save_summary, save_data,
+    image_num_list, tile_summaries_dict = image_list_to_tiles(image_num_list,
+                                                              display,
+                                                              save_summary,
+                                                              save_data,
                                                               save_top_tiles)
   else:
     num_training_slides = slide.get_num_training_slides()
-    image_num_list, tile_summaries_dict = image_range_to_tiles(1, num_training_slides, display, save_summary, save_data,
+    image_num_list, tile_summaries_dict = image_range_to_tiles(1,
+                                                               num_training_slides,
+                                                               display,
+                                                               save_summary,
+                                                               save_data,
                                                                save_top_tiles)
 
   print("Time to generate tile summaries: %s\n" % str(t.elapsed()))
@@ -849,7 +889,8 @@ def singleprocess_filtered_images_to_tiles(display=False, save_summary=True, sav
     generate_tiled_html_result(image_num_list, tile_summaries_dict, save_data)
 
 
-def multiprocess_filtered_images_to_tiles(display=False, save_summary=True, save_data=True, save_top_tiles=True,
+def multiprocess_filtered_images_to_tiles(display=False, save_summary=True,
+                                          save_data=True, save_top_tiles=True,
                                           html=True, image_num_list=None):
   """
   Generate tile summaries and tiles for all training images using multiple processes (one process per core).

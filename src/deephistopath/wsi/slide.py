@@ -229,7 +229,7 @@ def get_training_image_path(slide_number, large_w=None, large_h=None, small_w=No
     img_path = glob.glob(wildcard_path)[0]
   else:
     img_path = os.path.join(DEST_TRAIN_DIR, str(slide_number) + "-" + str(
-      SCALE_FACTOR) + "x-" + DEST_TRAIN_SUFFIX + str(
+     SCALE_FACTOR) + "x-" + DEST_TRAIN_SUFFIX + str(
       large_w) + "x" + str(large_h) + "-" + str(small_w) + "x" + str(small_h) + "." + DEST_TRAIN_EXT)
 
   return img_path
@@ -818,10 +818,11 @@ def training_slide_range_to_images(start_ind, end_ind):
 def trainig_slides_to_images(slides_path):
   """ ap replaces trainig_slide_range_to_images() """
 
-  train_images = glob.glob(os.path.join(slides_path, '*.svs'))  ## ap
+  train_images = glob.glob(os.path.join(slides_path, '*.svs'))
   for slide_filepath in train_images:
-    slide_num = int(os.path.basename(slide_filepath).split('.svs')[0])  ## ap
+    slide_num = int(os.path.basename(slide_filepath).split('.svs')[0])
     training_slide_to_image(slide_num)
+
   return None
 
 

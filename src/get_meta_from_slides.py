@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # crossref_meta_fname = 'ImageID_PDMRID_CrossRef.csv'  # comes with the svs slides
     crossref_meta_fname = '_ImageID_PDMRID_CrossRef.xlsx'  # comes with the svs slides
 
-    import ipdb; ipdb.set_trace(context=11)
+    # import ipdb; ipdb.set_trace(context=11)
 
     # Glob slides
     slides_path_list = glob.glob(os.path.join(slidespath, '*.svs'))
@@ -56,23 +56,23 @@ if __name__ == "__main__":
 
     # Confirm that svs file names match and the 'Image ID' column in excel file
     s1 = set([int(os.path.basename(x).split('.')[0]) for x in slides_path_list])
-    # df_img = pd.read_csv(metapath/crossref_meta_fname)
-    df_img = pd.read_excel(metapath/'_ImageID_PDMRID_CrossRef.xlsx', engine='openpyxl', header=2)
+    # df_img = pd.read_excel(metapath/crossref_meta_fname)  # csv
+    df_img = pd.read_excel(metapath/crossref_meta_fname, engine='openpyxl', header=2)  # excel
     df_img = df_img.rename(columns={'Image ID': 'image_id'})
     df_img = df_img.dropna(axis=0, how='all').reset_index(drop=True)
     df_img['image_id'] = [int(x) if ~np.isnan(x) else x for x in df_img['image_id'].values]
     s2 = set(df_img['image_id'].values)
 
-    print("SVS slides that are present in the folder but not in the 'Image ID'" \
+    print("SVS slides that are present in the folder but not in the 'Image ID' " \
           "column: {}".format(s1.difference(s2)))
-    print("Slide ids that are in the 'Image ID' column but not present in the" \
+    print("Slide ids that are in the 'Image ID' column but not present in the " \
           "folder:  {}".format(s2.difference(s1)))
 
     # Explore the Slide object
     s = slide.open_slide(slides_path_list[0])
-    print(f"\nFile type:  {type(s.properties)}")
-    print(f"Properties: {len(s.properties)}")
-    print(f"AppMag:     {s.properties['aperio.AppMag']}")  # access a property
+    print(f"\nFile type: {type(s.properties)}")
+    print(f"Properties:  {len(s.properties)}")
+    print(f"AppMag:      {s.properties['aperio.AppMag']}")  # access a property
     mag = int(s.properties['aperio.AppMag'])
 
     print(f"Level count:       {s.level_count}")         # access a property
@@ -95,11 +95,11 @@ if __name__ == "__main__":
     # Aggregate metadata into df from all slides
     # ------------------------------------------
 
-    import ipdb; ipdb.set_trace(context=11)
+    # import ipdb; ipdb.set_trace(context=11)
 
     t = util.Time()
     meta_list = []  # list of dicts
-    print_after = 1
+    print_after = 50
 
     for i, sname in enumerate(slides_path_list):
         if i % print_after == 0:
@@ -121,9 +121,9 @@ if __name__ == "__main__":
     meta_df = meta_df[cols]
     print('Shape', meta_df.shape)
     pprint(meta_df.T.iloc[:4, :7])
+    t.elapsed_display()
 
     # Save
+    print('\nSave slides metadata in csv.')
     meta_df.to_csv(metapath/'meta_from_wsi_slides.csv', index=False)
-
-    t.elapsed_display()
     print('Done.')

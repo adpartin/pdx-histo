@@ -1,5 +1,6 @@
 Note! I haven't setup a working Makefile yet.
 
+# Create the env
 1. Run the conda_create.sh
    $ ./conda_create.sh
 
@@ -8,3 +9,6 @@ Note! I haven't setup a working Makefile yet.
 
 3. Insall the reaining packages with Makefile
    $ make requirements
+
+# Activate the env
+source ./venv/bin/activate

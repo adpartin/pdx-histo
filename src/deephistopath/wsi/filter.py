@@ -1042,7 +1042,7 @@ def apply_image_filters(np_img, slide_num=None, info=None, save=False, display=F
                slide_num=slide_num,
                filter_num=1,
                display_text="Original",
-               file_text="rgb")
+               file_text="rgb")  ## saves the original image from data/training_png/... into data/filter_png/...
 
   mask_not_green = filter_green_channel(rgb)
   rgb_not_green = util.mask_rgb(rgb, mask_not_green)
@@ -1066,14 +1066,21 @@ def apply_image_filters(np_img, slide_num=None, info=None, save=False, display=F
 
   mask_gray_green_pens = mask_not_gray & mask_not_green & mask_no_red_pen & mask_no_green_pen & mask_no_blue_pen
   rgb_gray_green_pens = util.mask_rgb(rgb, mask_gray_green_pens)
-  save_display(save, display, info, rgb_gray_green_pens, slide_num, 7, "Not Gray, Not Green, No Pens",
-               "rgb-no-gray-no-green-no-pens")
+  save_display(save, display, info,
+               np_img=rgb_gray_green_pens,
+               slide_num=slide_num,
+               filter_num=7,
+               display_text="Not Gray, Not Green, No Pens",
+               file_text="rgb-no-gray-no-green-no-pens")
 
   mask_remove_small = filter_remove_small_objects(mask_gray_green_pens, min_size=500, output_type="bool")
   rgb_remove_small = util.mask_rgb(rgb, mask_remove_small)
-  save_display(save, display, info, rgb_remove_small, slide_num, 8,
-               "Not Gray, Not Green, No Pens,\nRemove Small Objects",
-               "rgb-not-green-not-gray-no-pens-remove-small")
+  save_display(save, display, info,
+               np_img=rgb_remove_small,
+               slide_num=slide_num,
+               filter_num=8,
+               display_text="Not Gray, Not Green, No Pens,\nRemove Small Objects",
+               file_text="rgb-not-green-not-gray-no-pens-remove-small")
 
   img = rgb_remove_small
   return img
