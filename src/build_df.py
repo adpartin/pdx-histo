@@ -18,9 +18,26 @@ import numpy as np
 dirpath = Path(__file__).resolve().parent
 
 
+def get_dups(df):
+    """ Return df of duplicates. """
+    df = df[df.duplicated(keep=False) == True]
+    return df
+
+
+def drop_dups(df, verbose=True):
+    """ Drop duplicates. """
+    n = df.shape[0]
+    df = df.drop_duplicates()
+    if verbose:
+        if df.shape[0] < n:
+            print(f'\nDropped {n - df.shape[0]} duplicates.\n')
+    return df
+
+
 def load_rsp(rsp_dpath, verbose=False):
     """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
+    rsp = drop_dups(rsp)
 
     # Keep single drug samples
     rsp = rsp[rsp['Drug2'].isna()].reset_index(drop=True)
@@ -44,6 +61,8 @@ def load_rsp(rsp_dpath, verbose=False):
 def load_rna(rna_dpath, verbose=False):
     """ Load RNA-Seq data. """
     rna = pd.read_csv(rna_dpath, sep='\t')
+    rna = drop_dups(rna)
+
     rna = rna[ rna.Sample.map(lambda x: x.split('.')[0]) == 'NCIPDM' ].reset_index(drop=True)
     rna = rna.sort_values(by='Sample', ascending=True)
     rna['Sample'] = rna['Sample'].map(lambda x: x.split('NCIPDM.')[1])
@@ -58,6 +77,7 @@ def load_rna(rna_dpath, verbose=False):
 def load_dd(dd_dpath, verbose=False):
     """ Load drug descriptors. """
     dd = pd.read_csv(dd_dpath, sep='\t')
+    dd = drop_dups(dd)
     
     if verbose:
         print(dd.shape)

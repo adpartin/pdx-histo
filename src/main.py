@@ -1,8 +1,10 @@
 """
 1. Tiling
    Generate tiles from slides (WSI files).
+   Done in tiling.py
 
 2. Build df that merges response, rna-seq, and desciptors.
+   Done in build_df.py
 
 3. Create tfrecords.
     For each slide, load the tiles, expression, and meta,

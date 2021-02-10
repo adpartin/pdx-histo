@@ -110,7 +110,7 @@ if __name__ == "__main__":
         ignore_property = ['aperio.User', 'openslide.comment',
                            'openslide.quickhash-1', 'tiff.ImageDescription']
         meta = {pname: s.properties[pname] for pname in s.properties if pname not in ignore_property}
-        meta.update({'memory': os.path.getsize(sname)})  # get the disk memory the file takes
+        meta.update({'disk_memory': os.path.getsize(sname)})  # get the disk memory the file takes
         meta_list.append(meta)  # append dict with slide meta to a list
         del s
         

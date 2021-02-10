@@ -23,6 +23,12 @@ import numpy as np
 dirpath = Path(__file__).resolve().parent
 
 
+def get_dups(df):
+    """ Return df of duplicates. """
+    df = df[df.duplicated(keep=False) == True]
+    return df
+
+
 def _explore(cref, pdx):
     """ Local func to exolore intermediate data. """
 
