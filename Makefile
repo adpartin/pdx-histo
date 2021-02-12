@@ -3,15 +3,31 @@
 
 # https://stackoverflow.com/questions/60115420/check-for-existing-conda-environment-in-makefile
 # http://blog.ianpreston.ca/2020/05/13/conda_envs.html
+
+# venv:
+# 	: # virtualenv venv
+# 	: # Create venv (dir) if it doesn't exist
+# 	test -d venv || virtualenv venv
+
+# req: venv
+# 	: # ./venv/bin/python -m pip install -r requirements.txt
+# 	: # Activate venv and install packges inside
+# 	. venv/bin/activate && pip install -r requirements.txt
+
+# Production
 venv:
 	: # virtualenv venv
-	: # Create venv if it doesn't exist
+	: # Create venv (dir) if it doesn't exist
 	test -d venv || virtualenv venv
-
-requirements: venv
 	: # ./venv/bin/python -m pip install -r requirements.txt
-	: # Activate venv and install smthing inside
+	: # Activate venv and install packges inside
 	. venv/bin/activate && pip install -r requirements.txt
+
+# Development
+dev-venv: venv
+	: # ./venv/bin/python -m pip install -r requirements-dev.txt
+	: # Activate venv and install packges inside
+	. venv/bin/activate && pip install -r requirements-dev.txt
 
 clean:
 	# rm -rf venv
