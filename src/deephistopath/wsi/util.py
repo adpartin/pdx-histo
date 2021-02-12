@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 ADDITIONAL_NP_STATS = False
 
 
-def pil_to_np_rgb(pil_img):
+def pil_to_np_rgb(pil_img, verbose=True):
   """
   Convert a PIL Image to a NumPy array.
 
@@ -36,7 +36,8 @@ def pil_to_np_rgb(pil_img):
   """
   t = Time()
   rgb = np.asarray(pil_img)
-  np_info(rgb, "RGB", t.elapsed())
+  if verbose:
+      np_info(rgb, "RGB", t.elapsed())
   return rgb
 
 

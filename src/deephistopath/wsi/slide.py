@@ -114,7 +114,7 @@ def open_image(filename):
   return image
 
 
-def open_image_np(filename):
+def open_image_np(filename, verbose=True):
   """
   Open an image (*.jpg, *.png, etc) as an RGB NumPy array.
 
@@ -125,7 +125,7 @@ def open_image_np(filename):
     A NumPy representing an RGB image.
   """
   pil_img = open_image(filename)
-  np_img = util.pil_to_np_rgb(pil_img)
+  np_img = util.pil_to_np_rgb(pil_img, verbose=verbose)
   return np_img
 
 
