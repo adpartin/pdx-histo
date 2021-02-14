@@ -18,7 +18,9 @@ from deephistopath.wsi import slide
 from deephistopath.wsi import util
 
 
-dirpath = Path(__file__).resolve().parent
+fdir = Path(__file__).resolve().parent
+
+DATADIR = fdir/'../data'
 
 
 def calc_eff_mpp(s, level=0, verbose=False):
@@ -40,10 +42,11 @@ def calc_eff_mpp(s, level=0, verbose=False):
 
 if __name__ == "__main__":
 
+    t = util.Time()
+
     # Path
-    datapath = dirpath/'../data'
-    slidespath = datapath/'doe-globus-pdx-data'  # path to raw WSI slides
-    metapath = datapath/'meta'
+    slidespath = DATADIR/'doe-globus-pdx-data'  # path to raw WSI slides
+    metapath = DATADIR/'meta'
     # crossref_meta_fname = 'ImageID_PDMRID_CrossRef.csv'  # comes with the svs slides
     crossref_meta_fname = '_ImageID_PDMRID_CrossRef.xlsx'  # comes with the svs slides
 
@@ -97,7 +100,6 @@ if __name__ == "__main__":
 
     # import ipdb; ipdb.set_trace(context=11)
 
-    t = util.Time()
     meta_list = []  # list of dicts
     print_after = 50
 
@@ -119,11 +121,11 @@ if __name__ == "__main__":
     meta_df = meta_df[[c for c in sorted(meta_df.columns)]]
     cols = ['aperio.ImageID'] + [c for c in meta_df.columns if c != 'aperio.ImageID']
     meta_df = meta_df[cols]
-    print('Shape', meta_df.shape)
+    print('\nShape', meta_df.shape)
     pprint(meta_df.T.iloc[:4, :7])
-    t.elapsed_display()
 
     # Save
     print('\nSave slides metadata in csv.')
     meta_df.to_csv(metapath/'meta_from_wsi_slides.csv', index=False)
+    t.elapsed_display()
     print('Done.')

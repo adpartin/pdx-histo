@@ -44,7 +44,9 @@ from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
 
-fpath = Path(__file__).resolve().parent
+fdir = Path(__file__).resolve().parent
+
+DATADIR = fdir/'../data'
 
 
 def get_slide_num_from_path(slide_filepath):
@@ -53,7 +55,8 @@ def get_slide_num_from_path(slide_filepath):
 
 # import ipdb; ipdb.set_trace(context=11)
 
-slides_dirpath = fpath/'../data/training_slides'
+# slides_dirpath = DATADIR/'training_slides'
+slides_dirpath = DATADIR/'doe-globus-pdx-data'
 slides_path_list = glob.glob(os.path.join(slides_dirpath, '*.svs'))
 image_num_list = [get_slide_num_from_path(slide_filepath) for slide_filepath in slides_path_list]
 print('Total svs slides', len(image_num_list))
@@ -195,8 +198,8 @@ folders = ['filter_png', 'filters.html', 'filter_thumbnail_jpg',
            'top_tile_summary_on_original_png', 'top_tile_summary_on_original_thumbnail_jpg',
            'top_tile_summary_png', 'top_tile_summary_thumbnail_jpg',
            'training_thumbnail_jpg']
-src_path = fpath/'../data'
-dst_path = fpath/'../data/tiles_other'
+src_path = DATADIR
+dst_path = DATADIR/'tiles_other'
 os.makedirs(dst_path, exist_ok=True)
 for folder in folders:
     if (src_path/folder).exists():

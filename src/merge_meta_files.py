@@ -20,7 +20,9 @@ import pandas as pd
 import numpy as np
 
 
-dirpath = Path(__file__).resolve().parent
+fdir = Path(__file__).resolve().parent
+
+DATADIR = fdir/'../data'
 
 
 def get_dups(df):
@@ -133,9 +135,8 @@ def load_slides_meta(metapath, slides_meta_fname):
 if __name__ == "__main__":
 
     # Path
-    datapath = dirpath/'../data'
-    slidespath = datapath/'doe-globus-pdx-data'  # path to raw WSI slides
-    metapath = datapath/'meta'
+    slidespath = DATADIR/'doe-globus-pdx-data'  # path to raw WSI slides
+    metapath = DATADIR/'meta'
 
     # Meta file names
     crossref_fname = '_ImageID_PDMRID_CrossRef.xlsx'

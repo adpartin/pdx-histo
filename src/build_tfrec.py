@@ -2,6 +2,7 @@ import os
 import sys
 assert sys.version_info >= (3, 5)
 
+import argparse
 from pathlib import Path
 from pprint import pprint
 import glob
@@ -33,7 +34,22 @@ from deephistopath.wsi import util
 np.random.seed(42)
 
 
-dirpath = Path(__file__).resolve().parent
+fdir = Path(__file__).resolve().parent
+
+DATADIR = fdir/'../data'
+
+
+def parse_args(args):
+    parser = argparse.ArgumentParser(description='Generate tfrecords for training.')
+
+    parser.add_argument('-ns', '--n_samples',
+                        default=None,
+                        type=int,
+                        help='Number of samples (treatments) to process (default: 1).')
+
+    # args = parser.parse_args(args)
+    args, other_args = parser.parse_known_args()
+    return args
 
 
 def calc_records_in_tfr_folder(tfr_dir):
@@ -99,12 +115,6 @@ def load_data(path):
     CSITE_NUM_CLASSES = len(csite_enc.keys())
     CTYPE_NUM_CLASSES = len(ctype_enc.keys())
     
-    # Create column of unique treatments
-    col_name = 'smp'
-    if col_name not in data.columns:
-        jj = [str(s) + '_' + str(d) for s, d in zip(data.Sample, data.Drug1)]
-        data.insert(loc=0, column=col_name, value=jj, allow_duplicates=False)
-        
     return data
 
 
@@ -157,7 +167,7 @@ def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
         ge_vec = [value for col_name, value in zip(item.index, item.values) if col_name.startswith('ge_')]
         dd_vec = [value for col_name, value in zip(item.index, item.values) if col_name.startswith('dd_')]
 
-        tfr_fname = tfr_path/f'train_{item.smp}.tfrecord'  # tfrecord filename
+        tfr_fname = tfr_path/f'{item.smp}.tfrecord'  # tfrecord filename
         tiles_path_list = list(tiles_path.glob(f'{item.image_id}-tile*.png'))  # load slide tiles
         writer = tf.io.TFRecordWriter(str(tfr_fname))  # create tfr writer
 
@@ -192,25 +202,24 @@ def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
     return
 
 
-if __name__ == "__main__":
-    
-    t = util.Time()
+def run(args):
+
     # import ipdb; ipdb.set_trace(context=11)
     
     # Path
-    datapath = dirpath/'../data'
-    tiles_path = datapath/'tiles_png'
-    tfr_path = datapath/'tfrecords'
+    tiles_path = DATADIR/'tiles_png'
+    tfr_path = DATADIR/'tfrecords'
     os.makedirs(tfr_path, exist_ok=True)
-    
+
     # Read dataframe
-    data = load_data(datapath/'data_merged.csv')
+    data = load_data(DATADIR/'data_merged.csv')
     GE_LEN = sum([1 for c in data.columns if c.startswith('ge_')])
     DD_LEN = sum([1 for c in data.columns if c.startswith('dd_')])
         
     # -----------------------------------------------------------------------------
     # Subsample data to create balanced dataset in terms of drug response and ctype
     # -----------------------------------------------------------------------------
+    # TODO: this should be used later (after all tfrecords are generated)
     print('\nSubsample master dataframe to create balanced dataset.')
     r0 = data[data.Response == 0]  # non-responders
     r1 = data[data.Response == 1]  # responders
@@ -237,8 +246,8 @@ if __name__ == "__main__":
     # Copy slides to training_slides folder
     # -------------------------------------
     print('\nCopy slides to training_slides folder.')
-    src_img_path = datapath/'doe-globus-pdx-data'
-    dst_img_path = datapath/'training_slides'
+    src_img_path = DATADIR/'doe-globus-pdx-data'
+    dst_img_path = DATADIR/'training_slides'
     os.makedirs(dst_img_path, exist_ok=True)
 
     exist = []
@@ -256,11 +265,11 @@ if __name__ == "__main__":
     # ------------------------------
     # Build TFRecords
     # ------------------------------
-    n_samples = 1
-    build_dfrecords(data, tfr_path=tfr_path, tiles_path=tiles_path, n_samples=n_samples)
+    # n_samples = 1
+    build_dfrecords(data, tfr_path=tfr_path, tiles_path=tiles_path, n_samples=args.n_samples)
     print('\nFinished building tfrecords.')
-        
-    # Glob tfrecords
+
+    # Summary of tfrecords
     tfr_files = sorted(tfr_path.glob('*.tfrec*'))
     print('\nNumber of tfrecords the folder:', len(tfr_files))
     calc_records_in_tfr_folder(tfr_dir=tfr_path)
@@ -275,7 +284,7 @@ if __name__ == "__main__":
         'dd_vec': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32, default_value=None),    
 
         'smp':      tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None), 
-        'rsp': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
+        'rsp':      tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
         'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
 
         'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
@@ -288,8 +297,8 @@ if __name__ == "__main__":
     }
 
     # Create tf dataset object
-    # fname = 'train_135848~042-T~JI6_NSC.616348.tfrecord'
-    fname = 'train_165739~295-R~AM1_NSC.616348.tfrecord'
+    # fname = '135848~042-T~JI6_NSC.616348.tfrecord'
+    fname = '165739~295-R~AM1_NSC.616348.tfrecord'
     ds = tf.data.TFRecordDataset(str(tfr_path/fname))
 
     # Get single tfr example
@@ -323,8 +332,14 @@ if __name__ == "__main__":
     print(img.numpy().shape)
     # show_img(img)
     
+
+def main(args):
+    t = util.Time()
+    args = parse_args(args)
+    run(args)
     t.elapsed_display()
     print('Done.')
-    
-    
-    
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

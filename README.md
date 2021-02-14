@@ -24,3 +24,9 @@ Generate image tiles from WSI slides and save to `data/tiles_png`.
 ```
 $ python src/tiling.py
 ```
+
+## Build TFRecords
+Build tfrecords for TensorFlow2.
+```
+$ python src/build_tfrec.py
+```
