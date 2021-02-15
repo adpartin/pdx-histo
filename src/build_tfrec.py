@@ -153,9 +153,9 @@ def np_img_to_bytes(np_img):
 def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
     """ Build tfrecords using the master dataframe that contains tabular
     features and response values, and image tiles.
+
     Args:
         tiles_path : path to the tiles
-
     """
     if n_samples is None:
         n_samples = data.shape[0]
@@ -182,7 +182,7 @@ def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
                     'dd_vec': _float_feature(dd_vec),
 
                     'smp': _bytes_feature(bytes(item['smp'], 'utf-8')),
-                    'rsp': _int64_feature(item['Response']),
+                    'Response': _int64_feature(item['Response']),
                     'image_id': _int64_feature(item['image_id']),
 
                     # tile
@@ -219,48 +219,48 @@ def run(args):
     # -----------------------------------------------------------------------------
     # Subsample data to create balanced dataset in terms of drug response and ctype
     # -----------------------------------------------------------------------------
-    # TODO: this should be used later (after all tfrecords are generated)
-    print('\nSubsample master dataframe to create balanced dataset.')
-    r0 = data[data.Response == 0]  # non-responders
-    r1 = data[data.Response == 1]  # responders
+    # # TODO: this should be used later (after all tfrecords are generated)
+    # print('\nSubsample master dataframe to create balanced dataset.')
+    # r0 = data[data.Response == 0]  # non-responders
+    # r1 = data[data.Response == 1]  # responders
 
-    dfs = []
-    for ctype, count in r1.ctype.value_counts().items():
-        # print(ctype, count)
-        aa = r0[r0.ctype == ctype]
-        if aa.shape[0] > count:
-            aa = aa.sample(n=count)
-        dfs.append(aa)
+    # dfs = []
+    # for ctype, count in r1.ctype.value_counts().items():
+    #     # print(ctype, count)
+    #     aa = r0[r0.ctype == ctype]
+    #     if aa.shape[0] > count:
+    #         aa = aa.sample(n=count)
+    #     dfs.append(aa)
 
-    aa = pd.concat(dfs, axis=0)
-    df = pd.concat([aa, r1], axis=0).reset_index(drop=True)
-    print(df.shape)
+    # aa = pd.concat(dfs, axis=0)
+    # df = pd.concat([aa, r1], axis=0).reset_index(drop=True)
+    # print(df.shape)
 
-    aa = df.reset_index()
-    pprint(aa.groupby(['ctype', 'Response']).agg({'index': 'nunique'}).reset_index())
+    # aa = df.reset_index()
+    # pprint(aa.groupby(['ctype', 'Response']).agg({'index': 'nunique'}).reset_index())
 
-    data = df
-    del dfs, df, aa, ctype, count
+    # data = df
+    # del dfs, df, aa, ctype, count
     
     # -------------------------------------
     # Copy slides to training_slides folder
     # -------------------------------------
-    print('\nCopy slides to training_slides folder.')
-    src_img_path = DATADIR/'doe-globus-pdx-data'
-    dst_img_path = DATADIR/'training_slides'
-    os.makedirs(dst_img_path, exist_ok=True)
+    # print('\nCopy slides to training_slides folder.')
+    # src_img_path = DATADIR/'doe-globus-pdx-data'
+    # dst_img_path = DATADIR/'training_slides'
+    # os.makedirs(dst_img_path, exist_ok=True)
 
-    exist = []
-    copied = []
-    for fname in data.image_id.unique():
-        if (dst_img_path/f'{fname}.svs').exists():
-            exist.append(fname)
-        else:
-            _ = shutil.copyfile(str(src_img_path/f'{fname}.svs'), str(dst_img_path/f'{fname}.svs'))
-            copied.append(fname)
+    # exist = []
+    # copied = []
+    # for fname in data.image_id.unique():
+    #     if (dst_img_path/f'{fname}.svs').exists():
+    #         exist.append(fname)
+    #     else:
+    #         _ = shutil.copyfile(str(src_img_path/f'{fname}.svs'), str(dst_img_path/f'{fname}.svs'))
+    #         copied.append(fname)
 
-    print(f'Copied slides:   {len(copied)}')
-    print(f'Existing slides: {len(exist)}')
+    # print(f'Copied slides:   {len(copied)}')
+    # print(f'Existing slides: {len(exist)}')
     
     # ------------------------------
     # Build TFRecords
@@ -284,7 +284,7 @@ def run(args):
         'dd_vec': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32, default_value=None),    
 
         'smp':      tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None), 
-        'rsp':      tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
+        'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
         'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
 
         'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
@@ -296,15 +296,16 @@ def run(args):
         'csite_label':  tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
     }
 
-    # Create tf dataset object
+    # Create tf dataset object (from a random tfrecord)
     # fname = '135848~042-T~JI6_NSC.616348.tfrecord'
-    fname = '165739~295-R~AM1_NSC.616348.tfrecord'
-    ds = tf.data.TFRecordDataset(str(tfr_path/fname))
+    # fname = '165739~295-R~AM1_NSC.616348.tfrecord'
+    # ds = tf.data.TFRecordDataset(str(tfr_path/fname))
+    ds = tf.data.TFRecordDataset(str(tfr_files[0]))
 
     # Get single tfr example
     ex = next(ds.__iter__())
     ex = tf.io.parse_single_example(ex, features=fea_spec)  # returns the features for a given example in a dict, ex_fea_dct
-    print('Feature types in the tfrecord example:\n{}'.format(ex.keys()))
+    print('\nFeature types in the tfrecord example:\n{}'.format(ex.keys()))
 
     # Bytes
     print('\nBytes (csite):')
@@ -317,9 +318,9 @@ def run(args):
     print(ex['csite_label'].numpy())
 
     # Int
-    print('\nInt (rsp):')
-    print(ex['rsp'])
-    print(ex['rsp'].numpy())
+    print('\nInt (Response):')
+    print(ex['Response'])
+    print(ex['Response'].numpy())
 
     # Float
     print('\nFloat (ge_vec):')

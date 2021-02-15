@@ -17,7 +17,7 @@ from deephistopath.wsi import util
 from utils.classlogger import Logger
 from datasplit.splitter import data_splitter  # cv_splitter
 from utils.plots import plot_hist
-from utils.utils import load_data, dump_dict, get_print_func
+from utils.utils import dump_dict, get_print_func
 
 # Seed
 np.random.seed(42)
@@ -25,24 +25,19 @@ np.random.seed(42)
 
 fdir = Path(__file__).resolve().parent
 
-OUTDIR = fdir/'../apps'
+MAIN_APPDIR = fdir/'../apps'
 DATADIR = fdir/'../data'
 
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description='Generate cv splits.')
 
-    # parser.add_argument('-dp', '--datapath',
-    #                     required=True,
-    #                     default=None,
-    #                     type=str,
-    #                     help='Full path to the data (default: None).')
-    parser.add_argument('-on', '--outname',
+    parser.add_argument('-an', '--appname',
                         default=None,
                         type=str,
                         help='Global outdir to dump the splits.')
     parser.add_argument('-ns', '--n_splits',
-                        default=5,
+                        default=1,
                         type=int,
                         help='Number of splits to generate (default: 5).')
     # parser.add_argument('-tem', '--te_method', default='simple', choices=['simple', 'group', 'strat'],
@@ -66,7 +61,7 @@ def parse_args(args):
                         choices=['reg', 'cls'],
                         help='ML task (default: cls).')
     parser.add_argument('-t', '--trg_name',
-                        default='rsp',
+                        default='Response',
                         type=str,
                         help='Target column name (required when stratify) (default: rsp).')
 
@@ -137,37 +132,24 @@ def run(args):
     te_size = verify_size(args.te_size)
 
     # Path
-    # datapath = fdir/'../data'
-    # tiles_path = datapath/'tiles_png'
-    # tfr_path = datapath/'tfrecords'
-    outdir = OUTDIR/args.outname
-    os.makedirs(outdir, exist_ok=True)
+    appdir = MAIN_APPDIR/args.appname
+
+    # import ipdb; ipdb.set_trace(context=11)
 
     # Hard split
     split_on = None if args.split_on is None else args.split_on.upper()
-    cv_method = args.cv_method
-    te_method = cv_method
+    te_method = args.cv_method
 
     # Specify ML task (regression or classification)
-    if cv_method == 'strat':
+    if args.cv_method == 'strat':
         mltype = 'cls'  # cast mltype to cls in case of stratification
     else:
         mltype = args.ml_task
 
     # -----------------------------------------------
-    #       Create outdir
+    #       Create appdir
     # -----------------------------------------------
-    # if args.gout is not None:
-    #     gout = Path(args.gout).resolve()
-    #     gout = gout/datapath.with_suffix('.splits').name
-    # else:
-    #     # Note! useful for drug response
-    #     # sufx = 'none' if split_on is None else split_on
-    #     # gout = gout / f'split_on_{sufx}'
-    #     gout = datapath.with_suffix('.splits')
-
-    gout = outdir/'splits'
-
+    gout = appdir/'splits'
     outfigs = gout/'outfigs'
     os.makedirs(gout, exist_ok=True)
     os.makedirs(outfigs, exist_ok=True)
@@ -185,21 +167,19 @@ def run(args):
     #       Load data
     # -----------------------------------------------
     print_fn('\nLoad master dataset.')
-    # data = load_data(datapath)
-    data = load_data(DATADIR/'data_merged.csv')
+    data = load_data(appdir/'annotations.csv')
     print_fn('data.shape {}'.format(data.shape))
 
     GE_LEN = sum([1 for c in data.columns if c.startswith('ge_')])
     DD_LEN = sum([1 for c in data.columns if c.startswith('dd_')])
 
+    # import ipdb; ipdb.set_trace(context=11)
+
     # -----------------------------------------------
     #       Determine the dataset
     # -----------------------------------------------
-    # TODO
-    data = data
-
     ydata = data[args.trg_name] if args.trg_name in data.columns else None
-    if (ydata is None) and (cv_method == 'strat'):
+    if (ydata is None) and (args.cv_method == 'strat'):
         raise ValueError('Y data must be specified if splits needs to be stratified.')
     if ydata is not None:
         plot_hist(ydata, title=f'{args.trg_name}', fit=None, bins=100,
@@ -213,24 +193,18 @@ def run(args):
     print_fn('{}'.format('-' * 50))
 
     kwargs = {'data': data,
-              'cv_method': cv_method,
+              'cv_method': args.cv_method,
               'te_method': te_method,
               'te_size': te_size,
               'mltype': mltype,
               'split_on': split_on
               }
 
-    import ipdb; ipdb.set_trace(context=11)
-
     data_splitter(n_splits=args.n_splits, gout=gout,
                   outfigs=outfigs, ydata=ydata,
                   print_fn=print_fn, **kwargs)
 
-    # print_fn('Runtime: {:.1f} min'.format( (time()-t0)/60) )
-    print_fn('Done.')
     lg.kill_logger()
-
-
 
 
 def main(args):

@@ -25,8 +25,20 @@ Generate image tiles from WSI slides and save to `data/tiles_png`.
 $ python src/tiling.py
 ```
 
+## Generate dataset for an application
+Using the master dataframe as the strating point, generate a subset of samples for
+further processing. For example, in build_mm_01.py, we create a balanced dataset
+(in terms responders and non-responders). For the non-responders, we extract
+samples of the same ctype as the responders. The created subset dataframe is stored
+in an appropriate foler such as `apps/mm_01/annotations.csv` (we name the file
+`annotations.csv` to conform with the naming convention that is used in SlideFlow.
+```
+$ python src/apps/build_mm_01.py
+```
+
 ## Build TFRecords
-Build tfrecords for TensorFlow2.
+Build tfrecords to use with TensorFlow2 for all the samples in the master dataframe
+`data/data_merged.csv`.
 ```
 $ python src/build_tfrec.py
 ```
