@@ -14,7 +14,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 assert tf.__version__ >= "2.0"
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
 
 # To plot pretty figures
 import matplotlib as mpl
@@ -30,6 +29,8 @@ from deephistopath.wsi import slide
 # from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
+from tf_utils import calc_records_in_tfr_folder, calc_examples_in_tfrecord
+
 # Seed
 np.random.seed(42)
 
@@ -37,6 +38,9 @@ np.random.seed(42)
 fdir = Path(__file__).resolve().parent
 
 DATADIR = fdir/'../data'
+TILES_DIR = DATADIR/'tiles_png'
+TFR_DIR = DATADIR/'tfrecords'
+os.makedirs(TFR_DIR, exist_ok=True)
 
 
 def parse_args(args):
@@ -52,24 +56,24 @@ def parse_args(args):
     return args
 
 
-def calc_records_in_tfr_folder(tfr_dir):
-    """
-    Calc and print the number of examples (tiles) in all tfrecords in the
-    input folder.
-    """
-    count = 0
-    for tfr_path in sorted(tfr_dir.glob('*.tfrec*')):
-        count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-    print('Number of examples in all tfrecords in the folder:', count)
+# def calc_records_in_tfr_folder(tfr_dir):
+#     """
+#     Calc and print the number of examples (tiles) in all tfrecords in the
+#     input folder.
+#     """
+#     count = 0
+#     for tfr_path in sorted(tfr_dir.glob('*.tfrec*')):
+#         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
+#     print('Number of examples in all tfrecords in the folder:', count)
 
     
-def calc_examples_in_tfrecord(tfr_path):
-    """
-    Calc and print the number of examples (tiles) in the input tfrecord
-    file provided by the path to the file.
-    """
-    count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-    print('Number of examples in the tfrecord:', count)
+# def calc_examples_in_tfrecord(tfr_path):
+#     """
+#     Calc and print the number of examples (tiles) in the input tfrecord
+#     file provided by the path to the file.
+#     """
+#     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
+#     print('Number of examples in the tfrecord:', count)
 
     
 def show_img(img, title=None):
@@ -150,12 +154,9 @@ def np_img_to_bytes(np_img):
     return img_bytes
 
 
-def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
+def build_dfrecords(data, n_samples=None):
     """ Build tfrecords using the master dataframe that contains tabular
     features and response values, and image tiles.
-
-    Args:
-        tiles_path : path to the tiles
     """
     if n_samples is None:
         n_samples = data.shape[0]
@@ -167,8 +168,8 @@ def build_dfrecords(data, tfr_path, tiles_path, n_samples=None):
         ge_vec = [value for col_name, value in zip(item.index, item.values) if col_name.startswith('ge_')]
         dd_vec = [value for col_name, value in zip(item.index, item.values) if col_name.startswith('dd_')]
 
-        tfr_fname = tfr_path/f'{item.smp}.tfrecord'  # tfrecord filename
-        tiles_path_list = list(tiles_path.glob(f'{item.image_id}-tile*.png'))  # load slide tiles
+        tfr_fname = TFR_DIR/f'{item.smp}.tfrecord'  # tfrecord filename
+        tiles_path_list = list(TILES_DIR.glob(f'{item.image_id}-tile*.png'))  # load slide tiles
         writer = tf.io.TFRecordWriter(str(tfr_fname))  # create tfr writer
 
         # Iter over tiles
@@ -206,11 +207,6 @@ def run(args):
 
     # import ipdb; ipdb.set_trace(context=11)
     
-    # Path
-    tiles_path = DATADIR/'tiles_png'
-    tfr_path = DATADIR/'tfrecords'
-    os.makedirs(tfr_path, exist_ok=True)
-
     # Read dataframe
     data = load_data(DATADIR/'data_merged.csv')
     GE_LEN = sum([1 for c in data.columns if c.startswith('ge_')])
@@ -265,19 +261,18 @@ def run(args):
     # ------------------------------
     # Build TFRecords
     # ------------------------------
-    # n_samples = 1
-    build_dfrecords(data, tfr_path=tfr_path, tiles_path=tiles_path, n_samples=args.n_samples)
+    build_dfrecords(data, n_samples=args.n_samples)
     print('\nFinished building tfrecords.')
 
     # Summary of tfrecords
-    tfr_files = sorted(tfr_path.glob('*.tfrec*'))
+    tfr_files = sorted(TFR_DIR.glob('*.tfrec*'))
     print('\nNumber of tfrecords the folder:', len(tfr_files))
-    calc_records_in_tfr_folder(tfr_dir=tfr_path)
+    calc_records_in_tfr_folder(tfr_dir=TFR_DIR)
     calc_examples_in_tfrecord(tfr_path=str(tfr_files[0]))
     
-    # -----------------------------------------------
-    # Read single tfrecord and explore single example
-    # -----------------------------------------------
+    # ------------------------------------------
+    # Read a tfrecord and explore single example
+    # ------------------------------------------
     # Feature specs (used to read an example from tfrecord)
     fea_spec = {
         'ge_vec': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32, default_value=None),
@@ -297,14 +292,11 @@ def run(args):
     }
 
     # Create tf dataset object (from a random tfrecord)
-    # fname = '135848~042-T~JI6_NSC.616348.tfrecord'
-    # fname = '165739~295-R~AM1_NSC.616348.tfrecord'
-    # ds = tf.data.TFRecordDataset(str(tfr_path/fname))
     ds = tf.data.TFRecordDataset(str(tfr_files[0]))
 
     # Get single tfr example
     ex = next(ds.__iter__())
-    ex = tf.io.parse_single_example(ex, features=fea_spec)  # returns the features for a given example in a dict, ex_fea_dct
+    ex = tf.io.parse_single_example(ex, features=fea_spec)  # returns features of the example in a dict
     print('\nFeature types in the tfrecord example:\n{}'.format(ex.keys()))
 
     # Bytes

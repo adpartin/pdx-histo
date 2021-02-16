@@ -1,6 +1,6 @@
 Multimodal neural network for drug response prediction in PDX with histology images and gene expressions.
 
-## Create dataframes with data
+## Create master dataframe (meta, tabular features, and response)
 Extract metadata from wsi slides and save the summary in `data/meta/meta_from_wsi_slides.csv`.
 ```
 $ python src/get_meta_from_slides.py
@@ -14,7 +14,7 @@ Merge 3 metadata files to create `data/meta/meta_merged.csv`:
 $ python src/merge_meta_files.py
 ```
 
-Build df and save in `data/data_merged.csv`.
+Finally, build master df and save in `data/data_merged.csv`.
 ```
 $ python src/build_df.py
 ```
@@ -23,6 +23,13 @@ $ python src/build_df.py
 Generate image tiles from WSI slides and save to `data/tiles_png`.
 ```
 $ python src/tiling.py
+```
+
+## Build TFRecords
+Build tfrecords to use with TensorFlow2 for all the samples in the master dataframe
+and save in `data/data_merged.csv`.
+```
+$ python src/build_tfrec.py
 ```
 
 ## Generate dataset for an application
@@ -36,9 +43,7 @@ in an appropriate foler such as `apps/mm_01/annotations.csv` (we name the file
 $ python src/apps/build_mm_01.py
 ```
 
-## Build TFRecords
-Build tfrecords to use with TensorFlow2 for all the samples in the master dataframe
-`data/data_merged.csv`.
-```
-$ python src/build_tfrec.py
+## Generate data splits
+```python
+$ python src/cv_splits.py --appname mm_01
 ```

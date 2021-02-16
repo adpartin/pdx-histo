@@ -35,7 +35,7 @@ def parse_args(args):
     parser.add_argument('-an', '--appname',
                         default=None,
                         type=str,
-                        help='Global outdir to dump the splits.')
+                        help='App name to dump the splits.')
     parser.add_argument('-ns', '--n_splits',
                         default=1,
                         type=int,

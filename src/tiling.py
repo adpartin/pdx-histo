@@ -191,7 +191,7 @@ tiles.singleprocess_filtered_images_to_tiles(display=False,
 
 # Keep only tiles_png in ../data/ and copy the rest to ../data/tiles_other
 import shutil
-folders = ['filter_png', 'filters.html', 'filter_thumbnail_jpg',
+items = ['filter_png', 'filters.html', 'filter_thumbnail_jpg',
            'tile_data', 'tiles.html',
            'tile_summary_on_original_png', 'tile_summary_on_original_thumbnail_jpg',
            'tile_summary_png', 'tile_summary_thumbnail_jpg',
@@ -201,9 +201,17 @@ folders = ['filter_png', 'filters.html', 'filter_thumbnail_jpg',
 src_path = DATADIR
 dst_path = DATADIR/'tiles_other'
 os.makedirs(dst_path, exist_ok=True)
-for folder in folders:
-    if (src_path/folder).exists():
-        shutil.move(src_path/folder, dst_path/folder)
+for item in items:
+    if (src_path/item).exists():
+        shutil.move(src_path/item, dst_path/item)
+
+# TODO: have not tested!
+file_patterns = ['filters*.html', 'tiles*.html']
+for fp in file_patterns:
+    gfiles = list(src_path.glob(fp))
+    for gf in gfiles:
+        if gf.exists():
+            shutil.move(gf, dst_path/gf.name)
 
 t.elapsed_display()
 print('Done.')

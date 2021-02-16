@@ -53,7 +53,7 @@ def np_to_pil(np_img):
   """
   if np_img.dtype == "bool":
     np_img = np_img.astype("uint8") * 255
-  elif np_img.dtype == "float64":
+  elif np_img.dtype == "float64" or np_img.dtype == "float32":
     np_img = (np_img * 255).astype("uint8")
   return Image.fromarray(np_img)
 
