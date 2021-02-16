@@ -8,7 +8,7 @@ Note! I haven't setup a working Makefile yet.
    $ conda activate pdx
 
 3. Insall the reaining packages with Makefile
-   $ make requirements
+   $ make dev-venv
 
 # Activate the env
 source ./venv/bin/activate

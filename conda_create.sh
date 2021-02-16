@@ -29,4 +29,4 @@ conda install -c conda-forge openslide=3.4.1 --yes
 # conda activate pdx
 
 # Step 6: (manually) activate create venv and install packages with Makefile
-# make requirements
+# make dev-venv
