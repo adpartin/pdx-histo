@@ -66,7 +66,7 @@ def parse_args(args):
 #         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
 #     print('Number of examples in all tfrecords in the folder:', count)
 
-    
+
 # def calc_examples_in_tfrecord(tfr_path):
 #     """
 #     Calc and print the number of examples (tiles) in the input tfrecord
@@ -75,25 +75,25 @@ def parse_args(args):
 #     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
 #     print('Number of examples in the tfrecord:', count)
 
-    
+
 def show_img(img, title=None):
     """ Show a single image tile. """
     plt.imshow(img)
     plt.title(title)
     plt.axis("off")
     plt.show()
-    
-    
+
+
 def show_images(img_list, ncols=4):
     """ Show a few image tiles. """
     fig, ax = plt.subplots(nrows=1, ncols=ncols, figsize=(15, 20))
-    
+
     for i, img_id in enumerate(np.random.randint(0, len(img_list), ncols)):
         ax[i].imshow(img_list[img_id]['image']);
         ax[i].axis("off");
         ax[i].set_title(img_list[img_id]['slide'])
-        
-        
+
+
 def encode_categorical(df, label_name, label_value):
     """
     The label_name and label_value are columns in df which, respectively,
@@ -169,32 +169,49 @@ def build_dfrecords(data, n_samples=None):
         dd_vec = [value for col_name, value in zip(item.index, item.values) if col_name.startswith('dd_')]
 
         tfr_fname = TFR_DIR/f'{item.smp}.tfrecord'  # tfrecord filename
-        tiles_path_list = list(TILES_DIR.glob(f'{item.image_id}-tile*.png'))  # load slide tiles
+        tiles_path_list = sorted(TILES_DIR.glob(f'{item.image_id}-tile*.png'))  # load slide tiles
+        tiles_path_list = [str(p) for p in tiles_path_list]
+
         writer = tf.io.TFRecordWriter(str(tfr_fname))  # create tfr writer
 
         # Iter over tiles
-        for tile_path in tiles_path_list:
+        for i, tile_path in enumerate(tiles_path_list):
             np_img = slide.open_image_np(str(tile_path), verbose=False)
             img_bytes = np_img_to_bytes(np_img)
 
+            def parse_tile_fpath(path):
+                """ Extract the basename from the tile fpath and return a list
+                of the parts that construct the original fpath. """
+                p = os.path.basename(str(path))
+                p = p.split('.png')[0]
+                p = p.split('-')
+                return p
+
+            tile_path_parts = parse_tile_fpath(tile_path)
+            tile_id = bytes(str(item['image_id']) + '_' + str(i+1), 'utf-8')
+
             # Prep features for current example to be assigned into the tfrecord
             feature = {
-                    'ge_vec': _float_feature(ge_vec),
-                    'dd_vec': _float_feature(dd_vec),
+                'ge_vec': _float_feature(ge_vec),
+                'dd_vec': _float_feature(dd_vec),
 
-                    'smp': _bytes_feature(bytes(item['smp'], 'utf-8')),
-                    'Response': _int64_feature(item['Response']),
-                    'image_id': _int64_feature(item['image_id']),
+                'smp': _bytes_feature(bytes(item['smp'], 'utf-8')),
+                'Response': _int64_feature(item['Response']),
+                'image_id': _int64_feature(item['image_id']),
 
-                    # tile
-                    'image_raw': _bytes_feature(img_bytes),
-                    # TODO tile meta                
+                # tile
+                'image_raw': _bytes_feature(img_bytes),
 
-                    'Sample': _bytes_feature(bytes(item['Sample'], 'utf-8')),
-                    'ctype': _bytes_feature(bytes(item['ctype'], 'utf-8')),
-                    'csite': _bytes_feature(bytes(item['csite'], 'utf-8')),
-                    'ctype_label': _int64_feature(item['ctype_label']),
-                    'csite_label': _int64_feature(item['csite_label']),
+                # extract meta from tile filename
+                'tile_id': _bytes_feature(tile_id),
+                'row': _bytes_feature(bytes(tile_path_parts[2], 'utf-8')),
+                'col': _bytes_feature(bytes(tile_path_parts[3], 'utf-8')),
+
+                'Sample': _bytes_feature(bytes(item['Sample'], 'utf-8')),
+                'ctype': _bytes_feature(bytes(item['ctype'], 'utf-8')),
+                'csite': _bytes_feature(bytes(item['csite'], 'utf-8')),
+                'ctype_label': _int64_feature(item['ctype_label']),
+                'csite_label': _int64_feature(item['csite_label']),
             }
             ex = tf.train.Example(features=tf.train.Features(feature=feature))
             writer.write(ex.SerializeToString())
@@ -206,58 +223,12 @@ def build_dfrecords(data, n_samples=None):
 def run(args):
 
     # import ipdb; ipdb.set_trace(context=11)
-    
+
     # Read dataframe
     data = load_data(DATADIR/'data_merged.csv')
     GE_LEN = sum([1 for c in data.columns if c.startswith('ge_')])
     DD_LEN = sum([1 for c in data.columns if c.startswith('dd_')])
-        
-    # -----------------------------------------------------------------------------
-    # Subsample data to create balanced dataset in terms of drug response and ctype
-    # -----------------------------------------------------------------------------
-    # # TODO: this should be used later (after all tfrecords are generated)
-    # print('\nSubsample master dataframe to create balanced dataset.')
-    # r0 = data[data.Response == 0]  # non-responders
-    # r1 = data[data.Response == 1]  # responders
 
-    # dfs = []
-    # for ctype, count in r1.ctype.value_counts().items():
-    #     # print(ctype, count)
-    #     aa = r0[r0.ctype == ctype]
-    #     if aa.shape[0] > count:
-    #         aa = aa.sample(n=count)
-    #     dfs.append(aa)
-
-    # aa = pd.concat(dfs, axis=0)
-    # df = pd.concat([aa, r1], axis=0).reset_index(drop=True)
-    # print(df.shape)
-
-    # aa = df.reset_index()
-    # pprint(aa.groupby(['ctype', 'Response']).agg({'index': 'nunique'}).reset_index())
-
-    # data = df
-    # del dfs, df, aa, ctype, count
-    
-    # -------------------------------------
-    # Copy slides to training_slides folder
-    # -------------------------------------
-    # print('\nCopy slides to training_slides folder.')
-    # src_img_path = DATADIR/'doe-globus-pdx-data'
-    # dst_img_path = DATADIR/'training_slides'
-    # os.makedirs(dst_img_path, exist_ok=True)
-
-    # exist = []
-    # copied = []
-    # for fname in data.image_id.unique():
-    #     if (dst_img_path/f'{fname}.svs').exists():
-    #         exist.append(fname)
-    #     else:
-    #         _ = shutil.copyfile(str(src_img_path/f'{fname}.svs'), str(dst_img_path/f'{fname}.svs'))
-    #         copied.append(fname)
-
-    # print(f'Copied slides:   {len(copied)}')
-    # print(f'Existing slides: {len(exist)}')
-    
     # ------------------------------
     # Build TFRecords
     # ------------------------------
@@ -269,26 +240,30 @@ def run(args):
     print('\nNumber of tfrecords the folder:', len(tfr_files))
     calc_records_in_tfr_folder(tfr_dir=TFR_DIR)
     calc_examples_in_tfrecord(tfr_path=str(tfr_files[0]))
-    
+
     # ------------------------------------------
     # Read a tfrecord and explore single example
     # ------------------------------------------
     # Feature specs (used to read an example from tfrecord)
     fea_spec = {
         'ge_vec': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32, default_value=None),
-        'dd_vec': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32, default_value=None),    
+        'dd_vec': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32, default_value=None),
 
-        'smp':      tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None), 
-        'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
-        'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None), 
+        'smp':      tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+        'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
+        'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
 
         'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
 
+        'tile_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+        'row':     tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+        'col':     tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+
         'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
         'ctype':  tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'csite':  tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),    
-        'ctype_label':  tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
-        'csite_label':  tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
+        'csite':  tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+        'ctype_label': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
+        'csite_label': tf.io.FixedLenFeature(shape=[], dtype=tf.int64, default_value=None),
     }
 
     # Create tf dataset object (from a random tfrecord)
@@ -300,31 +275,36 @@ def run(args):
     print('\nFeature types in the tfrecord example:\n{}'.format(ex.keys()))
 
     # Bytes
+    print('\nBytes (tile_id):')
+    print(ex['tile_id'].numpy())
+    # print(ex['tile_id'].numpy().decode('UTF-8'))
+
+    # Bytes
     print('\nBytes (csite):')
     print(ex['csite'].numpy())
-    print(ex['csite'].numpy().decode('UTF-8'))
+    # print(ex['csite'].numpy().decode('UTF-8'))
 
     # Float
     print('\nFloat (csite_label):')
     print(ex['csite_label'])
-    print(ex['csite_label'].numpy())
+    # print(ex['csite_label'].numpy())
 
     # Int
     print('\nInt (Response):')
     print(ex['Response'])
-    print(ex['Response'].numpy())
+    # print(ex['Response'].numpy())
 
     # Float
     print('\nFloat (ge_vec):')
     print(ex['ge_vec'][:10])
-    print(ex['ge_vec'].numpy()[:10])
+    # print(ex['ge_vec'].numpy()[:10])
 
     # Bytes
     print('\nBytes (image_raw):')
     img = tf.image.decode_jpeg(ex['image_raw'], channels=3)
     print(img.numpy().shape)
     # show_img(img)
-    
+
 
 def main(args):
     t = util.Time()
