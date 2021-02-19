@@ -2,11 +2,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-
 try:
     import tensorflow as tf
     if int(tf.__version__.split('.')[0]) < 2:
@@ -72,6 +67,11 @@ def plot_prfrm_metrics(history=None, logfile_path=None, title=None, name=None, s
     Retruns:
         history : keras history
     """
+    
+    import matplotlib
+    # matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
     if history is not None:
         # Plot from keras history
         hh = history.history
@@ -162,6 +162,17 @@ def calc_records_in_tfr_folder(tfr_dir):
     print('Number of examples in all tfrecords in the folder:', count)
 
     
+def calc_records_in_tfr_files(tfr_files):
+    """
+    Calc and print the number of examples (tiles) in all tfrecords in the
+    provided list of file paths.
+    """
+    count = 0
+    for tfr_path in sorted(tfr_files):
+        count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
+    print('Number of examples in all tfrecords in the folder:', count)
+    
+    
 def calc_examples_in_tfrecord(tfr_path):
     """
     Calc and print the number of examples (tiles) in the input tfrecord
@@ -169,3 +180,24 @@ def calc_examples_in_tfrecord(tfr_path):
     """
     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
     print('Number of examples in the tfrecord:', count)
+
+    
+def _float_feature(value):
+    """ Returns a bytes_list from a float / double. """
+    if isinstance(value, list) is False:
+        value = [value]
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
+def _bytes_feature(value):                                                                                                                                    
+    """ Returns a bytes_list from a string / byte. """
+    if isinstance(value, list) is False:
+        value = [value]
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))                                                                                     
+
+
+def _int64_feature(value):                                                                                                                                    
+    """ Returns an int64_list from a bool / enum / int / uint. """
+    if isinstance(value, list) is False:
+        value = [value]    
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))

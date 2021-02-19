@@ -29,7 +29,8 @@ from deephistopath.wsi import slide
 # from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
-from tf_utils import calc_records_in_tfr_folder, calc_examples_in_tfrecord
+from tf_utils import (calc_records_in_tfr_folder, calc_examples_in_tfrecord,
+                      _float_feature, _bytes_feature, _int64_feature)
 
 # Seed
 np.random.seed(42)
@@ -56,26 +57,6 @@ def parse_args(args):
     return args
 
 
-# def calc_records_in_tfr_folder(tfr_dir):
-#     """
-#     Calc and print the number of examples (tiles) in all tfrecords in the
-#     input folder.
-#     """
-#     count = 0
-#     for tfr_path in sorted(tfr_dir.glob('*.tfrec*')):
-#         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-#     print('Number of examples in all tfrecords in the folder:', count)
-
-
-# def calc_examples_in_tfrecord(tfr_path):
-#     """
-#     Calc and print the number of examples (tiles) in the input tfrecord
-#     file provided by the path to the file.
-#     """
-#     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-#     print('Number of examples in the tfrecord:', count)
-
-
 def show_img(img, title=None):
     """ Show a single image tile. """
     plt.imshow(img)
@@ -96,8 +77,8 @@ def show_images(img_list, ncols=4):
 
 def encode_categorical(df, label_name, label_value):
     """
-    The label_name and label_value are columns in df which, respectively,
-    correspond to the name and value of a categorical variable.
+    The label_name and label_value are columns in df which correspond,
+    respectively, to the name and value of a categorical variable.
     
     Args:
         label_name:  name of the label
@@ -122,25 +103,25 @@ def load_data(path):
     return data
 
 
-def _float_feature(value):
-    """ Returns a bytes_list from a float / double. """
-    if isinstance(value, list) is False:
-        value = [value]
-    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+# def _float_feature(value):
+#     """ Returns a bytes_list from a float / double. """
+#     if isinstance(value, list) is False:
+#         value = [value]
+#     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 
-def _bytes_feature(value):                                                                                                                                    
-    """ Returns a bytes_list from a string / byte. """
-    if isinstance(value, list) is False:
-        value = [value]
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))                                                                                     
+# def _bytes_feature(value):                                                                                                                                    
+#     """ Returns a bytes_list from a string / byte. """
+#     if isinstance(value, list) is False:
+#         value = [value]
+#     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))                                                                                     
 
 
-def _int64_feature(value):                                                                                                                                    
-    """ Returns an int64_list from a bool / enum / int / uint. """
-    if isinstance(value, list) is False:
-        value = [value]    
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+# def _int64_feature(value):                                                                                                                                    
+#     """ Returns an int64_list from a bool / enum / int / uint. """
+#     if isinstance(value, list) is False:
+#         value = [value]    
+#     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
 
 def np_img_to_bytes(np_img):

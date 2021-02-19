@@ -32,34 +32,31 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 
-# import deephistopath.wsi
-# from deephistopath.wsi.filter import *
-# from deephistopath.wsi.slide import *
-# from deephistopath.wsi.tiles import *
-# from deephistopath.wsi.util import *
-
 from deephistopath.wsi import filter
 from deephistopath.wsi import slide
 from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
+from config import cfg
 
 fdir = Path(__file__).resolve().parent
 
-DATADIR = fdir/'../data'
+# DATADIR = fdir/'../data'
+DATADIR = cfg.DATADIR
 
 
 def get_slide_num_from_path(slide_filepath):
     return int(os.path.basename(slide_filepath).split('.svs')[0])
 
-
-# import ipdb; ipdb.set_trace(context=11)
-
-# slides_dirpath = DATADIR/'training_slides'
-slides_dirpath = DATADIR/'doe-globus-pdx-data'
+# slides_dirpath = cfg.DATADIR/'training_slides'
+slides_dirpath = cfg.DATADIR/'doe-globus-pdx-data'
 slides_path_list = glob.glob(os.path.join(slides_dirpath, '*.svs'))
 image_num_list = [get_slide_num_from_path(slide_filepath) for slide_filepath in slides_path_list]
 print('Total svs slides', len(image_num_list))
+
+# n_slides = 2
+n_slides = None
+image_num_list = [9970, 9926]
 
 
 # ================================================
@@ -84,7 +81,7 @@ For each file:
 """
 
 # import ipdb; ipdb.set_trace(context=11)
-slide.singleprocess_training_slides_to_images(slides_dirpath)
+slide.singleprocess_training_slides_to_images(slides_dirpath, n_slides=n_slides)
 # slide.multiprocess_training_slides_to_images(slides_path)  # didn't try
 
 
@@ -112,7 +109,7 @@ For each image:
           data/filter_thumbnail_jpg/...
 """
 
-# import ipdb; ipdb.set_trace(context=11)
+import ipdb; ipdb.set_trace(context=11)
 filter.singleprocess_apply_filters_to_images(image_num_list=image_num_list)
 # filter.multiprocess_apply_filters_to_images(image_num_list=image_num_list)
 
@@ -169,7 +166,7 @@ For each image:
         tile_to_pil_tile( tile )
 """
 
-# import ipdb; ipdb.set_trace(context=11)
+import ipdb; ipdb.set_trace(context=11)
 tiles.singleprocess_filtered_images_to_tiles(display=False,
                                              save_summary=True,
                                              save_data=True,
@@ -189,17 +186,19 @@ tiles.singleprocess_filtered_images_to_tiles(display=False,
 # Final things
 # ================================================
 
+import ipdb; ipdb.set_trace(context=11)
+
 # Keep only tiles_png in ../data/ and copy the rest to ../data/tiles_other
 import shutil
 items = ['filter_png', 'filters.html', 'filter_thumbnail_jpg',
-           'tile_data', 'tiles.html',
-           'tile_summary_on_original_png', 'tile_summary_on_original_thumbnail_jpg',
-           'tile_summary_png', 'tile_summary_thumbnail_jpg',
-           'top_tile_summary_on_original_png', 'top_tile_summary_on_original_thumbnail_jpg',
-           'top_tile_summary_png', 'top_tile_summary_thumbnail_jpg',
-           'training_thumbnail_jpg']
-src_path = DATADIR
-dst_path = DATADIR/'tiles_other'
+         'tile_data', 'tiles.html',
+         'tile_summary_on_original_png', 'tile_summary_on_original_thumbnail_jpg',
+         'tile_summary_png', 'tile_summary_thumbnail_jpg',
+         'top_tile_summary_on_original_png', 'top_tile_summary_on_original_thumbnail_jpg',
+         'top_tile_summary_png', 'top_tile_summary_thumbnail_jpg',
+         'training_thumbnail_jpg']
+src_path = cfg.DATADIR
+dst_path = cfg.DATADIR/'tiles_other'
 os.makedirs(dst_path, exist_ok=True)
 for item in items:
     if (src_path/item).exists():

@@ -1,3 +1,9 @@
+""" 
+Build a dataset for binary classification with multimodal features.
+The dataset is balanced in terms of drug response and ctype.
+Specifically, we extracted all response samples and matched the same
+number of non-response samples of the same ctype.
+"""
 import os
 import sys
 assert sys.version_info >= (3, 5)
@@ -15,7 +21,7 @@ fdir = Path(__file__).resolve().parent
 
 DATADIR = fdir/'../../data'
 MAIN_APPDIR = fdir/'../../apps'
-APPNAME = 'mm_01'
+APPNAME = 'bin_rsp_balanced_01'
 
 
 outdir = MAIN_APPDIR/APPNAME

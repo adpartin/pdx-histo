@@ -26,14 +26,18 @@ import PIL
 from PIL import Image
 import re
 import sys
+from typing import Optional  # ap
 from deephistopath.wsi import util
 from deephistopath.wsi.util import Time
 
 fpath = os.path.dirname(os.path.abspath(__file__))
 
 ## BASE_DIR = os.path.join(".", "data")  ## ap
-BASE_DIR = os.path.join(fpath, "..", "..", "..", "data")  ## ap
 # BASE_DIR = os.path.join(os.sep, "Volumes", "BigData", "TUPAC")
+# BASE_DIR = os.path.join(fpath, "..", "..", "..", "data")  ## ap
+from config import cfg  ## ap
+BASE_DIR = cfg.DATADIR  ## ap
+
 ## TRAIN_PREFIX = "TUPAC-TR-"  ## ap
 TRAIN_PREFIX = "pdx-"  ## ap
 ## SRC_TRAIN_DIR = os.path.join(BASE_DIR, "training_slides")  # ap
@@ -816,10 +820,15 @@ def training_slide_range_to_images(start_ind, end_ind):
   return (start_ind, end_ind)
 
 
-def trainig_slides_to_images(slides_path):
+def trainig_slides_to_images(slides_path, n_slides: Optional[int]=None):
   """ ap replaces trainig_slide_range_to_images() """
 
   train_images = glob.glob(os.path.join(slides_path, '*.svs'))
+
+  # ap
+  if isinstance(n_slides, int) and n_slides > 0:
+      train_images = train_images[:n_slides]
+
   for slide_filepath in train_images:
     slide_num = int(os.path.basename(slide_filepath).split('.svs')[0])
     training_slide_to_image(slide_num)
@@ -828,7 +837,7 @@ def trainig_slides_to_images(slides_path):
 
 
 ## def singleprocess_training_slides_to_images():  ## ap
-def singleprocess_training_slides_to_images(slides_path):  ## ap
+def singleprocess_training_slides_to_images(slides_path, n_slides: Optional[int]=None):  ## ap
   """
   Convert all WSI training slides to smaller images using a single process.
   """
@@ -839,7 +848,7 @@ def singleprocess_training_slides_to_images(slides_path):  ## ap
   # training_slide_range_to_images(1, num_train_images)
 
   ## ap
-  trainig_slides_to_images(slides_path)
+  trainig_slides_to_images(slides_path, n_slides=n_slides)
 
   t.elapsed_display()
 

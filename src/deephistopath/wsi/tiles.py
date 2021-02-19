@@ -42,7 +42,7 @@ TISSUE_LOW_THRESH = 10
 ROW_TILE_SIZE = 300  # ap
 COL_TILE_SIZE = 300  # ap
 ## NUM_TOP_TILES = 50  # ap
-NUM_TOP_TILES = 50  # ap
+NUM_TOP_TILES = 5  # ap
 
 DISPLAY_TILE_SUMMARY_LABELS = False
 TILE_LABEL_TEXT_SIZE = 10
@@ -1965,16 +1965,16 @@ class TissueQuantity(Enum):
 
 def dynamic_tiles(slide_num, small_tile_in_tile=False):
   """
-  Generate tile summary with top tiles using original WSI training slide without intermediate image files saved to
-  file system.
+  Generate tile summary with top tiles using original WSI training slide
+  without intermediate image files saved to file system.
 
   Args:
     slide_num: The slide number.
     small_tile_in_tile: If True, include the small NumPy image in the Tile objects.
 
   Returns:
-     TileSummary object with list of top Tile objects. The actual tile images are not retrieved until the
-     Tile get_tile() methods are called.
+     TileSummary object with list of top Tile objects. The actual tile images
+     are not retrieved until the Tile get_tile() methods are called.
   """
   np_img, large_w, large_h, small_w, small_h = slide.slide_to_scaled_np_image(slide_num)
   filt_np_img = filter.apply_image_filters(np_img)
