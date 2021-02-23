@@ -8,16 +8,30 @@ Build df using the following files and save in ../data/data_merged.csv:
 
 import os
 import sys
+import argparse
 from pathlib import Path
 import glob
 from pprint import pprint
 import pandas as pd
 import numpy as np
 
+from config import cfg
 
 fdir = Path(__file__).resolve().parent
 
-DATADIR = fdir/'../data'
+# DATADIR = fdir/'../data'
+DATADIR = cfg.DATADIR
+
+
+def parse_args(args):
+    parser = argparse.ArgumentParser(description='Build master dataframe.')
+
+    parser.add_argument('--bad',
+                        action='store_true',
+                        help='Include samples with bad quality slides.')
+
+    args, other_args = parser.parse_known_args()
+    return args
 
 
 def get_dups(df):
@@ -39,7 +53,6 @@ def drop_dups(df, verbose=True):
 def load_rsp(rsp_dpath, verbose=False):
     """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
-    # rsp = rsp.rename(columns={'Response': 'Response'})
     rsp = drop_dups(rsp)
 
     # Keep single drug samples
@@ -130,7 +143,8 @@ def load_meta(meta_dpath, verbose=False):
     return meta
 
 
-if __name__ == "__main__":
+def main(args):
+    args = parse_args(args)
 
     # import ipdb; ipdb.set_trace()
 
@@ -159,14 +173,16 @@ if __name__ == "__main__":
     fea_df = data.drop(columns=meta_df.columns)
     data = pd.concat([meta_df, fea_df], axis=1)
 
-    # Add with tile counts
-    tiles_dir = DATADIR/'tiles_png'
-    # counter = []
-    # for image_id in data.image_id:
-    #     count = len(list(tiles_dir.glob(f'{image_id}-tile-*.png')))
-    #     counter.append(count)
-    counter = [len(list(tiles_dir.glob(f'{image_id}-tile-*.png'))) for image_id in data.image_id.values]
-    data.insert(loc=11, value=counter, column='n_tiles', allow_duplicates=True)
+    # Add column with tile counts
+    # tiles_dir = DATADIR/'tiles_png'
+    # counter = [len(list(tiles_dir.glob(f'{image_id}-tile-*.png'))) for image_id in data.image_id.values]
+    # data.insert(loc=11, value=counter, column='n_tiles', allow_duplicates=True)
+
+    # Drop samples which have bad quality slides
+    if args.bad is False:
+        bad_slides_list = cfg.BAD_SLIDES
+        # data[data.image_id.isin(bad_slides_list)]
+        data = data[~data.image_id.isin(bad_slides_list)].reset_index(drop=True)
 
     # import ipdb; ipdb.set_trace()
     print('\nFinal dataframe {}'.format(data.shape))
@@ -175,3 +191,7 @@ if __name__ == "__main__":
     print('Save merged dataframe in csv.')
     data.to_csv(DATADIR/'data_merged.csv', index=False)
     print('Done.')
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

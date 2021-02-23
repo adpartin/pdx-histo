@@ -20,3 +20,9 @@ cfg.DATADIR = DATADIR
 cfg.ANNOTATIONS_FILENAME = ANNOTATIONS_FILENAME
 cfg.TILES_DIR = TILES_DIR
 cfg.TFR_DIR = TFR_DIR
+
+# Slides that were identified as bad with either bad staining or poor quality. 
+# These notes were provided by Pearson's group in PDX_FIXED/slide_problems.txt
+cfg.BAD_SLIDES = [45983, 83742, 83743,  # poor quality
+                  22232, 21836, 20729,  # staining off
+                  ]

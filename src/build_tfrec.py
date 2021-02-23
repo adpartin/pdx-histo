@@ -32,15 +32,18 @@ from deephistopath.wsi import util
 from tf_utils import (calc_records_in_tfr_folder, calc_examples_in_tfrecord,
                       _float_feature, _bytes_feature, _int64_feature)
 
-# Seed
-np.random.seed(42)
+from config import cfg
 
+np.random.seed(42)
 
 fdir = Path(__file__).resolve().parent
 
-DATADIR = fdir/'../data'
-TILES_DIR = DATADIR/'tiles_png'
-TFR_DIR = DATADIR/'tfrecords'
+# DATADIR = fdir/'../data'
+# TILES_DIR = DATADIR/'tiles_png'
+# TFR_DIR = DATADIR/'tfrecords'
+DATADIR = cfg.DATADIR
+TILES_DIR = cfg.TILES_DIR
+TFR_DIR = cfg.TFR_DIR
 os.makedirs(TFR_DIR, exist_ok=True)
 
 
@@ -201,7 +204,9 @@ def build_dfrecords(data, n_samples=None):
     return
 
 
-def run(args):
+def main(args):
+    t = util.Time()
+    args = parse_args(args)
 
     # import ipdb; ipdb.set_trace(context=11)
 
@@ -286,11 +291,6 @@ def run(args):
     print(img.numpy().shape)
     # show_img(img)
 
-
-def main(args):
-    t = util.Time()
-    args = parse_args(args)
-    run(args)
     t.elapsed_display()
     print('Done.')
 
