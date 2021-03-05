@@ -17,10 +17,12 @@ from deephistopath.wsi import slide
 # from deephistopath.wsi import tiles
 from deephistopath.wsi import util
 
+from config import cfg
 
 fdir = Path(__file__).resolve().parent
 
-DATADIR = fdir/'../data'
+SLIDESPATH = cfg.DATADIR/'doe-globus-pdx-data'  # path to raw WSI slides
+METAPATH = cfg.DATADIR/'meta'
 
 
 def calc_eff_mpp(s, level=0, verbose=False):
@@ -44,23 +46,17 @@ if __name__ == "__main__":
 
     t = util.Time()
 
-    # Path
-    slidespath = DATADIR/'doe-globus-pdx-data'  # path to raw WSI slides
-    metapath = DATADIR/'meta'
-    # crossref_meta_fname = 'ImageID_PDMRID_CrossRef.csv'  # comes with the svs slides
-    crossref_meta_fname = '_ImageID_PDMRID_CrossRef.xlsx'  # comes with the svs slides
-
-    # import ipdb; ipdb.set_trace(context=11)
+    # import ipdb; ipdb.set_trace()
 
     # Glob slides
-    slides_path_list = glob.glob(os.path.join(slidespath, '*.svs'))
+    slides_path_list = glob.glob(os.path.join(SLIDESPATH, '*.svs'))
     print(f'Total slides: {len(slides_path_list)}')
     # print(os.path.basename(slides_path_list[0]))
 
     # Confirm that svs file names match and the 'Image ID' column in excel file
     s1 = set([int(os.path.basename(x).split('.')[0]) for x in slides_path_list])
-    # df_img = pd.read_excel(metapath/crossref_meta_fname)  # csv
-    df_img = pd.read_excel(metapath/crossref_meta_fname, engine='openpyxl', header=2)  # excel
+    # df_img = pd.read_excel(METAPATH/crossref_meta_fname)  # csv
+    df_img = pd.read_excel(METAPATH/cfg.CROSSREF_FNAME, engine='openpyxl', header=2)  # excel
     df_img = df_img.rename(columns={'Image ID': 'image_id'})
     df_img = df_img.dropna(axis=0, how='all').reset_index(drop=True)
     df_img['image_id'] = [int(x) if ~np.isnan(x) else x for x in df_img['image_id'].values]
@@ -126,6 +122,6 @@ if __name__ == "__main__":
 
     # Save
     print('\nSave slides metadata in csv.')
-    meta_df.to_csv(metapath/'meta_from_wsi_slides.csv', index=False)
+    meta_df.to_csv(METAPATH/cfg.SLIDES_META_FNAME, index=False)
     t.elapsed_display()
     print('Done.')

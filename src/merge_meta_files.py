@@ -19,10 +19,11 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
+from config import cfg
 
 fdir = Path(__file__).resolve().parent
 
-DATADIR = fdir/'../data'
+METAPATH = cfg.DATADIR/'meta'
 
 
 def get_dups(df):
@@ -42,30 +43,31 @@ def _explore(cref, pdx):
     # Subset the columns
     df1 = cref[['model', 'patient_id', 'specimen_id', 'sample_id', 'image_id']]
     df2 = pdx[['patient_id', 'specimen_id', 'stage_or_grade']]
-    pprint(df1[:2])
-    pprint(df2[:2])
+    pprint(df1.iloc[:2, :10])
+    pprint(df2.iloc[:2, :10])
 
     # Merge meta files
-    df = df1.merge(df2, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
+    mrg = df1.merge(df2, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
     print(df1.shape)
     print(df2.shape)
-    print(df.shape)
+    print(mrg.shape)
 
     # Explore (merge and identify from which df the items are coming from)
     # https://kanoki.org/2019/07/04/pandas-difference-between-two-dataframes/
-    df = df1.merge(df2, on=['patient_id', 'specimen_id'], how='outer', indicator=True)
-    print('Inner merge', df.shape)
-    pprint(df[:2])
+    mrg_outer = df1.merge(df2, on=['patient_id', 'specimen_id'], how='outer', indicator=True)
+    print('Outer merge', mrg_outer.shape)
+    pprint(mrg_outer.iloc[:2, :10])
 
-    print('In both         ', df[df['_merge']=='both'].shape)
-    print('In left or right', df[df['_merge']!='both'].shape)
+    # print('In both         ', mrg_outer[mrg_outer['_merge']=='both'].shape)
+    # print('In left or right', mrg_outer[mrg_outer['_merge']!='both'].shape)
+    print(mrg_outer['_merge'].value_counts())
 
     # Find which items are missing in Yitan's file
     # df = df1.merge(df2, on=['patient_id', 'specimen_id'], how='outer' ,indicator=True).loc[lambda x : x['_merge']=='right_only']
-    df_miss = df1.merge(df2, on=['patient_id', 'specimen_id'], how='outer', indicator=True).loc[lambda x : x['_merge']=='left_only']
-    df_miss = df_miss.sort_values(['patient_id', 'specimen_id'], ascending=True)
-    print('\nMissing items', df_miss.shape)
-    pprint(df_miss)
+    mrg_outer = df1.merge(df2, on=['patient_id', 'specimen_id'], how='outer', indicator=True).loc[lambda x : x['_merge']=='left_only']
+    miss = mrg_outer.sort_values(['patient_id', 'specimen_id'], ascending=True)
+    print('\nMissing items', miss.shape)
+    pprint(miss)
 
 
 def stats(df_mrg):
@@ -89,9 +91,9 @@ def stats(df_mrg):
     df_mrg['stage_or_grade'].value_counts()
 
 
-def load_crossref(metapath, crossref_fname):
+def load_crossref(path=METAPATH/cfg.CROSSREF_FNAME):
     # PDX slide meta (from NCI/Globus)
-    cref = pd.read_excel(metapath/crossref_fname, engine='openpyxl', header=2)
+    cref = pd.read_excel(path, engine='openpyxl', header=2)
     cref = cref.rename(columns={'Capture Date': 'capture_date',
                                 'Image ID': 'image_id',
                                 'Model': 'model',
@@ -105,17 +107,29 @@ def load_crossref(metapath, crossref_fname):
     return cref
 
 
-def load_pdx_meta(metapath, pdx_meta_fname):
+def load_pdx_meta(path=METAPATH/cfg.PDX_META_FNAME):
     # PDX meta (from Yitan)
     # Yitan doesn't have sample_id (??)
-    pdx = pd.read_csv(metapath/'PDX_Meta_Information.csv')
-    # pdx = pd.read_excel(metapath/pdx_meta_fname, engine='openpyxl')
-    # pdx = pdx.dropna(subset=['patient_id']).reset_index(drop=True)
+    file_type = str(path).split('.')[-1]
+    if file_type == 'csv':
+        pdx = pd.read_csv(path)
+    elif file_type == 'xlsx':
+        pdx = pd.read_excel(path, engine='openpyxl')
+        pdx = pdx.dropna(subset=['patient_id']).reset_index(drop=True)
+    else:
+        raise f"File type ({file_type}) not supported."
+    pdx = pdx.astype(str)
+
+    col_rename = {'tumor_site_from_data_src': 'csite_src',
+                  'tumor_type_from_data_src': 'ctype_src',
+                  'simplified_tumor_site': 'csite',
+                  'simplified_tumor_type': 'ctype'}
+    pdx = pdx.rename(columns=col_rename)
     return pdx
 
 
-def load_slides_meta(metapath, slides_meta_fname):
-    slides_meta = pd.read_csv(metapath/slides_meta_fname)
+def load_slides_meta(path=METAPATH/cfg.SLIDES_META_FNAME):
+    slides_meta = pd.read_csv(path)
     col_rename = {'aperio.ImageID': 'image_id',
                   'aperio.MPP': 'MPP',
                   'openslide.level[0].height': 'height',
@@ -134,26 +148,17 @@ def load_slides_meta(metapath, slides_meta_fname):
 
 if __name__ == "__main__":
 
-    # Path
-    slidespath = DATADIR/'doe-globus-pdx-data'  # path to raw WSI slides
-    metapath = DATADIR/'meta'
-
-    # Meta file names
-    crossref_fname = '_ImageID_PDMRID_CrossRef.xlsx'
-    slides_meta_fname = 'meta_from_wsi_slides.csv'
-    pdx_meta_fname = 'PDX_Meta_Information.xlsx'
-
-    # import ipdb; ipdb.set_trace(context=11)
-    cref = load_crossref(metapath, crossref_fname)
-    pdx = load_pdx_meta(metapath, pdx_meta_fname)
-    slides_meta = load_slides_meta(metapath, slides_meta_fname)
+    # import ipdb; ipdb.set_trace()
+    cref = load_crossref( METAPATH/cfg.CROSSREF_FNAME )
+    pdx = load_pdx_meta( METAPATH/cfg.PDX_META_FNAME )
+    slides_meta = load_slides_meta( METAPATH/cfg.SLIDES_META_FNAME )
 
     # print('Crossref: {}'.format(cref.shape))
     # print('PDX meta: {}'.format(pdx.shape))
     # pprint(cref[:2])
     # pprint(pdx[:2])
 
-    # import ipdb; ipdb.set_trace(context=11)
+    # import ipdb; ipdb.set_trace()
     # _explore(cref, pdx)
 
     #
@@ -168,7 +173,7 @@ if __name__ == "__main__":
     print('1st merge: {}'.format(df_mrg.shape))
     # pprint(df_mrg[:2])
 
-    # import ipdb; ipdb.set_trace(context=11)
+    # import ipdb; ipdb.set_trace()
     # _stats(df_mrg)
 
     #
@@ -183,5 +188,5 @@ if __name__ == "__main__":
 
     # Save
     print('\nSave merged metadata in csv.')
-    df_final.to_csv(metapath/'meta_merged.csv', index=False)
+    df_final.to_csv(METAPATH/'meta_merged.csv', index=False)
     print('Done.')
