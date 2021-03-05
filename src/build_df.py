@@ -10,7 +10,6 @@ import os
 import sys
 import argparse
 from pathlib import Path
-import glob
 from pprint import pprint
 import pandas as pd
 import numpy as np
@@ -19,9 +18,11 @@ from config import cfg
 
 fdir = Path(__file__).resolve().parent
 
-# DATADIR = fdir/'../data'
-DATADIR = cfg.DATADIR
-
+RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
+RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000_combat'
+DD_DPATH = cfg.DATADIR/'dd.mordred.with.nans'
+META_DPATH = cfg.DATADIR/'meta/meta_merged.csv'
+    
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description='Build master dataframe.')
@@ -50,7 +51,7 @@ def drop_dups(df, verbose=True):
     return df
 
 
-def load_rsp(rsp_dpath, verbose=False):
+def load_rsp(rsp_dpath=RSP_DPATH, verbose=False):
     """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
     rsp = drop_dups(rsp)
@@ -61,9 +62,19 @@ def load_rsp(rsp_dpath, verbose=False):
     rsp = rsp.drop(columns=['Source', 'Model', 'Drug2'])
     rsp['Sample'] = rsp['Sample'].map(lambda x: x.split('NCIPDM.')[1])
 
-    rsp.insert(loc=1, column='model', value=rsp['Sample'].map(lambda x: x.split('~')[0]), allow_duplicates=True)
-    rsp.insert(loc=2, column='patient_id', value=rsp['Sample'].map(lambda x: x.split('~')[1]), allow_duplicates=True)
-    rsp.insert(loc=3, column='sample_id', value=rsp['Sample'].map(lambda x: x.split('~')[2]), allow_duplicates=True)
+    # rsp.insert(loc=1, column='model', value=rsp['Sample'].map(lambda x: x.split('~')[0]), allow_duplicates=True)
+    # rsp.insert(loc=2, column='patient_id', value=rsp['Sample'].map(lambda x: x.split('~')[1]), allow_duplicates=True)
+    # rsp.insert(loc=3, column='sample_id', value=rsp['Sample'].map(lambda x: x.split('~')[2]), allow_duplicates=True)
+
+    # Parse Sample into model, patient_id, specimen_id, sample_id
+    patient_id = rsp['Sample'].map(lambda x: x.split('~')[0])
+    specimen_id = rsp['Sample'].map(lambda x: x.split('~')[1])
+    sample_id = rsp['Sample'].map(lambda x: x.split('~')[2])
+    model = [a + '~' + b for a, b in zip(patient_id, specimen_id)]
+    rsp.insert(loc=1, column='model', value=model, allow_duplicates=True)
+    rsp.insert(loc=2, column='patient_id', value=patient_id, allow_duplicates=True)
+    rsp.insert(loc=3, column='specimen_id', value=specimen_id, allow_duplicates=True)
+    rsp.insert(loc=4, column='sample_id', value=sample_id, allow_duplicates=True)
     
     # Create column of unique treatments
     col_name = 'smp'
@@ -80,7 +91,7 @@ def load_rsp(rsp_dpath, verbose=False):
     return rsp
 
 
-def load_rna(rna_dpath, verbose=False):
+def load_rna(rna_dpath=RNA_DPATH, add_prefix: bool=True, verbose: bool=False):
     """ Load RNA-Seq data. """
     rna = pd.read_csv(rna_dpath, sep='\t')
     rna = drop_dups(rna)
@@ -88,7 +99,8 @@ def load_rna(rna_dpath, verbose=False):
     rna = rna[ rna.Sample.map(lambda x: x.split('.')[0]) == 'NCIPDM'].reset_index(drop=True)
     rna = rna.sort_values(by='Sample', ascending=True)
     rna['Sample'] = rna['Sample'].map(lambda x: x.split('NCIPDM.')[1])
-    rna = rna.rename(columns={x: 'ge_'+x for x in rna.columns[1:]})  # add prefix to the genes
+    if add_prefix:
+        rna = rna.rename(columns={x: 'ge_'+x for x in rna.columns[1:]})  # add prefix to the genes
 
     if verbose:
         print(rna.shape)
@@ -96,7 +108,7 @@ def load_rna(rna_dpath, verbose=False):
     return rna
 
 
-def load_dd(dd_dpath, verbose=False):
+def load_dd(dd_dpath=DD_DPATH, verbose=False):
     """ Load drug descriptors. """
     dd = pd.read_csv(dd_dpath, sep='\t')
     dd = drop_dups(dd)
@@ -107,7 +119,7 @@ def load_dd(dd_dpath, verbose=False):
     return dd
 
 
-def load_meta(meta_dpath, verbose=False):
+def load_meta(meta_dpath=META_DPATH, verbose=False):
     """ Load the combined metadata. """
     meta = pd.read_csv(meta_dpath)
 
@@ -146,18 +158,13 @@ def load_meta(meta_dpath, verbose=False):
 def main(args):
     args = parse_args(args)
 
-    # import ipdb; ipdb.set_trace()
-
-    rsp_dpath = DATADIR/'studies/pdm/ncipdm_drug_response'
-    rna_dpath = DATADIR/'combined_rnaseq_data_lincs1000_combat'
-    dd_dpath = DATADIR/'dd.mordred.with.nans'
-    meta_dpath = DATADIR/'meta/meta_merged.csv'
-
+    # import ipdb; ipdb.set_trace() 
+    
     # Load
-    rsp = load_rsp(rsp_dpath)
-    rna = load_rna(rna_dpath)
-    dd = load_dd(dd_dpath)
-    meta = load_meta(meta_dpath)
+    rsp = load_rsp(RSP_DPATH)
+    rna = load_rna(RNA_DPATH)
+    dd = load_dd(DD_DPATH)
+    meta = load_meta(META_DPATH)
 
     # Merge
     data = rsp.merge(rna, on='Sample', how='inner')
@@ -174,7 +181,7 @@ def main(args):
     data = pd.concat([meta_df, fea_df], axis=1)
 
     # Add column with tile counts
-    # tiles_dir = DATADIR/'tiles_png'
+    # tiles_dir = cfg.DATADIR/'tiles_png'
     # counter = [len(list(tiles_dir.glob(f'{image_id}-tile-*.png'))) for image_id in data.image_id.values]
     # data.insert(loc=11, value=counter, column='n_tiles', allow_duplicates=True)
 
@@ -189,7 +196,7 @@ def main(args):
 
     # save
     print('Save merged dataframe in csv.')
-    data.to_csv(DATADIR/'data_merged.csv', index=False)
+    data.to_csv(cfg.DATADIR/'data_merged.csv', index=False)
     print('Done.')
 
 
