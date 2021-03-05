@@ -56,14 +56,20 @@ print('Total svs slides', len(image_num_list))
 
 # n_slides = 2
 n_slides = None
-image_num_list = [9970, 9926]
+exclude_slides = []
+# image_num_list = [9970, 9926]
+
+proc_slides = True
+filter_slides = True
+gen_tiles = True
 
 
 # ================================================
 # Tiling (generate tiles from histology slides)
 # ================================================
 
-t = util.Time()
+# Timer for each processing step
+timer = {}
 
 #
 # Part 1 (whole-slide image preprocessing in python)
@@ -81,9 +87,14 @@ For each file:
 """
 
 # import ipdb; ipdb.set_trace(context=11)
-slide.singleprocess_training_slides_to_images(slides_dirpath, n_slides=n_slides)
-# slide.multiprocess_training_slides_to_images(slides_path)  # didn't try
 
+t = util.Time()
+
+if proc_slides:
+    slide.singleprocess_training_slides_to_images(slides_dirpath, n_slides=n_slides)
+    # slide.multiprocess_training_slides_to_images(slides_path)  # didn't try
+
+timer['process slides'] = t.elapsed
 
 #
 # Part 3 (morphology operators)
@@ -109,10 +120,15 @@ For each image:
           data/filter_thumbnail_jpg/...
 """
 
-import ipdb; ipdb.set_trace(context=11)
-filter.singleprocess_apply_filters_to_images(image_num_list=image_num_list)
-# filter.multiprocess_apply_filters_to_images(image_num_list=image_num_list)
+t = util.Time()
 
+# import ipdb; ipdb.set_trace(context=11)
+
+if filter_slides:
+    filter.singleprocess_apply_filters_to_images(image_num_list=image_num_list)
+    # filter.multiprocess_apply_filters_to_images(image_num_list=image_num_list)
+
+timer['filter slides'] = t.elapsed
 
 #
 # Part 4 (top tile retrieval)
@@ -166,27 +182,33 @@ For each image:
         tile_to_pil_tile( tile )
 """
 
-import ipdb; ipdb.set_trace(context=11)
-tiles.singleprocess_filtered_images_to_tiles(display=False,
-                                             save_summary=True,
-                                             save_data=True,
-                                             save_top_tiles=True,
-                                             html=True,
-                                             image_num_list=image_num_list)
+t = util.Time()
 
-# tiles.multiprocess_filtered_images_to_tiles(display=False,
-#                                             save_summary=True,
-#                                             save_data=True,
-#                                             save_top_tiles=True,
-#                                             html=True,
-#                                             image_num_list=image_num_list)
+# import ipdb; ipdb.set_trace(context=11)
+
+if gen_tiles:
+    tiles.singleprocess_filtered_images_to_tiles(display=False,
+                                                 save_summary=True,
+                                                 save_data=True,
+                                                 save_top_tiles=True,
+                                                 html=True,
+                                                 image_num_list=image_num_list)
+
+    # tiles.multiprocess_filtered_images_to_tiles(display=False,
+    #                                             save_summary=True,
+    #                                             save_data=True,
+    #                                             save_top_tiles=True,
+    #                                             html=True,
+    #                                             image_num_list=image_num_list)
+
+timer['generate tiles'] = t.elapsed
 
 
 # ================================================
 # Final things
 # ================================================
 
-import ipdb; ipdb.set_trace(context=11)
+# import ipdb; ipdb.set_trace(context=11)
 
 # Keep only tiles_png in ../data/ and copy the rest to ../data/tiles_other
 import shutil
@@ -204,7 +226,6 @@ for item in items:
     if (src_path/item).exists():
         shutil.move(src_path/item, dst_path/item)
 
-# TODO: have not tested!
 file_patterns = ['filters*.html', 'tiles*.html']
 for fp in file_patterns:
     gfiles = list(src_path.glob(fp))
@@ -212,5 +233,8 @@ for fp in file_patterns:
         if gf.exists():
             shutil.move(gf, dst_path/gf.name)
 
-t.elapsed_display()
-print('Done.')
+print('\nProcessing time.')
+for k, v in timer:
+    print(f'{k}: {v}')
+
+print('\nDone.')
