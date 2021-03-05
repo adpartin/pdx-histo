@@ -35,7 +35,7 @@ APPNAME = 'bin_ctype_balance_02'
 outdir = cfg.MAIN_APPDIR/APPNAME
 os.makedirs(outdir, exist_ok=True)
 
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 #datapath = cfg.DATADIR/'data_merged.csv'
 #data = pd.read_csv(datapath)
 #print('\nMaster dataframe', data.shape)
@@ -60,6 +60,10 @@ rna = rna.sort_values(mrg_cols)
 
 # Remove bad samples with bad slides
 cref = cref[~cref.image_id.isin(cfg.BAD_SLIDES)].reset_index(drop=True)
+
+print(rna.shape)
+print(cref.shape)
+print(pdx.shape)
 
 
 # -----------------------------------------------------------
@@ -95,6 +99,7 @@ del df1, df2, mrg, mrg_outer, miss
 
 # Merge cref and rna
 cref_rna = cref[mrg_cols + ['image_id']].merge(rna, on=mrg_cols, how='inner').reset_index(drop=True)
+cref_rna.to_csv(outdir/'cref_rna.csv', index=False)
 # Note that we also loose some samples when we merge with pdx metadata
 data = pdx.merge(cref_rna, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
 # Re-org cols

@@ -34,7 +34,7 @@ APPNAME = 'bin_ctype_balance_01'
 outdir = cfg.MAIN_APPDIR/APPNAME
 os.makedirs(outdir, exist_ok=True)
 
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 datapath = cfg.DATADIR/'data_merged.csv'
 data = pd.read_csv(datapath)
 print('\nMaster dataframe', data.shape)
