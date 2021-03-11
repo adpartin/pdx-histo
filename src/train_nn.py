@@ -11,14 +11,20 @@ import itertools
 import pandas as pd
 import numpy as np
 from typing import List
+import warnings
+
+warnings.filterwarnings('ignore')
 
 import tensorflow as tf
 from tensorflow import keras
 assert tf.__version__ >= "2.0"
 print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+AUTO = tf.data.experimental.AUTOTUNE
+# REPLICAS = strategy.num_replicas_in_sync
+# print(f'REPLICAS: {REPLICAS}')
 
 # To plot pretty figures
-import matplotlib as mpl
+# import matplotlib as mpl
 import matplotlib.pyplot as plt
 # mpl.rc('axes', labelsize=14)
 # mpl.rc('xtick', labelsize=12)
@@ -34,12 +40,13 @@ from deephistopath.wsi import util
 from tf_utils import calc_records_in_tfr_folder, calc_examples_in_tfrecord
 
 # Seed
-np.random.seed(42)
-
+seed = 42
+np.random.seed(seed)
+tf.random.set_seed(seed)
 
 fdir = Path(__file__).resolve().parent
 
-# Path
+
 MAIN_APPDIR = fdir/'../apps'
 DATADIR = fdir/'../data'
 FILENAME = 'annotations.csv'
@@ -60,11 +67,11 @@ def parse_args(args):
     return args
 
 
-def get_tfr_fnames(smp_names_subset) -> List[str]:
-    """ Get filenames of tfrecords based on response samples names.
+def get_tfr_files(smp_names_subset) -> List[str]:
+    """ Get filenames of tfrecords based on response sample names.
 
     Example:
-        get_tfr_fnames(tr_smp_names)
+        get_tfr_files(tr_smp_names)
     """
     tfr_all_files = sorted(TFR_DIR.glob('*.tfrec*'))
     tfr_sub_files = []
@@ -72,14 +79,16 @@ def get_tfr_fnames(smp_names_subset) -> List[str]:
     for sname in smp_names_subset:
         fname = TFR_DIR/(sname+'.tfrecord')
         if fname not in tfr_all_files:
-            raise ValueError('File was not found in:\n\t{fname}')
+            raise ValueError(f'File was not found in:\n\t{fname}')
         tfr_sub_files.append(str(fname))
 
     return tfr_sub_files
 
 
-def run(args):
-
+def main(args):
+    timer = util.Time()
+    args = parse_args(args)
+    
     # Load data
     appdir = MAIN_APPDIR/args.appname
     data = pd.read_csv(appdir/FILENAME)
@@ -134,9 +143,9 @@ def run(args):
     # x_data = data.iloc[idx, :].reset_index(drop=True)
     # y_data = np.squeeze(ydata.iloc[idx, :]).reset_index(drop=True)
 
-    tr_tfr_fnames = get_tfr_fnames(tr_smp_names)
-    vl_tfr_fnames = get_tfr_fnames(vl_smp_names)
-    te_tfr_fnames = get_tfr_fnames(te_smp_names)
+    tr_tfr_fnames = get_tfr_files(tr_smp_names)
+    vl_tfr_fnames = get_tfr_files(vl_smp_names)
+    te_tfr_fnames = get_tfr_files(te_smp_names)
 
     # ------------------------------------------
     # Read a tfrecord and explore single example
@@ -208,7 +217,7 @@ def run(args):
 
         return inputs, outputs
     
-    import ipdb; ipdb.set_trace(context=11)
+    import ipdb; ipdb.set_trace()
 
     # Read single example
     ds = tf.data.TFRecordDataset(filenames=tr_tfr_fnames)
@@ -235,16 +244,11 @@ def run(args):
     ds_vl = tf.data.TFRecordDataset(filenames=vl_tfr_fnames)
     ds_te = tf.data.TFRecordDataset(filenames=te_tfr_fnames)
     
-    
+    ds_tr = ds_tr.cache()
     print('\nTODO ...\n')
     
-
-def main(args):
-    timer = util.Time()
-    args = parse_args(args)
-    run(args)
-    timer.elapsed_displa()
-    print('Done.')
+    timer.elapsed_display()
+    print('\nDone.')
 
 
 if __name__ == '__main__':

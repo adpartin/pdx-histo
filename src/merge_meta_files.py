@@ -94,16 +94,21 @@ def stats(df_mrg):
 def load_crossref(path=METAPATH/cfg.CROSSREF_FNAME):
     # PDX slide meta (from NCI/Globus)
     cref = pd.read_excel(path, engine='openpyxl', header=2)
+    
     cref = cref.rename(columns={'Capture Date': 'capture_date',
                                 'Image ID': 'image_id',
                                 'Model': 'model',
                                 'Sample ID': 'sample_id',
                                 'Date Loaded to BW_Transfers': 'date_loaded_to_bw_transfers'})
+    
     cref = cref.dropna(subset=['model', 'image_id']).reset_index(drop=True)
+    
     cref.insert(loc=1, column='patient_id',  value=cref['model'].map(lambda x: x.split('~')[0]), allow_duplicates=True)
     cref.insert(loc=2, column='specimen_id', value=cref['model'].map(lambda x: x.split('~')[1]), allow_duplicates=True)
+    
     # cref = cref.astype({'image_id': int})
     cref['image_id'] = [int(x) if ~np.isnan(x) else x for x in cref['image_id'].values]
+    
     return cref
 
 
@@ -118,6 +123,7 @@ def load_pdx_meta(path=METAPATH/cfg.PDX_META_FNAME):
         pdx = pdx.dropna(subset=['patient_id']).reset_index(drop=True)
     else:
         raise f"File type ({file_type}) not supported."
+        
     pdx = pdx.astype(str)
 
     col_rename = {'tumor_site_from_data_src': 'csite_src',
@@ -125,6 +131,7 @@ def load_pdx_meta(path=METAPATH/cfg.PDX_META_FNAME):
                   'simplified_tumor_site': 'csite',
                   'simplified_tumor_type': 'ctype'}
     pdx = pdx.rename(columns=col_rename)
+    
     return pdx
 
 

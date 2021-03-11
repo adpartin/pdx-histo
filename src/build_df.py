@@ -14,14 +14,13 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
+fdir = Path(__file__).resolve().parent
 from config import cfg
 
-fdir = Path(__file__).resolve().parent
-
-RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
-RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000_combat'
-DD_DPATH = cfg.DATADIR/'dd.mordred.with.nans'
-META_DPATH = cfg.DATADIR/'meta/meta_merged.csv'
+# RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
+# RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000_combat'
+# DD_DPATH = cfg.DATADIR/'dd.mordred.with.nans'
+# META_DPATH = cfg.DATADIR/'meta/meta_merged.csv'
     
 
 def parse_args(args):
@@ -51,7 +50,7 @@ def drop_dups(df, verbose=True):
     return df
 
 
-def load_rsp(rsp_dpath=RSP_DPATH, verbose=False):
+def load_rsp(rsp_dpath=cfg.RSP_DPATH, verbose=False):
     """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
     rsp = drop_dups(rsp)
@@ -91,7 +90,7 @@ def load_rsp(rsp_dpath=RSP_DPATH, verbose=False):
     return rsp
 
 
-def load_rna(rna_dpath=RNA_DPATH, add_prefix: bool=True, verbose: bool=False):
+def load_rna(rna_dpath=cfg.RNA_DPATH, add_prefix: bool=True, verbose: bool=False):
     """ Load RNA-Seq data. """
     rna = pd.read_csv(rna_dpath, sep='\t')
     rna = drop_dups(rna)
@@ -108,7 +107,7 @@ def load_rna(rna_dpath=RNA_DPATH, add_prefix: bool=True, verbose: bool=False):
     return rna
 
 
-def load_dd(dd_dpath=DD_DPATH, verbose=False):
+def load_dd(dd_dpath=cfg.DD_DPATH, verbose=False):
     """ Load drug descriptors. """
     dd = pd.read_csv(dd_dpath, sep='\t')
     dd = drop_dups(dd)
@@ -119,7 +118,7 @@ def load_dd(dd_dpath=DD_DPATH, verbose=False):
     return dd
 
 
-def load_meta(meta_dpath=META_DPATH, verbose=False):
+def load_meta(meta_dpath=cfg.META_DPATH, verbose=False):
     """ Load the combined metadata. """
     meta = pd.read_csv(meta_dpath)
 
@@ -161,10 +160,10 @@ def main(args):
     # import ipdb; ipdb.set_trace() 
     
     # Load
-    rsp = load_rsp(RSP_DPATH)
-    rna = load_rna(RNA_DPATH)
-    dd = load_dd(DD_DPATH)
-    meta = load_meta(META_DPATH)
+    rsp = load_rsp()
+    rna = load_rna()
+    dd = load_dd()
+    meta = load_meta()
 
     # Merge
     data = rsp.merge(rna, on='Sample', how='inner')
