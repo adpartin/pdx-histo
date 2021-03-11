@@ -106,27 +106,6 @@ def load_data(path):
     return data
 
 
-# def _float_feature(value):
-#     """ Returns a bytes_list from a float / double. """
-#     if isinstance(value, list) is False:
-#         value = [value]
-#     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
-
-
-# def _bytes_feature(value):                                                                                                                                    
-#     """ Returns a bytes_list from a string / byte. """
-#     if isinstance(value, list) is False:
-#         value = [value]
-#     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))                                                                                     
-
-
-# def _int64_feature(value):                                                                                                                                    
-#     """ Returns an int64_list from a bool / enum / int / uint. """
-#     if isinstance(value, list) is False:
-#         value = [value]    
-#     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
-
-
 def np_img_to_bytes(np_img):
     """ Encode np image into bytes string. 
     https://programmer.group/opencv-python-cv2.imdecode-and-cv2.imencode-picture-decoding-and-coding.html
