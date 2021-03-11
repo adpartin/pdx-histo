@@ -1,13 +1,13 @@
 """ 
-Takes the original tfrecords that we got from Alex Pearson and updates
-them with new data including PDX samples metadata and RNA-Seq data.
+Takes the original tfrecords that we got from Alex Pearson and uses
+them to generate new tfrecords with additional data.
 
-We take metadata csv files (crossref file that comes with the histology
-slides and PDX meta that Yitan prepared) and RNA data, and merge them
-to obtain df that contains samples that have RNA data and TFRecords.
+update_tfrecords_with_rna()
+    updates tfrecords with RNA-seq and metadata of PDX samples
 
-Only for those slides we update the tfrecords and store them in a new
-directory.
+update_tfrecords_for_drug_rsp()
+    creates tfrecord for drug response sample that contains histo
+    slide, RNA-seq, drug descriptors, and drug response
 """
 import os
 import sys
@@ -22,16 +22,10 @@ from typing import Optional
 import tensorflow as tf
 assert tf.__version__ >= '2.0'
 
-# from build_tfrec import show_img  # (show_images, encode_categorical, np_img_to_bytes)
-# from train_nn import get_tfr_files
-from tf_utils import (calc_records_in_tfr_folder, calc_examples_in_tfrecord,
-                      _float_feature, _bytes_feature, _int64_feature)
-
-# from build_df import load_rsp, load_rna, load_dd, load_meta
-# from merge_meta_files import load_crossref, load_pdx_meta
 import load_data
 from load_data import PDX_SAMPLE_COLS
 from tfrecords import FEA_SPEC, original_tfr_names #, FEA_SPEC_NEW
+from tf_utils import _float_feature, _bytes_feature, _int64_feature
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
@@ -49,36 +43,15 @@ def green(text):
     return GREEN + str(text) + ENDC
 
 
-# -------------------------------------------
-# Get the dataframe with the metadata and RNA
-# -------------------------------------------
-# Load data
-# rna = load_rna()
-# cref = load_crossref()
-# pdx = load_pdx_meta()
+n_samples = None
+# n_samples = 4
 
-PDX_SAMPLE_COLS = ['model', 'patient_id', 'specimen_id', 'sample_id']
-
-# print(rsp.shape)
-# print(rna.shape)
-# print(dd.shape)
-# print(cref.shape)
-# print(pdx.shape)
-
-n_samples = 4
 
 def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     """
     Takes original tfrecords that we got from A. Pearson and updates them
-    by addting more data including PDX samples metadata and RNA-Seq data.
-
-    We take RNA data and metadata csv files (crossref file that comes with the
-    histology slides and PDX meta that Yitan prepared), and merge them to
-    obtain df that contains samples that have RNA data and the corresponding
-    tfrecords.
-
-    Only for those slides we update the tfrecords and store them in a new
-    directory.
+    by addting more data including metadata of PDX samples, RNA-Seq, drug
+    descriptors, and drug response.
 
     Args:
         n_samples : generate tfrecords for n_samples drug response samples
@@ -88,8 +61,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     outpath = cfg.SF_TFR_DIR_RSP/LABEL
     os.makedirs(outpath, exist_ok=True)
 
-    # import ipdb; ipdb.set_trace()
-
+    # Load data
     rsp = load_data.load_rsp()
     rna = load_data.load_rna()
     dd = load_data.load_dd()
@@ -194,7 +166,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     c_slides = set(slides).intersection(set(all_slides))
     print(f'A total of {len(c_slides)} drug response samples with tfrecords and tabular features.')
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
     # Create a tfrecord for each sample (iter over samples)
     for i, slide_name in enumerate(sorted(c_slides)):
@@ -271,8 +243,6 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    import ipdb; ipdb.set_trace()
-
     GE_LEN = len(slide_meta['ge_data'])
     DD_LEN = len(slide_meta['dd_data'])
 
@@ -305,6 +275,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
     }
 
+    import ipdb; ipdb.set_trace()
+
     smp = samples[0]
     tfr_path = str(outpath/(smp + '.tfrecords'))
     raw_dataset = tf.data.TFRecordDataset(tfr_path)
@@ -328,11 +300,11 @@ def update_tfrecords_with_rna():
     Only for those slides we update the tfrecords and store them in a new
     directory.
     """
-
     # Create path for the updated tfrecords
     outpath = cfg.SF_TFR_DIR_RNA/LABEL
     os.makedirs(outpath, exist_ok=True)
 
+    # Load data
     rna = load_data.load_rna()
     cref = load_data.load_crossref()
     pdx = load_data.load_pdx_meta2()
@@ -365,7 +337,6 @@ def update_tfrecords_with_rna():
             slide_dct[c] = str(row_data[c])
 
         # RNA cols
-        ge_cols = [c for c in row_data.index if c.startswith('ge_')]
         ge_data = list(row_data[ge_cols].values.astype(GE_TYPE))
         slide_dct['ge_data'] = ge_data
         
@@ -406,22 +377,23 @@ def update_tfrecords_with_rna():
             ex = tf.train.Example(features=tf.train.Features(
                 feature={
                     # old features
-                    'slide':       _bytes_feature(features['slide'].numpy()),     # image_id
+                    'slide':       _bytes_feature(features['slide'].numpy()),  # image_id
                     'image_raw':   _bytes_feature(features['image_raw'].numpy()),
 
                     # new features
+                    'Sample':      _bytes_feature(bytes(slide_meta['Sample'], 'utf-8')),
                     'model':       _bytes_feature(bytes(slide_meta['model'], 'utf-8')),
                     'patient_id':  _bytes_feature(bytes(slide_meta['patient_id'], 'utf-8')),
                     'specimen_id': _bytes_feature(bytes(slide_meta['specimen_id'], 'utf-8')),
                     'sample_id':   _bytes_feature(bytes(slide_meta['sample_id'], 'utf-8')),
                     'image_id':    _bytes_feature(bytes(slide_meta['image_id'], 'utf-8')),
-                    'Sample':      _bytes_feature(bytes(slide_meta['Sample'], 'utf-8')),
-                    'ge_data':     _float_feature(slide_meta['ge_data']),
 
-                    'ctype':      _bytes_feature(bytes(slide_meta['ctype'], 'utf-8')),
-                    'csite':      _bytes_feature(bytes(slide_meta['csite'], 'utf-8')),
-                    'ctype_src':  _bytes_feature(bytes(slide_meta['ctype_src'], 'utf-8')),
-                    'csite_src':  _bytes_feature(bytes(slide_meta['csite_src'], 'utf-8')),
+                    'ctype':       _bytes_feature(bytes(slide_meta['ctype'], 'utf-8')),
+                    'csite':       _bytes_feature(bytes(slide_meta['csite'], 'utf-8')),
+                    'ctype_src':   _bytes_feature(bytes(slide_meta['ctype_src'], 'utf-8')),
+                    'csite_src':   _bytes_feature(bytes(slide_meta['csite_src'], 'utf-8')),
+
+                    'ge_data':     _float_feature(slide_meta['ge_data']),
                 }
             ))
             
@@ -433,8 +405,6 @@ def update_tfrecords_with_rna():
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    import ipdb; ipdb.set_trace()
-
     GE_LEN = len(slide_meta['ge_data'])
 
     fea_spec_new = {
@@ -467,4 +437,4 @@ def update_tfrecords_with_rna():
 
 
 # update_tfrecords_with_rna()
-update_tfrecords_for_drug_rsp(n_samples=n_samples)
+update_tfrecords_for_drug_rsp(n_samples)
