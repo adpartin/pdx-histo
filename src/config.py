@@ -13,7 +13,7 @@ cfg = types.SimpleNamespace()
 cfg.MAIN_APPDIR = (fdir/'../apps').resolve()
 cfg.DATADIR = (fdir/'../data').resolve()
 
-cfg.TILES_DIR = cfg.DATADIR/'tiles_png'
+# cfg.TILES_DIR = cfg.DATADIR/'tiles_png'  # old pipeline
 
 cfg.ANNOTATIONS_FILENAME = 'annotations.csv'
 cfg.SF_ANNOTATIONS_FILENAME = 'annotations_slideflow.csv'
@@ -22,6 +22,7 @@ cfg.TFR_DIR = (cfg.DATADIR/'tfrecords').resolve()
 cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED').resolve()
 # cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED_updated').resolve()
 cfg.SF_TFR_DIR_RNA = (fdir/'../../slideflow-proj/PDX_FIXED_RNA').resolve()
+cfg.SF_TFR_DIR_RSP = (fdir/'../../slideflow-proj/PDX_FIXED_RSP').resolve()
 
 # cfg.MAIN_APPDIR = MAIN_APPDIR
 # cfg.DATADIR = DATADIR
@@ -33,9 +34,17 @@ cfg.SF_TFR_DIR_RNA = (fdir/'../../slideflow-proj/PDX_FIXED_RNA').resolve()
 # Meta file names
 # cfg.CROSSREF_FNAME = 'ImageID_PDMRID_CrossRef.csv'
 cfg.CROSSREF_FNAME = '_ImageID_PDMRID_CrossRef.xlsx'
-# cfg.PDX_META_FNAME = 'PDX_Meta_Information.csv'
-cfg.PDX_META_FNAME = 'PDX_Meta_Information.xlsx'
+# cfg.PDX_META_FNAME = 'PDX_Meta_Information.xlsx'
+cfg.PDX_META_FNAME = 'PDX_Meta_Information2.csv'
 cfg.SLIDES_META_FNAME = 'meta_from_wsi_slides.csv'
+
+cfg.RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
+# cfg.RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000'
+cfg.RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000_combat'
+cfg.DD_DPATH = cfg.DATADIR/'dd.mordred.with.nans'
+
+cfg.METAPATH = cfg.DATADIR/'meta'
+# cfg.META_DPATH = cfg.METAPATH/'meta_merged.csv'
 
 # Slides that were identified as bad with either bad staining or poor quality. 
 # These notes were provided by Pearson's group in PDX_FIXED/slide_problems.txt
