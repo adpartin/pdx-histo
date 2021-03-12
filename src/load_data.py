@@ -198,10 +198,11 @@ def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
     
     # Remove bad samples with bad slides
     if drop_bad_slides:
+        bad_slides = [str(slide) for slide in cfg.BAD_SLIDES]
         print('\nDrop bad slides from image_id.')
         print(f'cref: {cref.shape}')
-        print(f'Bad slides: {cfg.BAD_SLIDES}')
-        cref = cref[~cref.image_id.isin(cfg.BAD_SLIDES)].reset_index(drop=True)
+        print(f'Bad slides: {bad_slides}')
+        cref = cref[~cref.image_id.isin(bad_slides)].reset_index(drop=True)
         print(f'cref: {cref.shape}')
     
     return cref

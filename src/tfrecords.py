@@ -7,9 +7,48 @@ FEA_SPEC = {
     'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None)
 }
 
-FEA_SPEC_NEW = {
-    'slide':     tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-    'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None)
+FEA_SPEC_RNA = {
+    'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+}
+
+FEA_SPEC_RSP = {
+    'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'smp': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'ctype': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'csite': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'ctype_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'csite_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'Drug1': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'CLEAN_NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'ID': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+
+    # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
+    # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
+    'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'dd_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 }
 
 

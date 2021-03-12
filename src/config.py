@@ -60,3 +60,9 @@ cfg.BAD_SLIDES = [str(s) for s in cfg.BAD_SLIDES]
 # Data types
 cfg.GE_DTYPE = np.float32
 cfg.DD_DTYPE = np.float32
+
+# App globals  # TODO: this should be set per app??
+cfg.ID_NAME = 'smp'
+cfg.TILE_PX = 299
+cfg.TILE_UM = 302
+cfg.IMAGE_SIZE = cfg.TILE_PX 
