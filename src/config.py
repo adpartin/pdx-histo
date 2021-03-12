@@ -5,6 +5,7 @@ import os
 import sys
 import types
 from pathlib import Path
+import numpy as np
 
 fdir = Path(__file__).resolve().parent
 
@@ -12,12 +13,14 @@ cfg = types.SimpleNamespace()
 
 cfg.MAIN_APPDIR = (fdir/'../apps').resolve()
 cfg.DATADIR = (fdir/'../data').resolve()
-
+cfg.SLIDES_DIR = (cfg.DATADIR/'doe-globus-pdx-data').resolve()
 # cfg.TILES_DIR = cfg.DATADIR/'tiles_png'  # old pipeline
 
+# Annotaions
 cfg.ANNOTATIONS_FILENAME = 'annotations.csv'
 cfg.SF_ANNOTATIONS_FILENAME = 'annotations_slideflow.csv'
 
+# TFRecords
 cfg.TFR_DIR = (cfg.DATADIR/'tfrecords').resolve()
 cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED').resolve()
 # cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED_updated').resolve()
@@ -49,6 +52,11 @@ cfg.METAPATH = cfg.DATADIR/'meta'
 # Slides that were identified as bad with either bad staining or poor quality. 
 # These notes were provided by Pearson's group in PDX_FIXED/slide_problems.txt
 cfg.BAD_SLIDES = [45983, 83742, 83743,  # poor quality
-                  22232, 21836, 20729,  # staining off
+                  20729, 21836, 22232,  # staining off
                   ]
+cfg.BAD_SLIDES = [str(s) for s in cfg.BAD_SLIDES]
 # 10415, 13582, 9113,   # "no corresponding slide annotations" --> output from slideflow
+
+# Data types
+cfg.GE_DTYPE = np.float32
+cfg.DD_DTYPE = np.float32

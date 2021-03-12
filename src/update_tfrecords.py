@@ -24,15 +24,13 @@ assert tf.__version__ >= '2.0'
 
 import load_data
 from load_data import PDX_SAMPLE_COLS
-from tfrecords import FEA_SPEC, original_tfr_names #, FEA_SPEC_NEW
+from tfrecords import FEA_SPEC, FEA_SPEC_RSP, original_tfr_names
 from tf_utils import _float_feature, _bytes_feature, _int64_feature
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
 
 
-GE_TYPE = np.float32
-DD_TYPE = np.float32
 LABEL = '299px_302um'
 directory = cfg.SF_TFR_DIR/LABEL
 
@@ -89,6 +87,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     print(rsp_rna_dd_pdx.shape)
 
     # Merge cref
+    # (we loose some samples because we filter the bad slides)
     print(cref.shape)
     print(rsp_rna_dd_pdx.shape)
     data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='inner')
@@ -135,7 +134,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
 
     # Create dict of slide ids. Each slide (key) contains a dict with metadata.
     mm = {}  # dict to store all metadata
-    id_name = 'smp'  # col name that contains the IDs for the samples 
+    id_col_name = 'smp'  # col name that contains the IDs for the samples 
 
     # import ipdb; ipdb.set_trace()
 
@@ -150,12 +149,16 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
             sample_dct[c] = str(row_data[c])
 
         # Features cols
-        ge_data = list(row_data[ge_cols].values.astype(GE_TYPE))
-        dd_data = list(row_data[dd_cols].values.astype(DD_TYPE))
-        sample_dct['ge_data'] = ge_data
-        sample_dct['dd_data'] = dd_data
+        # ge_data = list(row_data[ge_cols].values.astype(cfg.GE_DTYPE))
+        # dd_data = list(row_data[dd_cols].values.astype(cfg.DD_DTYPE))
+        # sample_dct['ge_data'] = ge_data
+        # sample_dct['dd_data'] = dd_data
+        ge_data = row_data[ge_cols].values.astype(cfg.GE_DTYPE)
+        dd_data = row_data[dd_cols].values.astype(cfg.DD_DTYPE)
+        sample_dct['ge_data'] = ge_data.tobytes()
+        sample_dct['dd_data'] = dd_data.tobytes()
         
-        smp = str(row_data[id_name])
+        smp = str(row_data[id_col_name])
         mm[smp] = sample_dct
         
     print(f'A total of {len(mm)} drug response samples with tabular features.')
@@ -175,7 +178,6 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         rel_tfr = str(slide_name) + '.tfrecords'
         tfr = str(directory/rel_tfr)
         
-        # print(f"\r\033[K Updating {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...", end="") 
         print(f"\r\033[K Creating tfrecords using {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...",
               end="") 
         print()
@@ -183,7 +185,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
         # Iter over drug response samples that use the current slide
-        samples = data[data['image_id'] == slide_name][id_name].values.tolist()
+        samples = data[data['image_id'] == slide_name][id_col_name].values.tolist()
         for smp in samples:
 
             # Name of the output tfrecord for the current drug response sample
@@ -229,8 +231,10 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
 
                         'Response':    _int64_feature(int(slide_meta['Response'])),
 
-                        'ge_data':     _float_feature(slide_meta['ge_data']),
-                        'dd_data':     _float_feature(slide_meta['dd_data']),
+                        # 'ge_data':     _float_feature(slide_meta['ge_data']),
+                        # 'dd_data':     _float_feature(slide_meta['dd_data']),
+                        'ge_data':     _bytes_feature(slide_meta['ge_data']),
+                        'dd_data':     _bytes_feature(slide_meta['dd_data']),
                     }
                 ))
                 
@@ -243,45 +247,49 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    GE_LEN = len(slide_meta['ge_data'])
-    DD_LEN = len(slide_meta['dd_data'])
+    # GE_LEN = len(slide_meta['ge_data'])
+    # DD_LEN = len(slide_meta['dd_data'])
 
-    fea_spec_new = {
-        'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    # fea_spec_new = {
+    #     'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-        'smp': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'smp': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-        'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-        'ctype': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'csite': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'ctype_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'csite_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'ctype': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'csite': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'ctype_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'csite_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-        'Drug1': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'CLEAN_NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-        'ID': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'Drug1': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'CLEAN_NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'ID': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-        'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+    #     'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
 
-        'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
-        'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
-    }
+    #     # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
+    #     # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
+    #     'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    #     'dd_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    # }
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
     smp = samples[0]
     tfr_path = str(outpath/(smp + '.tfrecords'))
     raw_dataset = tf.data.TFRecordDataset(tfr_path)
     rec = next(raw_dataset.__iter__())
-    features = tf.io.parse_single_example(rec, features=fea_spec_new)
+    # features = tf.io.parse_single_example(rec, features=fea_spec_new)
+    features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP)
+    print(np.frombuffer(features['ge_data'].numpy(), dtype=cfg.GE_DTYPE))
     tf.print(features.keys())
 
     print('\nDone.')
@@ -337,7 +345,7 @@ def update_tfrecords_with_rna():
             slide_dct[c] = str(row_data[c])
 
         # RNA cols
-        ge_data = list(row_data[ge_cols].values.astype(GE_TYPE))
+        ge_data = list(row_data[ge_cols].values.astype(cfg.GE_DTYPE))
         slide_dct['ge_data'] = ge_data
         
         slide = str(row_data['image_id'])
