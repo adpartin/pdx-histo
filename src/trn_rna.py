@@ -1,3 +1,7 @@
+"""
+Train ctype classifier using rna data (w/o tfrecords).
+This code can adjusted for drug response prediction.
+"""
 import os
 import sys
 assert sys.version_info >= (3, 5)
@@ -93,7 +97,6 @@ n_classes = len(np.unique(ydata_label))
 import ipdb; ipdb.set_trace()
 # Scale RNA
 xdata = data[ge_cols]
-
 x_scaler = StandardScaler()
 x1 = pd.DataFrame(x_scaler.fit_transform(xdata), columns=ge_cols, dtype=np.float32)
 

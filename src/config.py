@@ -6,6 +6,7 @@ import sys
 import types
 from pathlib import Path
 import numpy as np
+import tensorflow as tf
 
 fdir = Path(__file__).resolve().parent
 
@@ -60,9 +61,18 @@ cfg.BAD_SLIDES = [str(s) for s in cfg.BAD_SLIDES]
 # Data types
 cfg.GE_DTYPE = np.float32
 cfg.DD_DTYPE = np.float32
+cfg.FEA_DTYPE = np.float32
 
 # App globals  # TODO: this should be set per app??
+app_cfg = types.SimpleNamespace()
 cfg.ID_NAME = 'smp'
 cfg.TILE_PX = 299
 cfg.TILE_UM = 302
 cfg.IMAGE_SIZE = cfg.TILE_PX 
+
+# TF names
+tf_cfg = types.SimpleNamespace()
+tf_cfg.TILE_DATA_NAME = "tile_data"
+tf_cfg.GE_DATA_NAME = "ge_data"
+tf_cfg.DD_DATA_NAME = "dd_data"
+tf_cfg.RESPONSE_NAME = 'Response'

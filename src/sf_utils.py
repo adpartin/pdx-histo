@@ -1,18 +1,25 @@
 import sys
 import csv
 import numpy as np
+from functools import partial
 
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
 
 from config import cfg
-from tfrecords import FEA_SPEC_RSP
+from tfrecords import FEA_SPEC_RSP, FEA_SPEC_RNA
+
+GREEN = '\033[92m'
+ENDC = '\033[0m'
+def green(text):
+    return GREEN + str(text) + ENDC
 
 BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
 BALANCE_BY_PATIENT = 'BALANCE_BY_PATIENT'
 NO_BALANCE = 'NO_BALANCE'
 
 
+# Create training_dataset (instance of class Dataset)
 # Part of the Dataset class construction
 def read_annotations(annotations_file):
     '''
@@ -38,101 +45,12 @@ def read_annotations(annotations_file):
     return header, results
 
 
-def _parse_tfrecord_function(record,
-                             include_slidenames=True,
-                             multi_image=False,
-                             with_tile=True,
-                             with_ge=False,
-                             ge_scaler=None,
-                             dd_scaler=None,
-                             AUGMENT=True):
-    ''' Parses raw entry read from TFRecord. '''
-    #feature_description = tfrecords.FEATURE_DESCRIPTION if not multi_image else tfrecords.FEATURE_DESCRIPTION_MULTI
-    ##feature_description = FEATURE_DESCRIPTION if not multi_image else FEATURE_DESCRIPTION_MULTI
-
-    # if with_ge:
-    #     feature_description = FEATURE_DESCRIPTION_RNA
-    # elif multi_image:
-    #     feature_description = FEATURE_DESCRIPTION_MULTI
-    # else:
-    #     feature_description = FEATURE_DESCRIPTION
-
-    feature_description = FEA_SPEC_RSP
-
-    features = tf.io.parse_single_example(record, feature_description)
-    #slide = features['slide']
-    smp = features[cfg.ID_NAME]
-
-    #if MODEL_TYPE == 'linear':
-    #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
-    #    label = [ANNOTATIONS_TABLES[oi].lookup(smp) for oi in range(NUM_CLASSES)]
-    #else:
-    #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
-    #    label = ANNOTATIONS_TABLES[0].lookup(smp)
-    # label = {outcome_header[0]: label}  # ap, or {'ctype': label}
-    label = {'Response': tf.cast(features['Response'], tf.int64)}  # ap, or {'ctype': label}
-
-    image_dict = {}
-    
-    if multi_image:
-        #image_dict = {}
-        inputs = [inp for inp in list(feature_description.keys()) if inp != 'slide']
-        for i in inputs:
-            image_string = features[i]
-            #image = self._process_image(image_string, self.AUGMENT)
-            image = _process_image(image_string, AUGMENT)
-            image_dict.update({
-                i: image
-            })
-        if include_slidenames:
-            return image_dict, label, slide
-        else:
-            return image_dict, label	
-
-    else:
-        if with_tile:
-            image_string = features['image_raw']      
-            image = _process_image(image_string, AUGMENT)
-            #image_dict = {'tile_image': image}
-            image_dict.update({'tile_image': image})
-
-            NUM_SLIDE_INPUT=None # (ap)
-            if NUM_SLIDE_INPUT:
-                def slide_lookup(s):
-                    return SLIDE_INPUT_TABLE[s.numpy().decode('utf-8')]            
-                slide_input_val = tf.py_function(func=slide_lookup, inp=[slide], Tout=[tf.float32] * NUM_SLIDE_INPUT)
-                image_dict.update({'slide_input': slide_input_val})
-
-        if with_ge:
-            def decode_np_arr(tensor):
-                # import ipdb; ipdb.set_trace()
-                ge_data = np.frombuffer(tensor.numpy(), dtype=cfg.GE_DTYPE)
-                return ge_data
-            ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],
-                                     Tout=[tf.float32])
-            ge_data = tf.cast(ge_data, tf.float32)
-            # ge_data = _process_rna(ge_data)
-            if ge_scaler is not None:
-                ge_fea_mean = tf.constant(ge_scaler.mean_, tf.float32)
-                ge_fea_scale = tf.constant(ge_scaler.scale_, tf.float32)
-                ge_data = (ge_data - ge_fea_mean) / ge_fea_scale
-            image_dict.update({'ge_data': ge_data})      
-            
-        if include_slidenames:
-            return image_dict, label, slide
-        else:
-            return image_dict, label
-
-
 def _process_image(image_string, augment):
     '''Converts a JPEG-encoded image string into RGB array, using normalization if specified.'''
     image = tf.image.decode_jpeg(image_string, channels = 3)
 
-    #if self.normalizer:
-    normalizer = None  # (ap)
-    if normalizer:
-        #image = tf.py_function(self.normalizer.tf_to_rgb, [image], tf.int32)
-        print('(ap) not normalizing!')
+    # if self.normalizer:
+    #     image = tf.py_function(self.normalizer.tf_to_rgb, [image], tf.int32)
 
     image = tf.image.per_image_standardization(image)
 
@@ -150,12 +68,175 @@ def _process_image(image_string, augment):
     return image
 
 
-def _interleave_tfrecords(tfrecords, batch_size, balance, finite, max_tiles=None,
-                          min_tiles=None, include_slidenames=False, multi_image=False,
-                          parse_fn=None, drop_remainder=False,
-                          with_ge=False, with_tile=True,
-                          MANIFEST=None, ANNOTATIONS_TABLES=None, SLIDE_ANNOTATIONS=None,
-                          MODEL_TYPE=None):
+def _parse_tfrec_fn_rna(record,
+                        include_smp_names=True,
+                        use_tile=True,
+                        use_ge=False,
+                        ge_scaler=None,
+                        id_name='slide',
+                        MODEL_TYPE=None,
+                        ANNOTATIONS_TABLES=None,
+                        AUGMENT=True
+                        ):
+    '''Parses raw entry read from TFRecord.'''
+    # if use_ge:
+    #     feature_description = FEATURE_DESCRIPTION_RNA
+    # else:
+    #     feature_description = FEATURE_DESCRIPTION
+
+    # features = tf.io.parse_single_example(record, feature_description)
+    features = tf.io.parse_single_example(record, FEA_SPEC_RNA)
+    slide = features[id_name]
+
+    #if self.MODEL_TYPE == 'linear':
+    if MODEL_TYPE == 'linear':
+        label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
+    else:
+        label = ANNOTATIONS_TABLES[0].lookup(slide)
+    # label = {outcome_header[0]: label}  # ap, or {'ctype': label}
+    label = {'ctype': label}
+
+    image_dict = {}	
+
+    if use_tile:
+        image_string = features['image_raw']      
+        image = _process_image(image_string, AUGMENT)
+        image_dict.update({'tile_image': image})
+
+    if use_ge:
+        ge_data = tf.cast(features['ge_data'], tf.float32)
+        ge_data = (ge_data - tf.constant(ge_scaler.mean_, tf.float32)) / tf.constant(ge_scaler.scale_, tf.float32)
+        image_dict.update({'ge_data': ge_data})      
+
+    if include_smp_names:
+        return image_dict, label, slide
+    else:
+        return image_dict, label
+
+
+
+# def _parse_tfrecord_function(record,
+# def _parse_tfrec_fn_rsp(record,
+#                         include_smp_names=True,
+#                         use_tile=True,
+#                         use_ge=False,
+#                         use_dd=False,
+#                         ge_scaler=None,
+#                         dd_scaler=None,
+#                         id_name=None,
+#                         AUGMENT=True,
+#                         ANNOTATIONS_TABLES=None):
+def _parse_tfrec_fn_rsp(record,
+                        include_smp_names=True,
+                        use_tile=True,
+                        use_ge=False,
+                        use_dd=False,
+                        ge_scaler=None,
+                        dd_scaler=None,
+                        id_name='smp',
+                        MODEL_TYPE=None,
+                        ANNOTATIONS_TABLES=None,
+                        AUGMENT=True
+                        ):
+    ''' Parses raw entry read from TFRecord. '''
+    #feature_description = tfrecords.FEATURE_DESCRIPTION if not multi_image else tfrecords.FEATURE_DESCRIPTION_MULTI
+    ##feature_description = FEATURE_DESCRIPTION if not multi_image else FEATURE_DESCRIPTION_MULTI
+
+    # if use_ge:
+    #     feature_description = FEATURE_DESCRIPTION_RNA
+    # elif multi_image:
+    #     feature_description = FEATURE_DESCRIPTION_MULTI
+    # else:
+    #     feature_description = FEATURE_DESCRIPTION
+
+    feature_description = FEA_SPEC_RSP
+    # feature_description = FEA_SPEC_RNA
+
+    features = tf.io.parse_single_example(record, feature_description)
+    #slide = features['slide']
+    #smp = features[cfg.ID_NAME]
+    smp = features[id_name]
+
+    #if MODEL_TYPE == 'linear':
+    #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
+    #    label = [ANNOTATIONS_TABLES[oi].lookup(smp) for oi in range(NUM_CLASSES)]
+    #else:
+    #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
+    #    label = ANNOTATIONS_TABLES[0].lookup(smp)
+    # label = {outcome_header[0]: label}  # ap, or {'ctype': label}
+    label = {'Response': tf.cast(features['Response'], tf.int64)}  # ap, or {'ctype': label}
+
+    image_dict = {}
+
+    if use_tile:
+        image_string = features['image_raw']      
+        image = _process_image(image_string, AUGMENT)
+        image_dict.update({'tile_image': image})
+        del image
+
+    def decode_np_arr(tensor):
+        return np.frombuffer(tensor.numpy(), dtype=cfg.FEA_DTYPE)
+
+    def scale_fea(data, scaler):
+        """ Scaler is an object of class sklearn.preprocessing.StandardScaler. """
+        fea_mean = tf.constant(scaler.mean_, tf.float32)
+        fea_scale = tf.constant(scaler.scale_, tf.float32)
+        return (data - fea_mean) / fea_scale
+
+    if use_ge:
+        ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],
+                                 Tout=[tf.float32])
+        ge_data = tf.reshape(ge_data, [-1])
+
+        if ge_scaler is not None:
+            ge_data = scale_fea(ge_data, ge_scaler)
+
+        ge_data = tf.cast(ge_data, tf.float32)
+        image_dict.update({'ge_data': ge_data})      
+        del ge_data
+
+    if use_dd:
+        dd_data = tf.py_function(func=decode_np_arr, inp=[features['dd_data']],
+                                 Tout=[tf.float32])
+        dd_data = tf.reshape(dd_data, [-1])
+
+        if dd_scaler is not None:
+            dd_data = scale_fea(dd_data, dd_scaler)
+
+        dd_data = tf.cast(dd_data, tf.float32)
+        image_dict.update({'dd_data': dd_data})      
+        del dd_data
+
+    if include_smp_names:
+        return image_dict, label, smp
+    else:
+        return image_dict, label
+
+
+# def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
+#                           max_tiles=None, min_tiles=None,
+#                           include_smp_names=False,
+#                           parse_fn=None, drop_remainder=False,
+#                           use_dd=False,
+#                           use_ge=False,
+#                           use_tile=True,
+#                           id_name=None,
+#                           MANIFEST=None, # global var of SlideFlowModel
+#                           ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
+#                           SLIDE_ANNOTATIONS=None, # global var of SlideFlowModel
+#                           MODEL_TYPE=None, # global var of SlideFlowModel
+#                           SAMPLES=None): # global var of SlideFlowModel
+def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
+                          max_tiles=None, min_tiles=None,
+                          include_smp_names=False,
+                          drop_remainder=False,
+                          parse_fn=None,
+                          MANIFEST=None, # global var of SlideFlowModel
+                          # ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
+                          SLIDE_ANNOTATIONS=None, # global var of SlideFlowModel
+                          MODEL_TYPE=None, # global var of SlideFlowModel
+                          SAMPLES=None,
+                          **parse_fn_kwargs): # global var of SlideFlowModel
     ''' Generates an interleaved dataset from a collection of tfrecord files,
     sampling from tfrecord files randomly according to balancing if provided.
     Requires self.MANIFEST. Assumes TFRecord files are named by slide.
@@ -171,11 +252,12 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite, max_tiles=None
                                     used with balancing, some tiles will be skipped.
         max_tiles:				Maximum number of tiles to use per slide.
         min_tiles:				Minimum number of tiles that each slide must have to be included.
-        include_slidenames:		Bool, if True, dataset will include slidename (each entry will return image,
+        include_smp_names:		Bool, if True, dataset will include slidename (each entry will return image,
                                 label, and slidename)
         multi_image:			Bool, if True, will read multiple images from each TFRecord record.
     '''
-    # import ipdb; ipdb.set_trace()
+    DATASETS = {}  # global var of SlideFlowModel
+
     print(f"Interleaving {len(tfrecords)} tfrecords: finite={finite}, max_tiles={max_tiles}, min_tiles={min_tiles}")
     datasets = []
     datasets_categories = []
@@ -185,8 +267,8 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite, max_tiles=None
     categories_prob = {}
     categories_tile_fraction = {}
 
-    if not parse_fn:
-        parse_fn = _parse_tfrecord_function
+    # if not parse_fn:
+    #     parse_fn = _parse_tfrec_fn_rsp
 
     if tfrecords == []:
         print(f"No TFRecords found.")
@@ -302,10 +384,27 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite, max_tiles=None
               have been extracted and all TFRecords are in the appropriate folder")
         sys.exit()
 
-    if include_slidenames:
+    # if include_smp_names:
+    #     dataset_with_slidenames = dataset.map(
+    #             partial(parse_fn, include_smp_names=True,
+    #                     use_dd=use_dd, use_ge=use_ge, use_tile=use_tile, id_name=id_name,
+    #                     AUGMENT=AUTMENT, ANNOTATIONS_TABLES=ANNOTATIONS_TABLES),
+    #             num_parallel_calls=32
+    #     ) #tf.data.experimental.AUTOTUNE
+    #     dataset_with_slidenames = dataset_with_slidenames.batch(batch_size, drop_remainder=drop_remainder)
+    # else:
+    #     dataset_with_slidenames = None
+
+    # dataset = dataset.map(
+    #     partial(parse_fn, include_smp_names=False,
+    #             use_dd=use_dd, use_ge=use_ge, use_tile=use_tile, id_name=id_name,
+    #             AUGMENT=AUTMENT, ANNOTATIONS_TABLES=ANNOTATIONS_TABLES),
+    #     num_parallel_calls=8
+    # )
+
+    if include_smp_names:
         dataset_with_slidenames = dataset.map(
-                partial(parse_fn, include_slidenames=True, multi_image=multi_image,
-                        with_ge=with_ge, with_tile=with_tile),
+                partial(parse_fn, include_smp_names=True, **parse_fn_kwargs),
                 num_parallel_calls=32
         ) #tf.data.experimental.AUTOTUNE
         dataset_with_slidenames = dataset_with_slidenames.batch(batch_size, drop_remainder=drop_remainder)
@@ -313,8 +412,7 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite, max_tiles=None
         dataset_with_slidenames = None
 
     dataset = dataset.map(
-        partial(parse_fn, include_slidenames=False, multi_image=multi_image,
-                with_ge=with_ge, with_tile=with_tile),
+        partial(parse_fn, include_smp_names=False, **parse_fn_kwargs),
         num_parallel_calls=8
     )
 

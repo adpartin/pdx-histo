@@ -134,9 +134,9 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
 
     # Create dict of slide ids. Each slide (key) contains a dict with metadata.
     mm = {}  # dict to store all metadata
-    id_col_name = 'smp'  # col name that contains the IDs for the samples 
+    id_name = 'smp'  # col name that contains the IDs for the samples 
 
-    # import ipdb; ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
 
     # Iterate over rows a collect data into dict
     for i, row_data in data.iterrows():
@@ -158,7 +158,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         sample_dct['ge_data'] = ge_data.tobytes()
         sample_dct['dd_data'] = dd_data.tobytes()
         
-        smp = str(row_data[id_col_name])
+        smp = str(row_data[id_name])
         mm[smp] = sample_dct
         
     print(f'A total of {len(mm)} drug response samples with tabular features.')
@@ -185,7 +185,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
         # Iter over drug response samples that use the current slide
-        samples = data[data['image_id'] == slide_name][id_col_name].values.tolist()
+        samples = data[data['image_id'] == slide_name][id_name].values.tolist()
         for smp in samples:
 
             # Name of the output tfrecord for the current drug response sample

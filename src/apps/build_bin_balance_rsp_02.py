@@ -52,6 +52,7 @@ rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=['patient_id', 'specimen_id'], how='in
 print(rsp_rna_dd_pdx.shape)
 
 # Merge cref
+# (we loose some samples because we filter the bad slides)
 print(cref.shape)
 print(rsp_rna_dd_pdx.shape)
 data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='inner')
@@ -89,8 +90,6 @@ aa = pd.concat(dfs, axis=0)
 df = pd.concat([aa, r1], axis=0)
 df = df.sort_values('smp', ascending=True).reset_index(drop=True)
 del dfs, aa, ctype, count
-
-import ipdb; ipdb.set_trace()
 
 df = df.reset_index()
 pprint(df.groupby(['ctype', 'Response']).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))

@@ -11,13 +11,15 @@ FEA_SPEC_RNA = {
     'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
+    'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    # 'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    'ge_data': tf.io.FixedLenFeature(shape=(976,), dtype=tf.float32),
 }
 
 FEA_SPEC_RSP = {
