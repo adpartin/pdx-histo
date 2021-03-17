@@ -24,12 +24,13 @@ assert tf.__version__ >= '2.0'
 
 import load_data
 from load_data import PDX_SAMPLE_COLS
-from tfrecords import FEA_SPEC, FEA_SPEC_RSP, original_tfr_names
+from tfrecords import FEA_SPEC, FEA_SPEC_RSP, FEA_SPEC_RNA_NEW, original_tfr_names
 from tf_utils import _float_feature, _bytes_feature, _int64_feature
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
 
+seed = 42
 
 LABEL = '299px_302um'
 directory = cfg.SF_TFR_DIR/LABEL
@@ -119,7 +120,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     # -------------------
 
     if n_samples is not None:
-        data = data.sample(n=n_samples).reset_index(drop=True)
+        data = data.sample(n=n_samples, random_state=seed).reset_index(drop=True)
 
     # Re-org cols
     dim = data.shape[1]
@@ -136,12 +137,13 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     mm = {}  # dict to store all metadata
     id_name = 'smp'  # col name that contains the IDs for the samples 
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
     # Iterate over rows a collect data into dict
     for i, row_data in data.iterrows():
         # Dict to contain metadata for the current slide
         sample_dct = {}
+        smp = str(row_data[id_name])
 
         # Meta cols
         # Create a (key, value) pair for each meta col
@@ -158,7 +160,6 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         sample_dct['ge_data'] = ge_data.tobytes()
         sample_dct['dd_data'] = dd_data.tobytes()
         
-        smp = str(row_data[id_name])
         mm[smp] = sample_dct
         
     print(f'A total of {len(mm)} drug response samples with tabular features.')
@@ -180,7 +181,6 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
         
         print(f"\r\033[K Creating tfrecords using {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...",
               end="") 
-        print()
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
@@ -193,7 +193,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
             writer = tf.io.TFRecordWriter(tfr_fname)
 
             # Iter over tiles of the current slide
-            for tile_counter, rec in enumerate(raw_dataset):
+            for tile_cnt, rec in enumerate(raw_dataset):
                 # Features of the current rec from old tfrecord
                 features = tf.io.parse_single_example(rec, features=FEA_SPEC)
                 # tf.print(features.keys())
@@ -240,46 +240,14 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
                 
                 writer.write(ex.SerializeToString())
 
-            print(f'Total tiles in the sample {tile_counter + 1}')
+            print(f'Total tiles in the sample {tile_cnt+1}')
             writer.close()
+        print()
         
         
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    # GE_LEN = len(slide_meta['ge_data'])
-    # DD_LEN = len(slide_meta['dd_data'])
-
-    # fea_spec_new = {
-    #     'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-
-    #     'smp': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-
-    #     'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-
-    #     'ctype': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'csite': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'ctype_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'csite_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-
-    #     'Drug1': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'CLEAN_NAME': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'ID': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-
-    #     'Response': tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
-
-    #     # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
-    #     # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
-    #     'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    #     'dd_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
-    # }
 
     # import ipdb; ipdb.set_trace()
 
@@ -295,7 +263,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     print('\nDone.')
 
 
-def update_tfrecords_with_rna():
+def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
     """
     Takes original tfrecords that we got from A. Pearson and updates them
     by addting more data including PDX samples metadata and RNA-Seq data.
@@ -309,7 +277,8 @@ def update_tfrecords_with_rna():
     directory.
     """
     # Create path for the updated tfrecords
-    outpath = cfg.SF_TFR_DIR_RNA/LABEL
+    # outpath = cfg.SF_TFR_DIR_RNA/LABEL
+    outpath = cfg.SF_TFR_DIR_RNA_NEW/LABEL
     os.makedirs(outpath, exist_ok=True)
 
     # Load data
@@ -318,62 +287,83 @@ def update_tfrecords_with_rna():
     pdx = load_data.load_pdx_meta2()
 
     # Merge cref and rna
-    cref_rna = cref[PDX_SAMPLE_COLS + ['image_id']].merge(rna, on=PDX_SAMPLE_COLS, how='inner').reset_index(drop=True)
+    print(cref.shape)
+    print(rna.shape)
+    cref_rna = cref.merge(rna, on=PDX_SAMPLE_COLS, how='inner')
+    print(cref_rna.shape)
 
     # Merge with PDX meta
+    print(pdx.shape)
+    print(cref_rna.shape)
     data = pdx.merge(cref_rna, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
+    print(data.shape)
+
+    if n_samples is not None:
+        data = data.sample(n=n_samples, random_state=seed).reset_index(drop=True)
+
     # Re-org cols
-    cols = ['Sample', 'model', 'patient_id', 'specimen_id', 'sample_id', 'image_id', 
-            'csite_src', 'ctype_src', 'csite', 'ctype', 'stage_or_grade']
+    dim = data.shape[1]
+    meta_cols = ['Sample',
+                 'model', 'patient_id', 'specimen_id', 'sample_id', 'image_id', 
+                 'csite_src', 'ctype_src', 'csite', 'ctype', 'stage_or_grade']
     ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
-    data = data[cols + ge_cols]
+    data = data[meta_cols + ge_cols]
+    assert data.shape[1] == dim, "There are missing cols after re-organizing the cols."
 
     # Create dict of slide ids. Each slide (key) contains a dict with metadata.
     assert sum(data.duplicated('image_id', keep=False)) == 0, 'There are duplicates of image_id in the df'
-
     mm = {}  # dict to store all metadata
+    gg = {}
+    id_name = 'image_id'  # col name that contains the IDs for the samples 
 
     # Iterate over rows a collect data into dict
     for i, row_data in data.iterrows():
-        # Dict to contain metadata for the current slide
-        slide_dct = {}
+        # Dict to contain metadata for the current sample (slide)
+        sample_dct = {}
+        smp = str(row_data[id_name])
 
         # Meta cols
         # Create a (key, value) pair for each meta col
-        meta_cols = [c for c in row_data.index if not c.startswith('ge_')]
+        # meta_cols = [c for c in row_data.index if not c.startswith('ge_')]
         for c in meta_cols:
-            slide_dct[c] = str(row_data[c])
+            sample_dct[c] = str(row_data[c])
 
-        # RNA cols
-        ge_data = list(row_data[ge_cols].values.astype(cfg.GE_DTYPE))
-        slide_dct['ge_data'] = ge_data
-        
-        slide = str(row_data['image_id'])
-        mm[slide] = slide_dct
+        # import ipdb; ipdb.set_trace()
+
+        # Features cols
+        #ge_data = list(row_data[ge_cols].values.astype(cfg.GE_DTYPE))
+        #sample_id['ge_data'] = ge_data
+        ge_data = row_data[ge_cols].values.astype(cfg.GE_DTYPE)
+        sample_dct['ge_data'] = ge_data.tobytes()
+        # check
+        # jj = np.frombuffer(sample_dct['ge_data'], dtype=cfg.GE_DTYPE)
+        # print(all(jj == ge_data))
+
+        mm[smp] = sample_dct
+        gg[smp] = ge_data
         
     print(f'A total of {len(mm)} samples with image and rna data.')
 
-    slides = original_tfr_names(label=LABEL)
-
     # Common slides (that have both image and rna data)
-    c_slides = [s for s in slides if s in mm.keys()]
+    #c_slides = [s for s in all_slides if s in mm.keys()]
+    slides = data['image_id'].unique().tolist()
+    all_slides = original_tfr_names(label=LABEL)
+    c_slides = set(slides).intersection(set(all_slides))
     print(f'A total of {len(c_slides)} samples with tfrecords and rna data.')
 
-
     # Load tfrecords and update with new data
-    for i, s in enumerate(sorted(c_slides)):
-        rel_tfr = str(s) + '.tfrecords'
+    for i, slide_name in enumerate(sorted(c_slides)):
+        rel_tfr = str(slide_name) + '.tfrecords'
         tfr = str(directory/rel_tfr)
-        
-        print(f"\r\033[K Updating {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...", end="") 
-        
-        tfr_fname = str(outpath/rel_tfr)
-        writer = tf.io.TFRecordWriter(tfr_fname)
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
-        for rec in raw_dataset:
-            features = tf.io.parse_single_example(rec, features=FEA_SPEC)  # rec features from old tfrecord
+        tfr_fname = str(outpath/rel_tfr)
+        writer = tf.io.TFRecordWriter(tfr_fname)
+        
+        for tile_cnt, rec in enumerate(raw_dataset):
+            # Features of the current rec from old tfrecord
+            features = tf.io.parse_single_example(rec, features=FEA_SPEC)
             # tf.print(features.keys())
 
             # Extract slide name from old tfrecord and get the new metadata to be added to the new tfrecord
@@ -381,7 +371,6 @@ def update_tfrecords_with_rna():
             slide_meta = mm[slide]
 
             # slide, image_raw = _read_and_return_features(record)
-            
             ex = tf.train.Example(features=tf.train.Features(
                 feature={
                     # old features
@@ -401,48 +390,36 @@ def update_tfrecords_with_rna():
                     'ctype_src':   _bytes_feature(bytes(slide_meta['ctype_src'], 'utf-8')),
                     'csite_src':   _bytes_feature(bytes(slide_meta['csite_src'], 'utf-8')),
 
-                    'ge_data':     _float_feature(slide_meta['ge_data']),
+                    'ge_data':     _bytes_feature(slide_meta['ge_data']),
                 }
             ))
             
             writer.write(ex.SerializeToString())
             
+        print(f"\r\033[K Created tfrecord using {green(rel_tfr)} ({i+1} out of {len(c_slides)}; {tile_cnt+1} tiles) ...", end="") 
+        
         writer.close()
+    print()
         
         
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    GE_LEN = len(slide_meta['ge_data'])
 
-    fea_spec_new = {
-        'slide': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'image_raw': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
+    # import ipdb; ipdb.set_trace()
 
-        'model': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'patient_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'specimen_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'sample_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'image_id': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'Sample': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32, default_value=None),
-
-        'ctype': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'csite': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'ctype_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-        'csite_src': tf.io.FixedLenFeature(shape=[], dtype=tf.string, default_value=None),
-    }
-
-    s = c_slides[0]
-    rel_tfr = str(s) + '.tfrecords'
-    tfr_path = str(outpath/rel_tfr)
+    smp = list(c_slides)[0]
+    tfr_path = str(outpath/(str(smp) + '.tfrecords'))
     raw_dataset = tf.data.TFRecordDataset(tfr_path)
     rec = next(raw_dataset.__iter__())
-    features = tf.io.parse_single_example(rec, features=fea_spec_new)  # rec features from old tfrecord
+    # features = tf.io.parse_single_example(rec, features=FEA_SPEC_RNA)
+    features = tf.io.parse_single_example(rec, features=FEA_SPEC_RNA_NEW)
+    ge_data = np.frombuffer(features['ge_data'].numpy(), dtype=cfg.GE_DTYPE)
+    print(all(ge_data == gg[smp]))
     tf.print(features.keys())
 
     print('\nDone.')
 
 
-# update_tfrecords_with_rna()
-update_tfrecords_for_drug_rsp(n_samples)
+update_tfrecords_with_rna(n_samples)
+# update_tfrecords_for_drug_rsp(n_samples)

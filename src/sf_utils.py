@@ -7,7 +7,7 @@ import tensorflow as tf
 assert tf.__version__ >= "2.0"
 
 from config import cfg
-from tfrecords import FEA_SPEC_RSP, FEA_SPEC_RNA
+from tfrecords import FEA_SPEC_RSP, FEA_SPEC_RNA, FEA_SPEC_RNA_NEW
 
 GREEN = '\033[92m'
 ENDC = '\033[0m'
@@ -68,6 +68,17 @@ def _process_image(image_string, augment):
     return image
 
 
+def decode_np_arr(tensor):
+    return np.frombuffer(tensor.numpy(), dtype=cfg.FEA_DTYPE)
+
+
+def scale_fea(data, scaler):
+    """ Scaler is an object of class sklearn.preprocessing.StandardScaler. """
+    fea_mean = tf.constant(scaler.mean_, tf.float32)
+    fea_scale = tf.constant(scaler.scale_, tf.float32)
+    return (data - fea_mean) / fea_scale
+
+
 def _parse_tfrec_fn_rna(record,
                         include_smp_names=True,
                         use_tile=True,
@@ -79,13 +90,8 @@ def _parse_tfrec_fn_rna(record,
                         AUGMENT=True
                         ):
     '''Parses raw entry read from TFRecord.'''
-    # if use_ge:
-    #     feature_description = FEATURE_DESCRIPTION_RNA
-    # else:
-    #     feature_description = FEATURE_DESCRIPTION
-
-    # features = tf.io.parse_single_example(record, feature_description)
-    features = tf.io.parse_single_example(record, FEA_SPEC_RNA)
+    # features = tf.io.parse_single_example(record, FEA_SPEC_RNA)
+    features = tf.io.parse_single_example(record, FEA_SPEC_RNA_NEW)
     slide = features[id_name]
 
     #if self.MODEL_TYPE == 'linear':
@@ -104,9 +110,21 @@ def _parse_tfrec_fn_rna(record,
         image_dict.update({'tile_image': image})
 
     if use_ge:
-        ge_data = tf.cast(features['ge_data'], tf.float32)
-        ge_data = (ge_data - tf.constant(ge_scaler.mean_, tf.float32)) / tf.constant(ge_scaler.scale_, tf.float32)
+        # ge_data = tf.cast(features['ge_data'], tf.float32)
+        # ge_data = (ge_data-tf.constant(ge_scaler.mean_, tf.float32))/tf.constant(ge_scaler.scale_, tf.float32)
+        # image_dict.update({'ge_data': ge_data})      
+
+        # new
+        ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],
+                                 Tout=[tf.float32])
+        ge_data = tf.reshape(ge_data, [-1])
+
+        if ge_scaler is not None:
+            ge_data = scale_fea(ge_data, ge_scaler)
+
+        ge_data = tf.cast(ge_data, tf.float32)
         image_dict.update({'ge_data': ge_data})      
+        # new
 
     if include_smp_names:
         return image_dict, label, slide
@@ -114,18 +132,6 @@ def _parse_tfrec_fn_rna(record,
         return image_dict, label
 
 
-
-# def _parse_tfrecord_function(record,
-# def _parse_tfrec_fn_rsp(record,
-#                         include_smp_names=True,
-#                         use_tile=True,
-#                         use_ge=False,
-#                         use_dd=False,
-#                         ge_scaler=None,
-#                         dd_scaler=None,
-#                         id_name=None,
-#                         AUGMENT=True,
-#                         ANNOTATIONS_TABLES=None):
 def _parse_tfrec_fn_rsp(record,
                         include_smp_names=True,
                         use_tile=True,
@@ -139,18 +145,7 @@ def _parse_tfrec_fn_rsp(record,
                         AUGMENT=True
                         ):
     ''' Parses raw entry read from TFRecord. '''
-    #feature_description = tfrecords.FEATURE_DESCRIPTION if not multi_image else tfrecords.FEATURE_DESCRIPTION_MULTI
-    ##feature_description = FEATURE_DESCRIPTION if not multi_image else FEATURE_DESCRIPTION_MULTI
-
-    # if use_ge:
-    #     feature_description = FEATURE_DESCRIPTION_RNA
-    # elif multi_image:
-    #     feature_description = FEATURE_DESCRIPTION_MULTI
-    # else:
-    #     feature_description = FEATURE_DESCRIPTION
-
     feature_description = FEA_SPEC_RSP
-    # feature_description = FEA_SPEC_RNA
 
     features = tf.io.parse_single_example(record, feature_description)
     #slide = features['slide']
@@ -173,15 +168,6 @@ def _parse_tfrec_fn_rsp(record,
         image = _process_image(image_string, AUGMENT)
         image_dict.update({'tile_image': image})
         del image
-
-    def decode_np_arr(tensor):
-        return np.frombuffer(tensor.numpy(), dtype=cfg.FEA_DTYPE)
-
-    def scale_fea(data, scaler):
-        """ Scaler is an object of class sklearn.preprocessing.StandardScaler. """
-        fea_mean = tf.constant(scaler.mean_, tf.float32)
-        fea_scale = tf.constant(scaler.scale_, tf.float32)
-        return (data - fea_mean) / fea_scale
 
     if use_ge:
         ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],

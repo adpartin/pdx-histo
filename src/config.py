@@ -26,6 +26,7 @@ cfg.TFR_DIR = (cfg.DATADIR/'tfrecords').resolve()
 cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED').resolve()
 # cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED_updated').resolve()
 cfg.SF_TFR_DIR_RNA = (fdir/'../../slideflow-proj/PDX_FIXED_RNA').resolve()
+cfg.SF_TFR_DIR_RNA_NEW = (fdir/'../../slideflow-proj/PDX_FIXED_RNA_NEW').resolve()
 cfg.SF_TFR_DIR_RSP = (fdir/'../../slideflow-proj/PDX_FIXED_RSP').resolve()
 
 # cfg.MAIN_APPDIR = MAIN_APPDIR

@@ -65,14 +65,14 @@ parser.add_argument('--id_name',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-# use_ge, use_dd = True, True
-use_ge, use_dd = True, False
+use_ge, use_dd = True, True
+# use_ge, use_dd = True, False
 use_tile = True
 
 # import ipdb; ipdb.set_trace()
-APPNAME = 'bin_ctype_balance_02'
+# APPNAME = 'bin_ctype_balance_02'
 # APPNAME = 'bin_rsp_balance_01'
-# APPNAME = 'bin_rsp_balance_02'
+APPNAME = 'bin_rsp_balance_02'
 
 # Load data
 appdir = cfg.MAIN_APPDIR/APPNAME
@@ -88,8 +88,9 @@ else:
 
 ge_cols = [c for c in data.columns if c.startswith('ge_')]
 dd_cols = [c for c in data.columns if c.startswith('dd_')]
-# ge_len = len(ge_cols)
-# dd_len = len(dd_cols)
+# meta_df = data.drop(columns=[ge_cols + dd_cols])
+# meta_df.astype(str)
+data = data.astype({'image_id': str, 'slide': str})
 
 
 # Scale attributes for RNA
@@ -97,6 +98,7 @@ if len(ge_cols) > 0 and use_ge:
     ge_fea = data[ge_cols]
     ge_scaler = StandardScaler()
     ge_scaler.fit(ge_fea)
+    del ge_fea
 else:
     ge_scaler = None
 
@@ -105,6 +107,7 @@ if len(dd_cols) > 0 and use_dd:
     dd_fea = data[dd_cols]
     dd_scaler = StandardScaler()
     dd_scaler.fit(dd_fea)
+    del dd_fea
 else:
     dd_scaler = None
 
@@ -152,7 +155,8 @@ if args.target[0] == 'Response':
     tfr_dir = cfg.SF_TFR_DIR_RSP
     parse_fn = _parse_tfrec_fn_rsp
 elif args.target[0] == 'ctype':
-    tfr_dir = cfg.SF_TFR_DIR_RNA
+    #tfr_dir = cfg.SF_TFR_DIR_RNA
+    tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
     parse_fn = _parse_tfrec_fn_rna
 tfr_dir = tfr_dir/label
 
@@ -168,91 +172,101 @@ print('Number of samples', len(current_annotations))
 # Create outcomes - done
 # ---------------
 # __init__ --> _trainer --> training_dataset.get_outcomes_from_annotations
-# Inputs
-headers = outcome_header
-use_float = False
-assigned_outcome=None
 
-slides = sorted([a['slide'] for a in ANNOTATIONS])
-filtered_annotations = ANNOTATIONS
-results = {}
+# # Inputs
+# headers = outcome_header
+# use_float = False
+# assigned_outcome=None
 
-assigned_headers = {}
-unique_outcomes = None
+# slides = sorted([a['slide'] for a in ANNOTATIONS])
+# filtered_annotations = ANNOTATIONS
+# results = {}
 
-# We have only one header!
-# for header in headers:
-header = headers[0]
+# assigned_headers = {}
+# unique_outcomes = None
 
-assigned_headers[header] = {}
-filtered_outcomes = [a[header] for a in filtered_annotations]
-unique_outcomes = list(set(filtered_outcomes))
-unique_outcomes.sort()
+# # We have only one header!
+# # for header in headers:
+# header = headers[0]
 
-# Create function to process/convert outcome
-def _process_outcome(o):
-    if use_float:
-        return float(o)
-    elif assigned_outcome:
-        return assigned_outcome[o]
-    else:
-        return unique_outcomes.index(o)
+# assigned_headers[header] = {}
+# filtered_outcomes = [a[header] for a in filtered_annotations]
+# unique_outcomes = list(set(filtered_outcomes))
+# unique_outcomes.sort()
 
-# Assemble results dictionary
-patient_outcomes = {}
-num_warned = 0
-warn_threshold = 3
+# # Create function to process/convert outcome
+# def _process_outcome(o):
+#     if use_float:
+#         return float(o)
+#     elif assigned_outcome:
+#         return assigned_outcome[o]
+#     else:
+#         return unique_outcomes.index(o)
 
-for annotation in filtered_annotations:
-    slide = annotation['slide']
-    patient = annotation['submitter_id']
-    annotation_outcome = _process_outcome(annotation[header])
-    print_func = print if num_warned < warn_threshold else None
+# # Assemble results dictionary
+# patient_outcomes = {}
+# num_warned = 0
+# warn_threshold = 3
 
-    # Mark this slide as having been already assigned an outcome with his header
-    assigned_headers[header][slide] = True
+# for annotation in filtered_annotations:
+#     slide = annotation['slide']
+#     patient = annotation['submitter_id']
+#     annotation_outcome = _process_outcome(annotation[header])
+#     print_func = print if num_warned < warn_threshold else None
 
-    # Ensure patients do not have multiple outcomes
-    if patient not in patient_outcomes:
-        patient_outcomes[patient] = annotation_outcome
-    elif patient_outcomes[patient] != annotation_outcome:
-        log.error(f"Multiple different outcomes in header {header} found for patient {patient} ({patient_outcomes[patient]}, {annotation_outcome})", 1, print_func)
-        num_warned += 1
-    elif (slide in slides) and (slide in results) and (slide in assigned_headers[header]):
-        continue
+#     # Mark this slide as having been already assigned an outcome with his header
+#     assigned_headers[header][slide] = True
 
-    if slide in slides:
-        if slide in results:
-            so = results[slide]['outcome']
-            results[slide]['outcome'] = [so] if not isinstance(so, list) else so
-            results[slide]['outcome'] += [annotation_outcome]
-        else:
-            results[slide] = {'outcome': annotation_outcome if not use_float else [annotation_outcome]}
-            results[slide]['submitter_id'] = patient
+#     # Ensure patients do not have multiple outcomes
+#     if patient not in patient_outcomes:
+#         patient_outcomes[patient] = annotation_outcome
+#     elif patient_outcomes[patient] != annotation_outcome:
+#         log.error(f"Multiple different outcomes in header {header} found for patient {patient} ({patient_outcomes[patient]}, {annotation_outcome})", 1, print_func)
+#         num_warned += 1
+#     elif (slide in slides) and (slide in results) and (slide in assigned_headers[header]):
+#         continue
+
+#     if slide in slides:
+#         if slide in results:
+#             so = results[slide]['outcome']
+#             results[slide]['outcome'] = [so] if not isinstance(so, list) else so
+#             results[slide]['outcome'] += [annotation_outcome]
+#         else:
+#             results[slide] = {'outcome': annotation_outcome if not use_float else [annotation_outcome]}
+#             results[slide]['submitter_id'] = patient
             
-if num_warned >= warn_threshold:
-    log.warn(f"...{num_warned} total warnings, see {sfutil.green(log.logfile)} for details", 1)
+# if num_warned >= warn_threshold:
+#     log.warn(f"...{num_warned} total warnings, see {sfutil.green(log.logfile)} for details", 1)
 
-# import ipdb; ipdb.set_trace()
-outcomes = results
-del results
-print("\n'outcomes':")
-print(type(outcomes))
-print(len(outcomes))
-print(list(outcomes.keys())[:3])
-print(outcomes[list(outcomes.keys())[3]])
-
-# ooooooooooooooooooooooooooooooo
-# (ap) outcomes for drug response
-# ooooooooooooooooooooooooooooooo
-# outcomes = {smp: {'outcome': o} for smp, o in zip(data[cfg.ID_NAME], data['Response'])}
-# import ipdb; ipdb.set_trace()
-# outcomes = {smp: {'outcome': o} for smp, o in zip(data[args.id_name], data[header])}
+# # import ipdb; ipdb.set_trace()
+# outcomes = results
+# del results
 # print("\n'outcomes':")
 # print(type(outcomes))
 # print(len(outcomes))
 # print(list(outcomes.keys())[:3])
 # print(outcomes[list(outcomes.keys())[3]])
+
+# ooooooooooooooooooooooooooooooo
+# (ap) outcomes for drug response
+# ooooooooooooooooooooooooooooooo
+# import ipdb; ipdb.set_trace()
+outcomes = {}
+unique_outcomes = list(set(data[args.target[0]].values))
+unique_outcomes.sort()
+# for smp, o in zip(data[args.id_name], data[args.target[0]]):
+#     outcomes[smp] = {'outcome': unique_outcomes.index(o), 'submitter_id': smp}
+for smp, o in zip(data[args.id_name], data[args.target[0]]):
+    outcomes[smp] = {'outcome': unique_outcomes.index(o)}
+
+# import ipdb; ipdb.set_trace()
+# outcomes = {smp: {'outcome': o} for smp, o in zip(data[args.id_name], data[header])}
+
+print("\n'outcomes':")
+print(type(outcomes))
+print(len(outcomes))
+print(list(outcomes.keys())[:3])
+print(outcomes[list(outcomes.keys())[3]])
 
 
 # ---------------------
@@ -517,30 +531,32 @@ AUGMENT = True
 
 # import ipdb; ipdb.set_trace()
 
-# Ctype
-parse_fn = _parse_tfrec_fn_rna
-parse_fn_kwargs = {
-    'use_tile': use_tile,
-    'use_ge': use_ge,
-    'ge_scaler': ge_scaler,
-    'id_name': args.id_name,
-    'MODEL_TYPE': MODEL_TYPE,
-    'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES,
-    'AUGMENT': AUGMENT,
-}
+if args.target[0] == 'Response':
+    # Response
+    parse_fn = _parse_tfrec_fn_rsp
+    parse_fn_kwargs = {
+        'use_tile': use_tile,
+        'use_ge': use_ge,
+        'use_dd': use_dd,
+        'ge_scaler': ge_scaler,
+        'dd_scaler': dd_scaler,
+        'id_name': args.id_name,
+        'AUGMENT': AUGMENT,
+        'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
+    }
 
-# Response
-# parse_fn = _parse_tfrec_fn_rsp
-# parse_fn_kwargs = {
-#     'use_tile': True,
-#     'use_ge': True,
-#     'use_dd': True,
-#     'ge_scaler': None,
-#     'dd_scaler': None,
-#     'id_name': None,
-#     'AUGMENT': True,
-#     'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
-# }
+else:
+    # Ctype
+    parse_fn = _parse_tfrec_fn_rna
+    parse_fn_kwargs = {
+        'use_tile': use_tile,
+        'use_ge': use_ge,
+        'ge_scaler': ge_scaler,
+        'id_name': args.id_name,
+        'MODEL_TYPE': MODEL_TYPE,
+        'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES,
+        'AUGMENT': AUGMENT,
+    }
 
 train_data, _, num_tiles = _interleave_tfrecords(
     tfrecords=TRAIN_TFRECORDS,
@@ -559,10 +575,11 @@ train_data, _, num_tiles = _interleave_tfrecords(
 
 bb = next(train_data.__iter__())
 
+# import ipdb; ipdb.set_trace()
 if use_ge:
-    ge_len = bb[0]['ge_data'].numpy().shape[1:]
+    ge_shape = bb[0]['ge_data'].numpy().shape[1:]
 if use_dd:
-    dd_len = bb[0]['dd_data'].numpy().shape[1:]
+    dd_shape = bb[0]['dd_data'].numpy().shape[1:]
 
 for i, item in enumerate(bb):
     print(f"\nItem {i}")
@@ -608,7 +625,7 @@ else:
 # ----------------------
 # Prep for training
 # ----------------------
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
 # Prepare results
 results = {'epochs': {}}
@@ -691,53 +708,40 @@ def build_model_rna(pooling='max', pretrain='imagenet'):
 
     # Add the softmax prediction layer
     activation = 'linear' if model_type == 'linear' else 'softmax'
-    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, kernel_regularizer=None, name="prelogits")(merged_model)
+    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
     softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name='ctype')(final_dense_layer)
 
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-
-    # Print model summary
-    print()
-    model.summary()
     return model
 
 
 def build_model_rsp(pooling='max', pretrain='imagenet',
                     use_ge=True, use_dd=True, use_tile=True,
-                    ge_len=None, dd_len=None):
+                    ge_shape=None, dd_shape=None):
     """ ... """
     model_inputs = []
     merge_inputs = []
 
     if use_tile:
-        # Image layers
         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-        base_img_model = tf.keras.applications.Xception(weights=pretrain, pooling=pooling,
-                                                        include_top=False, input_shape=None,
-                                                        input_tensor=None)
-        # post_convolution_identity_layer = tf.keras.layers.Lambda(lambda x: x, name="post_convolution")
+        base_img_model = tf.keras.applications.Xception(
+            weights=pretrain, pooling=pooling, include_top=False,
+            input_shape=None, input_tensor=None)
+
         x_im = base_img_model(tile_input_tensor)
         model_inputs.append(tile_input_tensor)
         merge_inputs.append(x_im)
 
-    # RNA layers
     if use_ge:
-        # ge_shape = (ge_len,)
-        ge_shape = ge_len
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-        # x_ge = tf.keras.layers.Lambda(lambda x: x, name='ge_buffer')(ge_input_tensor)
-        x_ge = Dense(256, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
+        x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
         model_inputs.append(ge_input_tensor)
         merge_inputs.append(x_ge)
 
-    # Drug layers
     if use_dd:
-        # dd_shape = (dd_len,)
-        dd_shape = dd_len
         dd_input_tensor = tf.keras.Input(shape=dd_shape, name="dd_data")
-        # x_ge = tf.keras.layers.Lambda(lambda x: x, name='ge_buffer')(ge_input_tensor)
         x_dd = Dense(512, activation=tf.nn.relu, name="dense_dd_1")(dd_input_tensor)
         model_inputs.append(dd_input_tensor)
         merge_inputs.append(x_dd)
@@ -745,9 +749,6 @@ def build_model_rsp(pooling='max', pretrain='imagenet',
     # model_inputs = [tile_input_tensor, ge_input_tensor, dd_input_tensor]
 
     # Merge towers
-    # mrg = layers.concatenate([x_ge.output, x_im.output], axis=1)
-    # merged_model = layers.Concatenate(axis=1, name="merger")([x_ge.output, x_im.output])
-    # merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_im])
     # merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_dd, x_im])
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
@@ -757,24 +758,25 @@ def build_model_rsp(pooling='max', pretrain='imagenet',
 
     # Add the softmax prediction layer
     activation = 'linear' if model_type == 'linear' else 'softmax'
-    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, kernel_regularizer=None, name="prelogits")(merged_model)
+    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
     softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
 
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-
-    # Print model summary
-    print()
-    model.summary()
     return model
 
 
-model = build_model_rna()
+if args.target[0] == 'Response':
+    model = build_model_rsp(ge_shape=ge_shape, dd_shape=dd_shape)
+else:
+    model = build_model_rna()
+
+print()
+model.summary()
 
 # Fine-tune the model
 print("Beginning fine-tuning")
 
-#model.compile(loss=loss, optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001), metrics=metrics)
 model.compile(loss=loss,
               optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
               metrics=metrics)
