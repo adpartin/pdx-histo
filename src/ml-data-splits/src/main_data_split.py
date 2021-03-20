@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 import argparse
 from time import time
-from pprint import pformat
+from pprint import pprint, pformat
+from typing import Union
+
+import numpy as np
 
 # Utils
 from utils.classlogger import Logger
@@ -18,10 +21,15 @@ from utils.plots import plot_hist
 from utils.utils import load_data, dump_dict, get_print_func
 
 # File path
-filepath = Path(__file__).resolve().parent
+fdir = Path(__file__).resolve().parent
+
+# Seed
+seed = 42
+np.random.seed(seed)
+
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description='Dump train/val/test splits.')
+    parser = argparse.ArgumentParser(description='Create train/val/test splits.')
 
     parser.add_argument('-dp', '--datapath',
                         required=True,
@@ -49,7 +57,7 @@ def parse_args(args):
     parser.add_argument('--split_on',
                         type=str,
                         default=None,
-                        choices=['cell', 'drug'],
+                        choices=['Sample', 'slide'],
                         help='Specify which variable (column) to make a hard split on (default: None).')
     parser.add_argument('--ml_task',
                         type=str,
@@ -65,46 +73,65 @@ def parse_args(args):
     return args
 
 
-def verify_size(s):
-    for fn in (int, float):
-        try:
-            return fn(s)
-        except ValueError:
-            print('Invalid test size passed.')
-    return s
+def verify_size(s: Union[int, float]) -> Union[int, float]:
+    """ Verify that te_size is either int or float. """
+    from ast import literal_eval
+    try:
+        s = literal_eval(s)
+        if isinstance(s, int) or isinstance(s, float):
+            return s
+    except ValueError:
+        print('te_size must be either int or float.')
+        sys.exit()
 
+    # for fn in (int, float):
+    #     try:
+    #         return fn(s)
+    #     except ValueError:
+    #         print('te_size must be either int or float.')
+    #         sys.exit()
 
 def run(args):
+
+    print('\nInput args:')
+    pprint(vars(args))
+
     t0 = time()
-    n_splits = int(args.n_splits)
     te_size = verify_size(args.te_size)
-    # te_size = args['te_size']
     datapath = Path(args.datapath).resolve()
 
     # Hard split
-    split_on = None if args.split_on is None else args.split_on.upper()
+    # split_on = None if args.split_on is None else args.split_on.upper()
     cv_method = args.cv_method
     te_method = cv_method
 
     # Specify ML task (regression or classification)
     if cv_method == 'strat':
-        mltype = 'cls'  # cast mltype to cls in case of stratification
+        mltask = 'cls'  # cast mltask to cls in case of stratification
     else:
-        mltype = args.ml_task
+        mltask = args.ml_task
 
     # Target column name
     trg_name = str(args.trg_name)
+    # assert args.trg_name in data.columns, f'The prediction target ({args.name}) \
+    #     was not found in the dataset.'
+
+    # import ipdb; ipdb.set_trace()
 
     # -----------------------------------------------
     #       Create outdir
     # -----------------------------------------------
     if args.gout is not None:
         gout = Path(args.gout).resolve()
-        gout = gout/datapath.with_suffix('.splits').name
+        sufx = 'none' if args.split_on is None else args.split_on
+        gout = gout/datapath.with_suffix('.splits')
+        if args.split_on is not None:
+            gout = gout/f'split_on_{sufx}'
+        else:
+            gout = gout/f'split_on_none'
     else:
         # Note! useful for drug response
-        # sufx = 'none' if split_on is None else split_on
-        # gout = gout / f'split_on_{sufx}'
+        sufx = 'none' if args.split_on is None else args.split_on
         gout = datapath.with_suffix('.splits')
 
     outfigs = gout/'outfigs'
@@ -116,9 +143,9 @@ def run(args):
     # -----------------------------------------------
     lg = Logger(gout/'data.splitter.log')
     print_fn = get_print_func(lg.logger)
-    print_fn(f'File path: {filepath}')
+    print_fn(f'File path: {fdir}')
     print_fn(f'\n{pformat(vars(args))}')
-    dump_dict(vars(args), outpath=gout/'data.splitter.args.txt')  # dump args
+    dump_dict(vars(args), outpath=gout/'data.splitter.args.txt')
 
     # -----------------------------------------------
     #       Load data
@@ -128,8 +155,11 @@ def run(args):
     print_fn('data.shape {}'.format(data.shape))
 
     ydata = data[trg_name] if trg_name in data.columns else None
-    if (ydata is None) and (cv_method == 'strat'):
-        raise ValueError('Y data must be available if splits are required to stratified.')
+    if (cv_method == 'strat') and (ydata is None):
+        raise ValueError('Prediction target column must be available if splits need to be stratified.')
+    # assert (cv_method == 'strat') and (ydata is not None), 'prediction target column \
+    #     data must be available if splits need to be stratified.'
+
     if ydata is not None:
         plot_hist(ydata, title=f'{trg_name}', fit=None, bins=100,
                   path=outfigs/f'{trg_name}_hist_all.png')
@@ -138,24 +168,28 @@ def run(args):
     #       Generate splits (train/val/test)
     # -----------------------------------------------
     print_fn('\n{}'.format('-' * 50))
-    print_fn('Split into hold-out train/val/test')
+    print_fn('Split data into hold-out train/val/test')
     print_fn('{}'.format('-' * 50))
 
     kwargs = {'data': data,
               'cv_method': cv_method,
               'te_method': te_method,
               'te_size': te_size,
-              'mltype': mltype,
-              'split_on': split_on
+              'mltask': mltask,
+              'split_on': args.split_on
               }
 
-    data_splitter(n_splits=n_splits, gout=gout,
-                  outfigs=outfigs, ydata=ydata,
-                  print_fn=print_fn, **kwargs)
+    data_splitter(n_splits = args.n_splits,
+                  gout = gout,
+                  outfigs = outfigs,
+                  ydata = ydata,
+                  print_fn = print_fn,
+                  seed = seed,
+                  **kwargs)
 
     print_fn('Runtime: {:.1f} min'.format( (time()-t0)/60) )
     print_fn('Done.')
-    lg.kill_logger()
+    lg.close_logger()
 
 
 def main(args):

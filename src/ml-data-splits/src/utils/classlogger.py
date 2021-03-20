@@ -21,8 +21,9 @@ class Logger():
         # "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         # "[%(asctime)s %(process)d] %(message)s"
         # fileFormatter = logging.Formatter("%(asctime)s : %(threadName)-12.12s : %(levelname)-5.5s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        self.logfilename = logfilename
         fileFormatter = logging.Formatter("%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-        fileHandler = logging.FileHandler(filename=logfilename)
+        fileHandler = logging.FileHandler(filename=self.logfilename)
         fileHandler.setFormatter(fileFormatter)
         fileHandler.setLevel(logging.INFO)
         self.fileHandler = fileHandler
@@ -39,8 +40,8 @@ class Logger():
         # logger = logging.getLogger(__name__)
         logger = logging.getLogger('')
         logger.setLevel(logging.INFO)
-        logger.addHandler(fileHandler)
-        logger.addHandler(consoleHandler)
+        logger.addHandler(self.fileHandler)
+        logger.addHandler(self.consoleHandler)
         self.logger = logger
 
         # from combo (when use candle)
@@ -55,9 +56,20 @@ class Logger():
         #return logger
 
 
+    def close_logger(self):
+        """ Close logger. """
+        n_seps = 70
+        self.logger.info('\nClose logger.')
+        self.logger.info('{}\n'.format('-' * n_seps))
+        self.logger.removeHandler(self.fileHandler)
+        self.logger.removeHandler(self.consoleHandler)
+
+
     def kill_logger(self):
+        """ Kill logger. """
         n_seps = 70
         self.logger.info('\nKill logger.')
         self.logger.info('{}\n'.format('-' * n_seps))
         self.logger.removeHandler(self.fileHandler)
         self.logger.removeHandler(self.consoleHandler)
+        # TODO: delete file

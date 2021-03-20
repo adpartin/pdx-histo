@@ -7,6 +7,8 @@ from pathlib import Path
 from pprint import pprint
 import json
 import csv
+import glob
+from time import time
 from functools import partial
 from typing import List, Optional, Union
 
@@ -18,7 +20,6 @@ from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
 print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-AUTO = tf.data.experimental.AUTOTUNE
 
 from tensorflow import keras
 from tensorflow.keras import backend as K
@@ -32,11 +33,10 @@ from tensorflow.keras.models import Sequential, Model, load_model
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.utils import plot_model
 
-from tf_utils import _float_feature, _bytes_feature, _int64_feature
-from sf_utils import (read_annotations, green,
-                      _parse_tfrec_fn_rsp, _parse_tfrec_fn_rna,
-                      _process_image, _interleave_tfrecords)
-# from tfrecords import FEA_SPEC_RSP
+from tf_utils import _float_feature, _bytes_feature, _int64_feature, get_tfr_files
+from sf_utils import (green, interleave_tfrecords,
+                      _parse_tfrec_fn_rsp, _parse_tfrec_fn_rna)
+from models import build_model_rsp, build_model_rna
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
@@ -47,20 +47,25 @@ np.random.seed(seed)
 tf.random.set_seed(seed)
 
 
-parser = argparse.ArgumentParser("Traing NN.")
+parser = argparse.ArgumentParser("Train NN.")
 parser.add_argument('-t', '--target',
                     type=str,
                     nargs='+',
-                    default=['ctype'],
-                    # default=['Response'],
+                    # default=['ctype'],
+                    default=['Response'],
                     choices=['Response', 'ctype', 'csite'],
                     help='Name of target output.')
 parser.add_argument('--id_name',
                     type=str,
-                    default='slide',
-                    # default='smp',
+                    # default='slide',
+                    default='smp',
                     choices=['slide', 'smp'],
                     help='Column name of the ID.')
+parser.add_argument('--split_on',
+                    type=str,
+                    default=None,
+                    choices=['Sample', 'slide'],
+                    help='Specify the hard split variable/column (default: None).')
 
 args, other_args = parser.parse_known_args()
 pprint(args)
@@ -71,14 +76,19 @@ use_tile = True
 
 # import ipdb; ipdb.set_trace()
 # APPNAME = 'bin_ctype_balance_02'
-# APPNAME = 'bin_rsp_balance_01'
-APPNAME = 'bin_rsp_balance_02'
+APPNAME = 'bin_rsp_balance_01'
+# APPNAME = 'bin_rsp_balance_02'
 
 # Load data
 appdir = cfg.MAIN_APPDIR/APPNAME
 annotations_file = appdir/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
+
+# Outdir
+split_on = 'none' if args.split_on is (None or 'none') else args.split_on
+outdir = appdir/f'results/split_on_{split_on}'
+os.makedirs(outdir, exist_ok=True)
 
 if args.target[0] == 'Response':
     pprint(data.groupby(['ctype', 'Response']).agg({
@@ -88,28 +98,23 @@ else:
 
 ge_cols = [c for c in data.columns if c.startswith('ge_')]
 dd_cols = [c for c in data.columns if c.startswith('dd_')]
-# meta_df = data.drop(columns=[ge_cols + dd_cols])
-# meta_df.astype(str)
 data = data.astype({'image_id': str, 'slide': str})
 
+def get_scaler(fea_df):
+    if fea_df.shape[0] == 0:
+        # TODO: add warning!
+        return None
+    scaler = StandardScaler()
+    scaler.fit(fea_df)
+    return scaler
 
-# Scale attributes for RNA
-if len(ge_cols) > 0 and use_ge:
-    ge_fea = data[ge_cols]
-    ge_scaler = StandardScaler()
-    ge_scaler.fit(ge_fea)
-    del ge_fea
-else:
-    ge_scaler = None
+# RNA scaler
+if use_ge:
+    ge_scaler = get_scaler(data[ge_cols])
 
-# Scale attributes for DD
-if len(dd_cols) > 0 and use_dd:
-    dd_fea = data[dd_cols]
-    dd_scaler = StandardScaler()
-    dd_scaler.fit(dd_fea)
-    del dd_fea
-else:
-    dd_scaler = None
+# Descriptors scaler
+if use_dd:
+    dd_scaler = get_scaler(data[dd_cols])
 
 
 BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
@@ -118,7 +123,8 @@ NO_BALANCE = 'NO_BALANCE'
 
 tile_px = 299
 tile_um = 302
-finetune_epochs = 10
+# finetune_epochs = 10
+finetune_epochs = 1
 toplayer_epochs = 0
 model = 'Xception'
 pooling = 'max'
@@ -151,116 +157,25 @@ pretrain = 'imagenet'
 
 label = f'{tile_px}px_{tile_um}um'
 
+
 if args.target[0] == 'Response':
     tfr_dir = cfg.SF_TFR_DIR_RSP
     parse_fn = _parse_tfrec_fn_rsp
 elif args.target[0] == 'ctype':
-    #tfr_dir = cfg.SF_TFR_DIR_RNA
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
     parse_fn = _parse_tfrec_fn_rna
 tfr_dir = tfr_dir/label
 
-# Annotations
-header, current_annotations = read_annotations(annotations_file)
-ANNOTATIONS = current_annotations  # item in Dataset class instance
-ann = ANNOTATIONS  # (ap)
-print('Number of headers', len(header))
-print('Number of samples', len(current_annotations))
 
-
-# ---------------
-# Create outcomes - done
-# ---------------
+# (ap) Create outcomes (for drug response)
 # __init__ --> _trainer --> training_dataset.get_outcomes_from_annotations
-
-# # Inputs
-# headers = outcome_header
-# use_float = False
-# assigned_outcome=None
-
-# slides = sorted([a['slide'] for a in ANNOTATIONS])
-# filtered_annotations = ANNOTATIONS
-# results = {}
-
-# assigned_headers = {}
-# unique_outcomes = None
-
-# # We have only one header!
-# # for header in headers:
-# header = headers[0]
-
-# assigned_headers[header] = {}
-# filtered_outcomes = [a[header] for a in filtered_annotations]
-# unique_outcomes = list(set(filtered_outcomes))
-# unique_outcomes.sort()
-
-# # Create function to process/convert outcome
-# def _process_outcome(o):
-#     if use_float:
-#         return float(o)
-#     elif assigned_outcome:
-#         return assigned_outcome[o]
-#     else:
-#         return unique_outcomes.index(o)
-
-# # Assemble results dictionary
-# patient_outcomes = {}
-# num_warned = 0
-# warn_threshold = 3
-
-# for annotation in filtered_annotations:
-#     slide = annotation['slide']
-#     patient = annotation['submitter_id']
-#     annotation_outcome = _process_outcome(annotation[header])
-#     print_func = print if num_warned < warn_threshold else None
-
-#     # Mark this slide as having been already assigned an outcome with his header
-#     assigned_headers[header][slide] = True
-
-#     # Ensure patients do not have multiple outcomes
-#     if patient not in patient_outcomes:
-#         patient_outcomes[patient] = annotation_outcome
-#     elif patient_outcomes[patient] != annotation_outcome:
-#         log.error(f"Multiple different outcomes in header {header} found for patient {patient} ({patient_outcomes[patient]}, {annotation_outcome})", 1, print_func)
-#         num_warned += 1
-#     elif (slide in slides) and (slide in results) and (slide in assigned_headers[header]):
-#         continue
-
-#     if slide in slides:
-#         if slide in results:
-#             so = results[slide]['outcome']
-#             results[slide]['outcome'] = [so] if not isinstance(so, list) else so
-#             results[slide]['outcome'] += [annotation_outcome]
-#         else:
-#             results[slide] = {'outcome': annotation_outcome if not use_float else [annotation_outcome]}
-#             results[slide]['submitter_id'] = patient
-            
-# if num_warned >= warn_threshold:
-#     log.warn(f"...{num_warned} total warnings, see {sfutil.green(log.logfile)} for details", 1)
-
-# # import ipdb; ipdb.set_trace()
-# outcomes = results
-# del results
-# print("\n'outcomes':")
-# print(type(outcomes))
-# print(len(outcomes))
-# print(list(outcomes.keys())[:3])
-# print(outcomes[list(outcomes.keys())[3]])
-
-# ooooooooooooooooooooooooooooooo
-# (ap) outcomes for drug response
-# ooooooooooooooooooooooooooooooo
-# import ipdb; ipdb.set_trace()
 outcomes = {}
 unique_outcomes = list(set(data[args.target[0]].values))
 unique_outcomes.sort()
-# for smp, o in zip(data[args.id_name], data[args.target[0]]):
-#     outcomes[smp] = {'outcome': unique_outcomes.index(o), 'submitter_id': smp}
+
 for smp, o in zip(data[args.id_name], data[args.target[0]]):
     outcomes[smp] = {'outcome': unique_outcomes.index(o)}
-
-# import ipdb; ipdb.set_trace()
-# outcomes = {smp: {'outcome': o} for smp, o in zip(data[args.id_name], data[header])}
+    # outcomes[smp] = {'outcome': unique_outcomes.index(o), 'submitter_id': smp}
 
 print("\n'outcomes':")
 print(type(outcomes))
@@ -444,29 +359,120 @@ print(manifest[list(manifest.keys())[3]])
 
 # import ipdb; ipdb.set_trace()
 
-from sklearn.model_selection import train_test_split
-# slides = list(outcomes.keys())
+# from sklearn.model_selection import train_test_split
+# # slides = list(outcomes.keys())
+# # y = [outcomes[k]['outcome'] for k in outcomes.keys()]
+# samples = list(outcomes.keys())
 # y = [outcomes[k]['outcome'] for k in outcomes.keys()]
-samples = list(outcomes.keys())
-y = [outcomes[k]['outcome'] for k in outcomes.keys()]
-s_tr, s_te, y_tr, y_te = train_test_split(samples, y, test_size=0.2,
-                                          stratify=y, random_state=seed)
+# s_tr, s_te, y_tr, y_te = train_test_split(samples, y, test_size=0.2,
+#                                           stratify=y, random_state=seed)
 
-training_tfrecords = [str(directory/s)+'.tfrecords' for s in s_tr]
-validation_tfrecords = [str(directory/s)+'.tfrecords' for s in s_te]
+# train_tfrecords = [str(directory/s)+'.tfrecords' for s in s_tr]
+# val_tfrecords = [str(directory/s)+'.tfrecords' for s in s_te]
 
-data = data.astype({args.id_name: str})
-dtr = data[data[args.id_name].isin(s_tr)]
-dte = data[data[args.id_name].isin(s_te)]
+# data = data.astype({args.id_name: str})
+# dtr = data[data[args.id_name].isin(s_tr)]
+# dte = data[data[args.id_name].isin(s_te)]
 
-assert sorted(s_tr) == sorted(dtr[args.id_name].values.tolist()), "Sample names \
+# assert sorted(s_tr) == sorted(dtr[args.id_name].values.tolist()), "Sample names \
+#     in the s_tr and dtr don't match."
+# assert sorted(s_te) == sorted(dte[args.id_name].values.tolist()), "Sample names \
+#     in the s_te and dte don't match."
+
+# print(f'Training files {len(train_tfrecords)}')
+# print(f'Validation files {len(val_tfrecords)}')
+
+
+
+# -----------------------------------------------
+# Data splits
+# -----------------------------------------------
+
+# import ipdb; ipdb.set_trace()
+
+# T/V/E filenames
+# splitdir = appdir/'annotations.splits'
+splitdir = appdir/f'annotations.splits/split_on_{split_on}'
+split_id = 0
+
+split_pattern = f'1fold_s{split_id}_*_id.txt'
+single_split_files = glob.glob(str(splitdir/split_pattern))
+# single_split_files = list(splitdir.glob(split_pattern))
+
+def read_lines(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.read().splitlines()
+    return lines
+
+def cast_list(ll, dtype=int):
+    return [dtype(i) for i in ll]
+
+# Get indices for the split
+# assert len(single_split_files) >= 2, f'The split {s} contains only one file.'
+for id_file in single_split_files:
+    if 'tr_id' in id_file:
+        # tr_id = pd.read_csv(id_file).values.reshape(-1,)
+        tr_id = cast_list(read_lines(id_file), int)
+    elif 'vl_id' in id_file:
+        # vl_id = pd.read_csv(id_file).values.reshape(-1,)
+        vl_id = cast_list(read_lines(id_file), int)
+    elif 'te_id' in id_file:
+        # te_id = pd.read_csv(id_file).values.reshape(-1,)
+        te_id = cast_list(read_lines(id_file), int)
+
+# -----------------------------------------------
+# Get data based on splits
+# -----------------------------------------------
+# Dataframes of T/V/E samples
+tr_df = data.iloc[tr_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
+vl_df = data.iloc[vl_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
+te_df = data.iloc[te_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
+print('Total samples {}'.format(tr_df.shape[0] + vl_df.shape[0] + te_df.shape[0]))
+
+# List of sample names for T/V/E
+tr_smp_names = list(tr_df[args.id_name].values)
+vl_smp_names = list(vl_df[args.id_name].values)
+te_smp_names = list(te_df[args.id_name].values)
+
+# TFRecords filenames
+tr_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)  # training_tfrecords
+vl_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)  # validation_tfrecords
+te_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
+print('Total samples {}'.format(len(tr_tfr_files) + len(vl_tfr_files) + len(te_tfr_files)))
+
+# Missing tfrecords
+print('\nThese samples miss a tfrecord ...\n')
+print(data.loc[~data[args.id_name].isin(tr_smp_names + vl_smp_names + te_smp_names), ['smp', 'image_id']])
+
+train_tfrecords = tr_tfr_files
+val_tfrecords = vl_tfr_files
+test_tfrecords = te_tfr_files
+
+import ipdb; ipdb.set_trace()
+
+# data = data.astype({args.id_name: str})
+# dtr = data[data[args.id_name].isin(tr_smp_names)]
+# dvl = data[data[args.id_name].isin(vl_smp_names)]
+# dte = data[data[args.id_name].isin(te_smp_names)]
+
+# assert sorted(tr_smp_names) == sorted(dtr[args.id_name].values.tolist()), "Sample names \
+#     in the s_tr and dtr don't match."
+# assert sorted(vl_smp_names) == sorted(dvl[args.id_name].values.tolist()), "Sample names \
+#     in the s_te and dte don't match."
+# assert sorted(te_smp_names) == sorted(dte[args.id_name].values.tolist()), "Sample names \
+#     in the s_te and dte don't match."
+
+assert sorted(tr_smp_names) == sorted(tr_df[args.id_name].values.tolist()), "Sample names \
     in the s_tr and dtr don't match."
-assert sorted(s_te) == sorted(dte[args.id_name].values.tolist()), "Sample names \
+assert sorted(vl_smp_names) == sorted(vl_df[args.id_name].values.tolist()), "Sample names \
+    in the s_te and dte don't match."
+assert sorted(te_smp_names) == sorted(te_df[args.id_name].values.tolist()), "Sample names \
     in the s_te and dte don't match."
 
-print(f'Training files {len(training_tfrecords)}')
-print(f'Validation files {len(validation_tfrecords)}')
-
+os.makedirs(outdir/f'split_{split_id}', exist_ok=True)
+tr_df.to_csv(outdir/f'split_{split_id}/dtr.csv', index=False)
+vl_df.to_csv(outdir/f'split_{split_id}/dvl.csv', index=False)
+te_df.to_csv(outdir/f'split_{split_id}/dte.csv', index=False)
 
 # num_slide_input = 0
 # input_labels = None
@@ -491,8 +497,8 @@ MANIFEST = manifest
 IMAGE_SIZE = image_size = tile_px
 DTYPE = 'float16' if use_fp16 else 'float32'
 SLIDE_ANNOTATIONS = slide_annotations = outcomes
-TRAIN_TFRECORDS = training_tfrecords
-VALIDATION_TFRECORDS = validation_tfrecords
+TRAIN_TFRECORDS = train_tfrecords
+VALIDATION_TFRECORDS = val_tfrecords
 model_type = MODEL_TYPE = model_type
 #SLIDES = list(slide_annotations.keys())
 SAMPLES = list(slide_annotations.keys())
@@ -558,7 +564,7 @@ else:
         'AUGMENT': AUGMENT,
     }
 
-train_data, _, num_tiles = _interleave_tfrecords(
+train_data, _, num_tiles = interleave_tfrecords(
     tfrecords=TRAIN_TFRECORDS,
     batch_size=batch_size,
     balance=balanced_training,
@@ -595,7 +601,7 @@ for i, rec in enumerate(train_data.take(4)):
 using_validation = 25
 
 if using_validation:
-    validation_data, validation_data_with_slidenames, _ = _interleave_tfrecords(
+    val_data, val_data_with_smp_names, _ = interleave_tfrecords(
         tfrecords=VALIDATION_TFRECORDS,
         batch_size=val_batch_size,
         balance='NO_BALANCE',
@@ -611,16 +617,30 @@ if using_validation:
     )
 
     if validation_steps:
-        validation_data_for_training = validation_data.repeat()
+        validation_data_for_training = val_data.repeat()
         print(f"Using {validation_steps} batches ({validation_steps * batch_size} samples) each validation check")
     else:
-        validation_data_for_training = validation_data
+        validation_data_for_training = val_data
         print(f"Using entire validation set each validation check")
 else:
     log.info("Validation during training: None", 1)
     validation_data_for_training = None
     validation_steps = 0
 
+test_data, te_data_with_smp_names, _ = interleave_tfrecords(
+    tfrecords=test_tfrecords,
+    batch_size=val_batch_size,
+    balance='NO_BALANCE',
+    finite=True,
+    max_tiles=max_tiles_per_slide,
+    min_tiles=min_tiles_per_slide,
+    include_smp_names=True,
+    parse_fn=parse_fn,
+    MANIFEST=MANIFEST,
+    SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+    SAMPLES=SAMPLES,
+    **parse_fn_kwargs
+)
 
 # ----------------------
 # Prep for training
@@ -652,7 +672,7 @@ metrics = ['accuracy'] if model_type != 'linear' else [loss]
 # Create callbacks for early stopping, checkpoint saving, summaries, and history
 history_callback = tf.keras.callbacks.History()
 checkpoint_path = os.path.join(DATA_DIR, "cp.ckpt")
-cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=True, verbose=1)
+cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=False, verbose=1)
 # tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=DATA_DIR, histogram_freq=0, write_graph=False, update_freq=log_frequency)
 
 
@@ -679,108 +699,29 @@ print('Variable dtype: %s' % policy.variable_dtype)
 
 
 # -------------
-# Build network - ap
+# Train model
 # -------------
 
-import ipdb; ipdb.set_trace()
-
-def build_model_rna(pooling='max', pretrain='imagenet'):
-    # Image layers
-    image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
-    tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-    base_img_model = tf.keras.applications.Xception(
-        weights=pretrain, pooling=pooling, include_top=False,
-        input_shape=None, input_tensor=None)
-    x_im = base_img_model(tile_input_tensor)
-
-    # RNA layers
-    ge_input_tensor = tf.keras.Input(shape=(976,), name="ge_data")
-    x_ge = Dense(512, activation=tf.nn.relu)(ge_input_tensor)
-
-    model_inputs = [tile_input_tensor, ge_input_tensor]
-
-    # Merge towers
-    merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_im])
-
-    hidden_layer_width = 1000
-    merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-                                         name="hidden_1")(merged_model)
-
-    # Add the softmax prediction layer
-    activation = 'linear' if model_type == 'linear' else 'softmax'
-    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-    softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name='ctype')(final_dense_layer)
-
-    # Assemble final model
-    model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-    return model
-
-
-def build_model_rsp(pooling='max', pretrain='imagenet',
-                    use_ge=True, use_dd=True, use_tile=True,
-                    ge_shape=None, dd_shape=None):
-    """ ... """
-    model_inputs = []
-    merge_inputs = []
-
-    if use_tile:
-        image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
-        tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-        base_img_model = tf.keras.applications.Xception(
-            weights=pretrain, pooling=pooling, include_top=False,
-            input_shape=None, input_tensor=None)
-
-        x_im = base_img_model(tile_input_tensor)
-        model_inputs.append(tile_input_tensor)
-        merge_inputs.append(x_im)
-
-    if use_ge:
-        ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-        x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
-        model_inputs.append(ge_input_tensor)
-        merge_inputs.append(x_ge)
-
-    if use_dd:
-        dd_input_tensor = tf.keras.Input(shape=dd_shape, name="dd_data")
-        x_dd = Dense(512, activation=tf.nn.relu, name="dense_dd_1")(dd_input_tensor)
-        model_inputs.append(dd_input_tensor)
-        merge_inputs.append(x_dd)
-
-    # model_inputs = [tile_input_tensor, ge_input_tensor, dd_input_tensor]
-
-    # Merge towers
-    # merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_dd, x_im])
-    merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
-
-    hidden_layer_width = 1000
-    merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-                                         name="hidden_1", kernel_regularizer=None)(merged_model)
-
-    # Add the softmax prediction layer
-    activation = 'linear' if model_type == 'linear' else 'softmax'
-    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-    softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
-
-    # Assemble final model
-    model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-    return model
-
+# import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
-    model = build_model_rsp(ge_shape=ge_shape, dd_shape=dd_shape)
+    model = build_model_rsp(ge_shape=ge_shape, dd_shape=dd_shape,
+                            model_type=model_type, NUM_CLASSES=NUM_CLASSES)
 else:
+    raise NotImplementedError('Need to check this method')
     model = build_model_rna()
 
 print()
-model.summary()
-
-# Fine-tune the model
-print("Beginning fine-tuning")
+print(model.summary())
 
 model.compile(loss=loss,
               optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
               metrics=metrics)
 
+# import ipdb; ipdb.set_trace()
+
+t = time()
+print('Start training ...')
 history = model.fit(train_data,
                     steps_per_epoch=steps_per_epoch,
                     epochs=total_epochs,
@@ -789,5 +730,54 @@ history = model.fit(train_data,
                     validation_data=validation_data_for_training,
                     validation_steps=validation_steps,
                     callbacks=callbacks)
+print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 
 
+# import ipdb; ipdb.set_trace()
+
+# Predict
+y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
+for i, batch in enumerate(te_data_with_smp_names):
+    fea = batch[0]
+    label = batch[1]
+    smp = batch[2]
+
+    preds = model.predict(fea)
+    y_pred_prob.append( preds )
+    y_pred_label.extend( np.argmax(preds, axis=1).tolist() )
+    y_true.extend( label[args.target[0]].numpy().tolist() )
+    smp_list.extend( [smp_bytes.decode('utf-8') for smp_bytes in batch[2].numpy().tolist()] )
+
+# Put predictions in a dataframe
+y_pred_prob = np.vstack(y_pred_prob)
+y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f'prob_{c}' for c in range(y_pred_prob.shape[1])])
+
+prd = pd.DataFrame({'smp': smp_list, 'y_true': y_true, 'y_pred_label': y_pred_label})
+prd = pd.concat([prd, y_pred_prob], axis=1)
+prd.to_csv(outdir/'te_preds_per_tiles.csv', index=False)
+
+# Agg predictions per smp
+aa = []
+for smp in prd.smp.unique():
+    dd = {'smp': smp}
+    df = prd[prd.smp == smp]
+    dd['y_true'] = df.y_true.unique()[0]
+    dd['y_pred_label'] = np.argmax(np.bincount(df.y_pred_label))
+    dd['pred_acc'] = sum(df.y_true == df.y_pred_label)/df.shape[0]
+    aa.append(dd)
+
+import ipdb; ipdb.set_trace()
+
+te_prd_agg = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
+te_prd_agg.to_csv(outdir/'te_preds_per_smp.csv', index=False)
+
+# efficient use of groupby().apply()
+xx = prd.groupby('smp').apply(lambda x: pd.Series({
+    'y_true': int(x['y_true'].unique()[0]),
+    'y_pred_label': int(np.argmax(np.bincount(x['y_pred_label']))),
+    'pred_acc': sum(x['y_true'] == x['y_pred_label'])/x.shape[0]
+})).reset_index().sort_values(args.id_name).reset_index(drop=True)
+
+print(te_prd_agg.equals(xx))
+
+print('Done.')

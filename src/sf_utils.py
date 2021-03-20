@@ -199,30 +199,17 @@ def _parse_tfrec_fn_rsp(record,
         return image_dict, label
 
 
-# def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
-#                           max_tiles=None, min_tiles=None,
-#                           include_smp_names=False,
-#                           parse_fn=None, drop_remainder=False,
-#                           use_dd=False,
-#                           use_ge=False,
-#                           use_tile=True,
-#                           id_name=None,
-#                           MANIFEST=None, # global var of SlideFlowModel
-#                           ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
-#                           SLIDE_ANNOTATIONS=None, # global var of SlideFlowModel
-#                           MODEL_TYPE=None, # global var of SlideFlowModel
-#                           SAMPLES=None): # global var of SlideFlowModel
-def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
-                          max_tiles=None, min_tiles=None,
-                          include_smp_names=False,
-                          drop_remainder=False,
-                          parse_fn=None,
-                          MANIFEST=None, # global var of SlideFlowModel
-                          # ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
-                          SLIDE_ANNOTATIONS=None, # global var of SlideFlowModel
-                          MODEL_TYPE=None, # global var of SlideFlowModel
-                          SAMPLES=None,
-                          **parse_fn_kwargs): # global var of SlideFlowModel
+def interleave_tfrecords(tfrecords, batch_size, balance, finite,
+                         max_tiles=None, min_tiles=None,
+                         include_smp_names=False,
+                         drop_remainder=False,
+                         parse_fn=None,
+                         MANIFEST=None, # global var of SlideFlowModel
+                         # ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
+                         SLIDE_ANNOTATIONS=None, # global var of SlideFlowModel
+                         MODEL_TYPE=None, # global var of SlideFlowModel
+                         SAMPLES=None,
+                         **parse_fn_kwargs): # global var of SlideFlowModel
     ''' Generates an interleaved dataset from a collection of tfrecord files,
     sampling from tfrecord files randomly according to balancing if provided.
     Requires self.MANIFEST. Assumes TFRecord files are named by slide.
@@ -242,6 +229,8 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
                                 label, and slidename)
         multi_image:			Bool, if True, will read multiple images from each TFRecord record.
     '''
+    # TODO: optimizing with data api
+    # https://www.tensorflow.org/guide/data_performance
     DATASETS = {}  # global var of SlideFlowModel
 
     print(f"Interleaving {len(tfrecords)} tfrecords: finite={finite}, max_tiles={max_tiles}, min_tiles={min_tiles}")
@@ -370,38 +359,28 @@ def _interleave_tfrecords(tfrecords, batch_size, balance, finite,
               have been extracted and all TFRecords are in the appropriate folder")
         sys.exit()
 
-    # if include_smp_names:
-    #     dataset_with_slidenames = dataset.map(
-    #             partial(parse_fn, include_smp_names=True,
-    #                     use_dd=use_dd, use_ge=use_ge, use_tile=use_tile, id_name=id_name,
-    #                     AUGMENT=AUTMENT, ANNOTATIONS_TABLES=ANNOTATIONS_TABLES),
-    #             num_parallel_calls=32
-    #     ) #tf.data.experimental.AUTOTUNE
-    #     dataset_with_slidenames = dataset_with_slidenames.batch(batch_size, drop_remainder=drop_remainder)
-    # else:
-    #     dataset_with_slidenames = None
-
-    # dataset = dataset.map(
-    #     partial(parse_fn, include_smp_names=False,
-    #             use_dd=use_dd, use_ge=use_ge, use_tile=use_tile, id_name=id_name,
-    #             AUGMENT=AUTMENT, ANNOTATIONS_TABLES=ANNOTATIONS_TABLES),
-    #     num_parallel_calls=8
-    # )
+    # (ap) recommended to use batch before map
+    # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
     if include_smp_names:
-        dataset_with_slidenames = dataset.map(
+        dataset_with_smp_names = dataset.map(
                 partial(parse_fn, include_smp_names=True, **parse_fn_kwargs),
                 num_parallel_calls=32
         ) #tf.data.experimental.AUTOTUNE
-        dataset_with_slidenames = dataset_with_slidenames.batch(batch_size, drop_remainder=drop_remainder)
+        dataset_with_smp_names = dataset_with_smp_names.batch(batch_size, drop_remainder=drop_remainder)
     else:
-        dataset_with_slidenames = None
+        dataset_with_smp_names = None
 
+    num_parallel_calls = 8
+    # num_parallel_calls = tf.data.experimental.AUTOTUNE
     dataset = dataset.map(
         partial(parse_fn, include_smp_names=False, **parse_fn_kwargs),
-        num_parallel_calls=8
+        num_parallel_calls=num_parallel_calls
     )
 
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
-    return dataset, dataset_with_slidenames, global_num_tiles
+    # (ap)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    return dataset, dataset_with_smp_names, global_num_tiles

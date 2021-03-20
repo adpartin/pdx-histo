@@ -1,6 +1,7 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from typing import List
 
 try:
     import tensorflow as tf
@@ -181,7 +182,35 @@ def calc_examples_in_tfrecord(tfr_path):
     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
     print('Number of examples in the tfrecord:', count)
 
-    
+
+def get_tfr_files(tfr_dir, tfr_names) -> List[str]:
+    """ Get filenames of tfrecords based on response sample names.
+
+    Args:
+        fnames : file names exluding the suffix '.tfrecord*'
+
+    Example:
+        get_tfr_files(tr_smp_names)
+    """
+    tfr_all_files = sorted(tfr_dir.glob('*.tfrec*'))
+    tfr_sub_files = []
+
+    suffix = np.unique([s.suffix for s in tfr_all_files])
+    if len(suffix) < 1:
+        raise FileNotFoundError("No files found with suffix '.tfrec*'") 
+    if len(suffix) > 1:
+        "Multiple files with variations of '.tfrec*' suffix found."
+    suffix = suffix[0]
+
+    for sname in tfr_names:
+        fname = tfr_dir/(sname + suffix)
+        if fname not in tfr_all_files:
+            raise ValueError(f'File was not found in:\n\t{fname}')
+        tfr_sub_files.append(str(fname))
+
+    return tfr_sub_files
+
+
 def _float_feature(value):
     """ Returns a bytes_list from a float / double. """
     if isinstance(value, list) is False:

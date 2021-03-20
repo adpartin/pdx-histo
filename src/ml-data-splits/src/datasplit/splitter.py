@@ -1,8 +1,8 @@
 """ Util functions to split data into train/val. """
-from __future__ import print_function, division
-
+import pathlib
 from pathlib import Path
 import numpy as np
+from typing import Union, Optional, Any, Tuple
 
 import matplotlib
 matplotlib.use('Agg')
@@ -18,21 +18,28 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from utils.plots import plot_hist
 
 
-def data_splitter( n_splits=1, gout=None, outfigs=None, ydata=None,
-                   print_fn=print, **kwargs):
+def data_splitter(n_splits: int=1,
+                  gout: Optional[Any]=None,
+                  outfigs: Optional[Any]=None,
+                  ydata=None,
+                  print_fn=print,
+                  seed: Optional[int]=None,
+                  **kwargs) -> Tuple[dict, dict, dict]:
     """
     This func calls get_single_splits() a total of n_splits times to generate
     multiple train/val/test splits.
+
     Args:
         n_splits : number of splits
         gout : global outdir to dump the splits
         outfigs : outdir to dump the distributions of target variable
-        ydata : the target variable
+        ydata : the target variable (array-like)
         split_on : vol name in the dataframe to use for hard (group) partition
         print_fn : print function
     Return:
         tr_dct, vl_dct, te_dct : tuple of split dicts
     """
+    np.random.seed(seed)
     seeds = np.random.choice(n_splits, n_splits, replace=False)
 
     # These dicts will contain the splits
@@ -40,7 +47,8 @@ def data_splitter( n_splits=1, gout=None, outfigs=None, ydata=None,
     vl_dct = {}
     te_dct = {}
 
-    for i, seed in enumerate( seeds ):
+    # import ipdb; ipdb.set_trace()
+    for i, seed in enumerate(seeds):
         tr_id, vl_id, te_id = gen_single_split(ydata=ydata, seed=seed, **kwargs)
 
         tr_dct[i] = tr_id
@@ -52,34 +60,41 @@ def data_splitter( n_splits=1, gout=None, outfigs=None, ydata=None,
         output = '1fold_s' + seed_str
 
         if gout is not None:
-            np.savetxt(gout/f'{output}_tr_id.csv', tr_id.reshape(-1, 1),
+            np.savetxt(gout/f'{output}_tr_id.txt', tr_id.reshape(-1, 1),
                        fmt='%d', delimiter='', newline='\n')
-            np.savetxt(gout/f'{output}_vl_id.csv', vl_id.reshape(-1, 1),
+            np.savetxt(gout/f'{output}_vl_id.txt', vl_id.reshape(-1, 1),
                        fmt='%d', delimiter='', newline='\n')
-            np.savetxt(gout/f'{output}_te_id.csv', te_id.reshape(-1, 1),
+            np.savetxt(gout/f'{output}_te_id.txt', te_id.reshape(-1, 1),
                        fmt='%d', delimiter='', newline='\n')
 
         if (ydata is not None) and (outfigs is not None):
-            plot_hist(ydata, title='Train Set Histogram',
+            plot_hist(ydata[tr_id], title='Train Set Histogram',
                       fit=None, bins=100, path=outfigs/f'{output}_y_hist_train.png')
-            plot_hist(ydata, title='Val Set Histogram',
+            plot_hist(ydata[vl_id], title='Val Set Histogram',
                       fit=None, bins=100, path=outfigs/f'{output}_y_hist_val.png')
-            plot_hist(ydata, title='Test Set Histogram',
+            plot_hist(ydata[te_id], title='Test Set Histogram',
                       fit=None, bins=100, path=outfigs/f'{output}_y_hist_test.png')
     return (tr_dct, vl_dct, te_dct)
 
 
-def gen_single_split(data, te_method='simple', cv_method='simple', te_size=0.1,
-                     mltype='reg', ydata=None, split_on=None, seed=None,
+def gen_single_split(data,
+                     te_method: str='simple',
+                     cv_method: str='simple',
+                     te_size: Union[int, float]=0.1,
+                     mltask: str='reg',
+                     ydata=None,
+                     split_on: Optional[str]=None,
+                     seed: Optional[int]=None,
                      print_fn=print):
     """
     This func generates train/val/test split indices.
+
     Args:
         data : dataframe
         te_method : method to split data (D) into test (E) and train (T0)
         cv_method : method to split the test from te_method (T0) into train (T1) and validation (V)
         te_size : fraction of data (D) to extract for test set (E)
-        mltype : ml type (task)
+        mltask : ml type (task)
         ydata : the target variable
         split_on : vol name in the dataframe to use for hard (group) partition
         seed : see value
@@ -87,9 +102,10 @@ def gen_single_split(data, te_method='simple', cv_method='simple', te_size=0.1,
     Return:
         tr_id, vl_id, te_id : tuple of 1-D arrays specifying the indices in the original input data
     """
-    np.random.seed( seed )
-    idx_vec = np.random.permutation( data.shape[0] )
-    y_vec = ydata.values[idx_vec] if ydata is not None else None
+    # import ipdb; ipdb.set_trace()
+    np.random.seed(seed)
+    idx_vec = np.random.permutation(data.shape[0])
+    yvec = ydata.values[idx_vec] if ydata is not None else None
 
     # Create splitter that splits the full dataset into tr and te
     if te_size < 1:
@@ -98,22 +114,24 @@ def gen_single_split(data, te_method='simple', cv_method='simple', te_size=0.1,
     else:
         te_folds = 1
         test_size = te_size
+
+    # TODO: do we really need to specify seed?? idx_vec is already shuffled!
     te_splitter = cv_splitter(cv_method=te_method, cv_folds=te_folds, test_size=test_size,
-                              mltype=mltype, shuffle=False, random_state=seed)
+                              mltask=mltask, shuffle=False, seed=seed)
 
     te_grp = None if split_on is None else data[split_on].values[idx_vec]
     if is_string_dtype(te_grp): te_grp = LabelEncoder().fit_transform(te_grp)
 
     # Split data (D) into tr (T0) and te (E)
-    tr_id, te_id = next( te_splitter.split(X=idx_vec, y=y_vec, groups=te_grp) )
-    tr_id = idx_vec[tr_id] # adjust the indices! we'll split the remaining tr into tr and vl
-    te_id = idx_vec[te_id] # adjust the indices!
+    tr_id, te_id = next( te_splitter.split(X=idx_vec, y=yvec, groups=te_grp) )
+    tr_id = idx_vec[tr_id] # adjust indices! we'll split the remaining tr into tr and vl
+    te_id = idx_vec[te_id] # adjust indices!
 
-    # Update a vector array that excludes the test indices
+    # Update the vector array that excludes the test indices
     idx_vec_ = tr_id; del tr_id
-    y_vec_ = ydata.values[idx_vec_] if ydata is not None else None
+    yvec_ = ydata.values[idx_vec_] if ydata is not None else None
 
-    # Define vl_size while considering the new full size of the available samples
+    # Define vl_size while considering the new sample size of the available samples
     if te_size < 1:
         # TODO instead of computing the adjusted ratio for vl_size
         # we can simply use cv_folds=1 and vl_size=te_size!
@@ -126,17 +144,17 @@ def gen_single_split(data, te_method='simple', cv_method='simple', te_size=0.1,
 
     # Create splitter that splits tr (T0) into tr (T1) and vl (V)
     cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=test_size,
-                     mltype=mltype, shuffle=False, random_state=seed)
+                     mltask=mltask, shuffle=False, seed=seed)
 
     cv_grp = None if split_on is None else data[split_on].values[idx_vec_]
     if is_string_dtype(cv_grp): cv_grp = LabelEncoder().fit_transform(cv_grp)
 
     # Split tr into tr and vl
-    tr_id, vl_id = next( cv.split(X=idx_vec_, y=y_vec_, groups=cv_grp) )
+    tr_id, vl_id = next( cv.split(X=idx_vec_, y=yvec_, groups=cv_grp) )
     tr_id = idx_vec_[tr_id]  # adjust the indices!
     vl_id = idx_vec_[vl_id]  # adjust the indices!
 
-    # Make sure that indices do not overlap
+    # Make sure indices do not overlap
     assert len( set(tr_id).intersection(set(vl_id)) ) == 0, 'Overlapping indices btw tr and vl'
     assert len( set(tr_id).intersection(set(te_id)) ) == 0, 'Overlapping indices btw tr and te'
     assert len( set(vl_id).intersection(set(te_id)) ) == 0, 'Overlapping indices btw tr and vl'
@@ -154,32 +172,39 @@ def gen_single_split(data, te_method='simple', cv_method='simple', te_size=0.1,
     return tr_id, vl_id, te_id
 
 
-def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
-                mltype: str='reg', shuffle: bool=False, random_state=None):
+def cv_splitter(cv_method: str='simple',
+                cv_folds: int=1,
+                test_size: float=0.2,
+                mltask: str='reg',
+                shuffle: bool=False,
+                seed=None):
     """ Creates a cross-validation splitter.
+
     Args:
         cv_method: 'simple', 'stratify' (only for classification), 'groups' (only for regression)
         cv_folds: number of cv folds
         test_size: fraction of test set size (used only if cv_folds=1)
-        mltype: 'reg', 'cls'
+        mltask: 'reg', 'cls'
     """
     # Classification
-    if mltype == 'cls':
+    if mltask == 'cls':
         if cv_method == 'simple':
             if cv_folds == 1:
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size,
-                                  random_state=random_state)
+                                  random_state=seed)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=shuffle,
-                           random_state=random_state)
+                           random_state=seed)
 
         elif cv_method == 'strat':
             if cv_folds == 1:
                 cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size,
-                                            random_state=random_state)
+                                            random_state=seed)
             else:
-                cv = StratifiedKFold(n_splits=cv_folds, shuffle=shuffle,
-                                     random_state=random_state)
+                # cv = StratifiedKFold(n_splits=cv_folds, shuffle=shuffle,
+                #                      random_state=seed)
+                cv = StratifiedKFold(n_splits=cv_folds, shuffle=False,
+                                     random_state=None)
 
         elif cv_method == 'group':
             if cv_folds == 1:
@@ -188,19 +213,19 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
                 # https://github.com/scikit-learn/scikit-learn/issues/13369
                 # https://github.com/scikit-learn/scikit-learn/issues/9193
                 cv = GroupShuffleSplit(n_splits=cv_folds, test_size=test_size,
-                                       random_state=random_state)
+                                       random_state=seed)
             else:
                 cv = GroupKFold(n_splits=cv_folds)
 
     # Regression
-    elif mltype == 'reg':
+    elif mltask == 'reg':
         if cv_method == 'simple':
             if cv_folds == 1:
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size,
-                                  random_state=random_state)
+                                  random_state=seed)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=shuffle,
-                           random_state=random_state)
+                           random_state=seed)
 
         elif cv_method == 'group':
             if cv_folds == 1:
@@ -209,7 +234,7 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
                 # https://github.com/scikit-learn/scikit-learn/issues/13369
                 # https://github.com/scikit-learn/scikit-learn/issues/9193
                 cv = GroupShuffleSplit(n_splits=cv_folds, test_size=test_size,
-                                       random_state=random_state)
+                                       random_state=seed)
             else:
                 cv = GroupKFold(n_splits=cv_folds)
     return cv
