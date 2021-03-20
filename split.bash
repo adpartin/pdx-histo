@@ -1,7 +1,7 @@
 #!/bin/bash
 
-appname=bin_rsp_balance_01
-# appname=bin_rsp_balance_02
+# appname=bin_rsp_balance_01
+appname=bin_rsp_balance_02
 
 appdir=apps/$appname
 datapath=$appdir/annotations.csv

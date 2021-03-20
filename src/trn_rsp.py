@@ -66,6 +66,10 @@ parser.add_argument('--split_on',
                     default=None,
                     choices=['Sample', 'slide'],
                     help='Specify the hard split variable/column (default: None).')
+parser.add_argument('--appname',
+                    type=str,
+                    default=None,
+                    help='App name (default: None).')
 
 args, other_args = parser.parse_known_args()
 pprint(args)
@@ -74,13 +78,8 @@ use_ge, use_dd = True, True
 # use_ge, use_dd = True, False
 use_tile = True
 
-# import ipdb; ipdb.set_trace()
-# APPNAME = 'bin_ctype_balance_02'
-APPNAME = 'bin_rsp_balance_01'
-# APPNAME = 'bin_rsp_balance_02'
-
 # Load data
-appdir = cfg.MAIN_APPDIR/APPNAME
+appdir = cfg.MAIN_APPDIR/args.appname
 annotations_file = appdir/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
@@ -448,7 +447,7 @@ train_tfrecords = tr_tfr_files
 val_tfrecords = vl_tfr_files
 test_tfrecords = te_tfr_files
 
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
 # data = data.astype({args.id_name: str})
 # dtr = data[data[args.id_name].isin(tr_smp_names)]
@@ -469,10 +468,11 @@ assert sorted(vl_smp_names) == sorted(vl_df[args.id_name].values.tolist()), "Sam
 assert sorted(te_smp_names) == sorted(te_df[args.id_name].values.tolist()), "Sample names \
     in the s_te and dte don't match."
 
-os.makedirs(outdir/f'split_{split_id}', exist_ok=True)
-tr_df.to_csv(outdir/f'split_{split_id}/dtr.csv', index=False)
-vl_df.to_csv(outdir/f'split_{split_id}/dvl.csv', index=False)
-te_df.to_csv(outdir/f'split_{split_id}/dte.csv', index=False)
+split_outdir = outdir/f'split_{split_id}'
+os.makedirs(split_outdir, exist_ok=True)
+tr_df.to_csv(split_outdir/'dtr.csv', index=False)
+vl_df.to_csv(split_outdir/'dvl.csv', index=False)
+te_df.to_csv(split_outdir/'dte.csv', index=False)
 
 # num_slide_input = 0
 # input_labels = None
@@ -736,48 +736,59 @@ print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 # import ipdb; ipdb.set_trace()
 
 # Predict
-y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
-for i, batch in enumerate(te_data_with_smp_names):
-    fea = batch[0]
-    label = batch[1]
-    smp = batch[2]
+def calc_predictions(data_with_smp_names, model, outdir):
 
-    preds = model.predict(fea)
-    y_pred_prob.append( preds )
-    y_pred_label.extend( np.argmax(preds, axis=1).tolist() )
-    y_true.extend( label[args.target[0]].numpy().tolist() )
-    smp_list.extend( [smp_bytes.decode('utf-8') for smp_bytes in batch[2].numpy().tolist()] )
+    y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
+    for i, batch in enumerate(data_with_smp_names):
+        fea = batch[0]
+        label = batch[1]
+        smp = batch[2]
 
-# Put predictions in a dataframe
-y_pred_prob = np.vstack(y_pred_prob)
-y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f'prob_{c}' for c in range(y_pred_prob.shape[1])])
+        preds = model.predict(fea)
+        y_pred_prob.append( preds )
+        y_pred_label.extend( np.argmax(preds, axis=1).tolist() )
+        y_true.extend( label[args.target[0]].numpy().tolist() )
+        smp_list.extend( [smp_bytes.decode('utf-8') for smp_bytes in batch[2].numpy().tolist()] )
 
-prd = pd.DataFrame({'smp': smp_list, 'y_true': y_true, 'y_pred_label': y_pred_label})
-prd = pd.concat([prd, y_pred_prob], axis=1)
-prd.to_csv(outdir/'te_preds_per_tiles.csv', index=False)
+    # Put predictions in a dataframe
+    y_pred_prob = np.vstack(y_pred_prob)
+    y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f'prob_{c}' for c in range(y_pred_prob.shape[1])])
 
-# Agg predictions per smp
-aa = []
-for smp in prd.smp.unique():
-    dd = {'smp': smp}
-    df = prd[prd.smp == smp]
-    dd['y_true'] = df.y_true.unique()[0]
-    dd['y_pred_label'] = np.argmax(np.bincount(df.y_pred_label))
-    dd['pred_acc'] = sum(df.y_true == df.y_pred_label)/df.shape[0]
-    aa.append(dd)
+    prd = pd.DataFrame({'smp': smp_list, 'y_true': y_true, 'y_pred_label': y_pred_label})
+    prd = pd.concat([prd, y_pred_prob], axis=1)
+    prd.to_csv(outdir/'test_preds_per_tiles.csv', index=False)
+    return prd
+
+
+def agg_per_smp_preds(prd, id_name, outdir):
+    """ Agg predictions per smp. """
+    aa = []
+    for sample in prd[id_name].unique():
+        dd = {id_name: sample}
+        df = prd[prd[id_name] == sample]
+        dd['y_true'] = df.y_true.unique()[0]
+        dd['y_pred_label'] = np.argmax(np.bincount(df.y_pred_label))
+        dd['pred_acc'] = sum(df.y_true == df.y_pred_label)/df.shape[0]
+        aa.append(dd)
+
+    te_prd_agg = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
+    te_prd_agg.to_csv(outdir/'test_preds_per_smp.csv', index=False)
+
+    # efficient use of groupby().apply() !!
+    xx = prd.groupby('smp').apply(lambda x: pd.Series({
+        'y_true': x['y_true'].unique()[0],
+        'y_pred_label': np.argmax(np.bincount(x['y_pred_label'])),
+        'pred_acc': sum(x['y_true'] == x['y_pred_label'])/x.shape[0]
+    })).reset_index().sort_values(args.id_name).reset_index(drop=True)
+    xx = xx.astype({'y_true': int, 'y_pred_label': int})
+
+    print(te_prd_agg.equals(xx))
+    return te_prd_agg
+
 
 import ipdb; ipdb.set_trace()
+test_preds = calc_predictions(te_data_with_smp_names, model=model, outdir=split_outdir)
+te_prd_agg = agg_per_smp_preds(test_preds, id_name=args.id_name, outdir=split_outdir)
 
-te_prd_agg = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
-te_prd_agg.to_csv(outdir/'te_preds_per_smp.csv', index=False)
-
-# efficient use of groupby().apply()
-xx = prd.groupby('smp').apply(lambda x: pd.Series({
-    'y_true': int(x['y_true'].unique()[0]),
-    'y_pred_label': int(np.argmax(np.bincount(x['y_pred_label']))),
-    'pred_acc': sum(x['y_true'] == x['y_pred_label'])/x.shape[0]
-})).reset_index().sort_values(args.id_name).reset_index(drop=True)
-
-print(te_prd_agg.equals(xx))
 
 print('Done.')

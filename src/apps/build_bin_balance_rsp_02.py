@@ -22,9 +22,11 @@ from config import cfg
 import load_data
 from load_data import PDX_SAMPLE_COLS
 
-APPNAME = 'bin_rsp_balance_01'
+APPNAME = 'bin_rsp_balance_02'
 outdir = cfg.MAIN_APPDIR/APPNAME
 os.makedirs(outdir, exist_ok=True)
+
+target = 'Response'
 
 # Load data
 rsp = load_data.load_rsp()
@@ -69,12 +71,11 @@ data.insert(loc=5, column='slide', value=data['image_id'], allow_duplicates=True
 # Note!
 # this is required for predicting with images only
 # df = data.copy()
-# df = df.drop_duplicates(subset=['Response', 'image_id'])
-# df = df.sort_values('Response', ascending=False)
+# df = df.drop_duplicates(subset=[target, 'image_id'])
+# df = df.sort_values(target, ascending=False)
 # df = df.drop_duplicates(subset=['image_id'], keep='first')
 # df = df.reset_index(drop=True)
 
-# import ipdb; ipdb.set_trace()
 ge_cols = [c for c in rna.columns if c.startswith('ge_')]
 rna = rna.sort_values('Sample', ascending=True)
 dup_vec = rna.duplicated(subset=ge_cols, keep=False)
@@ -84,8 +85,8 @@ print('Dups', sum(dup_vec))
 # Subsample data to create balanced dataset in terms of drug response and ctype
 # -----------------------------------------------------------------------------
 print('\nSubsample master dataframe to create balanced dataset.')
-r0 = data[data.Response == 0]  # non-responders
-r1 = data[data.Response == 1]  # responders
+r0 = data[data[target] == 0]  # non-responders
+r1 = data[data[target] == 1]  # responders
 
 # Aggregate non-responders to balance the responders
 dfs = []
@@ -100,14 +101,34 @@ for ctype, count in r1['ctype'].value_counts().items():
 aa = pd.concat(dfs, axis=0)
 df = pd.concat([aa, r1], axis=0)
 df = df.sort_values('smp', ascending=True).reset_index(drop=True)
+del dfs, aa, ctype, count, r0, r1
+
+# --------------------------------------------------------------
+# import ipdb; ipdb.set_trace()
+
+bb = data[~data['smp'].isin(df['smp'].values)]
+bb = bb[bb['ctype'].isin(df['ctype'].unique())]
+
+dfs = []
+for ctype, count in df['ctype'].value_counts().items():
+    # print(ctype, count)
+    aa = bb[bb.ctype == ctype]
+    if aa.shape[0] > count:
+        aa = aa.sample(n=count)
+    dfs.append(aa)
+
+aa = pd.concat(dfs, axis=0)
+df = pd.concat([aa, df], axis=0)
+df = df.sort_values('smp', ascending=True).reset_index(drop=True)
 del dfs, aa, ctype, count
+# --------------------------------------------------------------
 
 df = df.reset_index()
-pprint(df.groupby(['ctype', 'Response']).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
+pprint(df.groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
 
-pprint(df['Response'].value_counts())
+pprint(df[target].value_counts())
 
-# save annotations file
+# Save annotations file
 df.to_csv(outdir/cfg.ANNOTATIONS_FILENAME, index=False)
 print('\nFinal dataframe', df.shape)
 
