@@ -1,5 +1,6 @@
 import sys
 import csv
+import json
 import numpy as np
 from functools import partial
 
@@ -79,16 +80,16 @@ def scale_fea(data, scaler):
     return (data - fea_mean) / fea_scale
 
 
-def _parse_tfrec_fn_rna(record,
-                        include_smp_names=True,
-                        use_tile=True,
-                        use_ge=False,
-                        ge_scaler=None,
-                        id_name='slide',
-                        MODEL_TYPE=None,
-                        ANNOTATIONS_TABLES=None,
-                        AUGMENT=True
-                        ):
+def parse_tfrec_fn_rna(record,
+                       include_smp_names=True,
+                       use_tile=True,
+                       use_ge=False,
+                       ge_scaler=None,
+                       id_name='slide',
+                       MODEL_TYPE=None,
+                       ANNOTATIONS_TABLES=None,
+                       AUGMENT=True
+                       ):
     '''Parses raw entry read from TFRecord.'''
     # features = tf.io.parse_single_example(record, FEA_SPEC_RNA)
     features = tf.io.parse_single_example(record, FEA_SPEC_RNA_NEW)
@@ -132,18 +133,18 @@ def _parse_tfrec_fn_rna(record,
         return image_dict, label
 
 
-def _parse_tfrec_fn_rsp(record,
-                        include_smp_names=True,
-                        use_tile=True,
-                        use_ge=False,
-                        use_dd=False,
-                        ge_scaler=None,
-                        dd_scaler=None,
-                        id_name='smp',
-                        MODEL_TYPE=None,
-                        ANNOTATIONS_TABLES=None,
-                        AUGMENT=True
-                        ):
+def parse_tfrec_fn_rsp(record,
+                       include_smp_names=True,
+                       use_tile=True,
+                       use_ge=False,
+                       use_dd=False,
+                       ge_scaler=None,
+                       dd_scaler=None,
+                       id_name='smp',
+                       MODEL_TYPE=None,
+                       ANNOTATIONS_TABLES=None,
+                       AUGMENT=True
+                       ):
     ''' Parses raw entry read from TFRecord. '''
     feature_description = FEA_SPEC_RSP
 
@@ -297,7 +298,6 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
                                           'num_tiles': tiles}})
         else:
             # categories[category]['num_slides'] += 1
-            # categories[category]['num_tiles'] += tiles
             categories[category]['num_samples'] += 1
             categories[category]['num_tiles'] += tiles
         num_tiles += [tiles]
@@ -384,3 +384,82 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     return dataset, dataset_with_smp_names, global_num_tiles
+
+
+def create_manifest(directory):
+    """
+    __init__ --> _trainer --> get_manifest --> update_manifest_at_dir
+    """
+    # directory = tfr_dir
+    tfr_files = list(directory.glob('*.tfrec*'))
+    manifest_path = directory/"manifest.json"
+    manifest = {}
+
+    if manifest_path.exists():
+        print('Loading existing manifest.')
+        with open(manifest_path, 'r') as data_file:
+            global_manifest = json.load(data_file)
+            
+        MANIFEST = manifest = global_manifest
+
+    else:
+        print('Creating manifest.')
+        relative_tfrecord_paths = [f.name for f in tfr_files]
+        slide_names_from_annotations = [n.split('.tfr')[0] for n in relative_tfrecord_paths]
+
+        # ap
+        n = len(relative_tfrecord_paths)
+
+        for i, rel_tfr in enumerate(relative_tfrecord_paths):
+            # print(f'processing {i}')
+            tfr = str(directory/rel_tfr)  #join(directory, rel_tfr)
+
+            manifest.update({rel_tfr: {}})
+            try:
+                raw_dataset = tf.data.TFRecordDataset(tfr)
+            except Exception as e:
+                print(f"Unable to open TFRecords file with Tensorflow: {str(e)}")
+                
+            print(f"\r\033[K + Verifying tiles in ({i+1} out of {n} tfrecords) {green(rel_tfr)}...", end="")
+            total = 0
+            
+            try:
+                for raw_record in raw_dataset:
+                    example = tf.train.Example()
+                    example.ParseFromString(raw_record.numpy())
+                    slide = example.features.feature['slide'].bytes_list.value[0].decode('utf-8')  # get the slide name
+                    if slide not in manifest[rel_tfr]:
+                        manifest[rel_tfr][slide] = 1
+                    else:
+                        manifest[rel_tfr][slide] += 1
+                    total += 1
+                    
+            except tf.python.framework.errors_impl.DataLossError:
+                print('\r\033[K', end="")
+                log.error(f"Corrupt or incomplete TFRecord at {tfr}", 1)
+                log.info(f"Deleting and removing corrupt TFRecord from manifest...", 1)
+                del(raw_dataset)
+                os.remove(tfr)
+                del(manifest[rel_tfr])
+                continue
+                
+            manifest[rel_tfr]['total'] = total
+            print('\r\033[K', end="")
+
+        del raw_dataset
+
+        # Update manifest to use full paths to tfrecords
+        tfrecord_dir = str(tfr_dir)
+        global_manifest = {}
+        for record in manifest:
+            global_manifest.update({os.path.join(tfrecord_dir, record): manifest[record]})
+
+        MANIFEST = manifest = global_manifest
+
+        print(f'Items in manifest {len(manifest)}')
+        
+        # Save manifest
+        with open(manifest_path, "w") as data_file:
+            json.dump(manifest, data_file, indent=1)
+
+    return manifest

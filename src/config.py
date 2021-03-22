@@ -12,7 +12,7 @@ fdir = Path(__file__).resolve().parent
 
 cfg = types.SimpleNamespace()
 
-cfg.MAIN_APPDIR = (fdir/'../apps').resolve()
+cfg.MAIN_PRJDIR = (fdir/'../projects').resolve()
 cfg.DATADIR = (fdir/'../data').resolve()
 cfg.SLIDES_DIR = (cfg.DATADIR/'doe-globus-pdx-data').resolve()
 # cfg.TILES_DIR = cfg.DATADIR/'tiles_png'  # old pipeline
@@ -24,22 +24,12 @@ cfg.SF_ANNOTATIONS_FILENAME = 'annotations_slideflow.csv'
 # TFRecords
 cfg.TFR_DIR = (cfg.DATADIR/'tfrecords').resolve()
 cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED').resolve()
-# cfg.SF_TFR_DIR = (fdir/'../../slideflow-proj/PDX_FIXED_updated').resolve()
 cfg.SF_TFR_DIR_RNA = (fdir/'../../slideflow-proj/PDX_FIXED_RNA').resolve()
 cfg.SF_TFR_DIR_RNA_NEW = (fdir/'../../slideflow-proj/PDX_FIXED_RNA_NEW').resolve()
 cfg.SF_TFR_DIR_RSP = (fdir/'../../slideflow-proj/PDX_FIXED_RSP').resolve()
 
-# cfg.MAIN_APPDIR = MAIN_APPDIR
-# cfg.DATADIR = DATADIR
-# cfg.ANNOTATIONS_FILENAME = ANNOTATIONS_FILENAME
-# cfg.SF_ANNOTATIONS_FILENAME = SF_ANNOTATIONS_FILENAME
-# cfg.TILES_DIR = TILES_DIR
-# cfg.SF_TFR_DIR = SF_TFR_DIR
-
 # Meta file names
-# cfg.CROSSREF_FNAME = 'ImageID_PDMRID_CrossRef.csv'
 cfg.CROSSREF_FNAME = '_ImageID_PDMRID_CrossRef.xlsx'
-# cfg.PDX_META_FNAME = 'PDX_Meta_Information.xlsx'
 cfg.PDX_META_FNAME = 'PDX_Meta_Information2.csv'
 cfg.SLIDES_META_FNAME = 'meta_from_wsi_slides.csv'
 

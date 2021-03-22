@@ -33,10 +33,13 @@ from tensorflow.keras.models import Sequential, Model, load_model
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.utils import plot_model
 
-from tf_utils import _float_feature, _bytes_feature, _int64_feature, get_tfr_files
+from tf_utils import get_tfr_files
 from sf_utils import (green, interleave_tfrecords,
-                      _parse_tfrec_fn_rsp, _parse_tfrec_fn_rna)
-from models import build_model_rsp, build_model_rna
+                      parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
+                      create_manifest)
+from models import build_model_rsp, build_model_rna, build_model_rsp_simple
+from ml.scale import get_scaler
+from utils.utils import Params
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
@@ -66,27 +69,30 @@ parser.add_argument('--split_on',
                     default=None,
                     choices=['Sample', 'slide'],
                     help='Specify the hard split variable/column (default: None).')
-parser.add_argument('--appname',
+parser.add_argument('--prjname',
                     type=str,
-                    default=None,
-                    help='App name (default: None).')
+                    help='Project name (folder that contains the annotations.csv dataframe).')
 
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-use_ge, use_dd = True, True
-# use_ge, use_dd = True, False
-use_tile = True
+# use_ge, use_dd = True, True
+# use_tile = True
 
-# Load data
-appdir = cfg.MAIN_APPDIR/args.appname
-annotations_file = appdir/cfg.SF_ANNOTATIONS_FILENAME
+# Load dataframe (annotations)
+prjdir = cfg.MAIN_PRJDIR/args.prjname
+annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
 
+import ipdb; ipdb.set_trace()
+# Import parameters
+prm_dir = prjdir/'params.json'
+params = Params(prm_dir)
+
 # Outdir
 split_on = 'none' if args.split_on is (None or 'none') else args.split_on
-outdir = appdir/f'results/split_on_{split_on}'
+outdir = prjdir/f'results/split_on_{split_on}'
 os.makedirs(outdir, exist_ok=True)
 
 if args.target[0] == 'Response':
@@ -99,70 +105,64 @@ ge_cols = [c for c in data.columns if c.startswith('ge_')]
 dd_cols = [c for c in data.columns if c.startswith('dd_')]
 data = data.astype({'image_id': str, 'slide': str})
 
-def get_scaler(fea_df):
-    if fea_df.shape[0] == 0:
-        # TODO: add warning!
-        return None
-    scaler = StandardScaler()
-    scaler.fit(fea_df)
-    return scaler
-
 # RNA scaler
-if use_ge:
+if params.use_ge:
     ge_scaler = get_scaler(data[ge_cols])
+else:
+    ge_scaler = None
 
 # Descriptors scaler
-if use_dd:
+if params.use_dd:
     dd_scaler = get_scaler(data[dd_cols])
+else:
+    dd_scaler = None
 
 
 BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
 BALANCE_BY_PATIENT = 'BALANCE_BY_PATIENT'
 NO_BALANCE = 'NO_BALANCE'
 
-tile_px = 299
-tile_um = 302
-# finetune_epochs = 10
-finetune_epochs = 1
+# tile_px = 299
+# tile_um = 302
+# finetune_epochs = 1
 toplayer_epochs = 0
-model = 'Xception'
-pooling = 'max'
+# model = 'Xception'
+# pooling = 'max'
 
 loss = 'sparse_categorical_crossentropy'
 # loss={'csite_label': tf.keras.losses.categorical_crossentropy,
 #     'ctype_label': tf.keras.losses.categorical_crossentropy},
 # loss = {'ctype': tf.keras.losses.SparseCategoricalCrossentropy()}
 
-learning_rate = 0.0001
-batch_size = 16
-hidden_layers = 1
-hidden_layer_width = 500
-optimizer = 'Adam'
+# learning_rate = 0.0001
+# batch_size = 16
+# hidden_layers = 1
+# hidden_layer_width = 500
+# optimizer = 'Adam'
 early_stop = True 
-early_stop_patience = 10
+# early_stop_patience = 10
 early_stop_method = 'loss'  # uses only validation metrics
-balanced_training = 'BALANCE_BY_CATEGORY'
-balanced_validation = 'NO_BALANCE'
-trainable_layers = 0
-L2_weight = 0
-augment = True
+# balanced_training = 'BALANCE_BY_CATEGORY'
+# balanced_validation = 'NO_BALANCE'
+# trainable_layers = 0
+# augment = True
 
 # outcome_header = ['Response']
 outcome_header = args.target
 # aux_headers = ['ctype', 'csite']  # (ap)
-model_type = 'categorical'
-use_fp16 = True
-pretrain = 'imagenet'
+# model_type = 'categorical'
+# use_fp16 = True
+# pretrain = 'imagenet'
 
-label = f'{tile_px}px_{tile_um}um'
+label = f'{params.tile_px}px_{params.tile_um}um'
 
 
 if args.target[0] == 'Response':
     tfr_dir = cfg.SF_TFR_DIR_RSP
-    parse_fn = _parse_tfrec_fn_rsp
+    parse_fn = parse_tfrec_fn_rsp
 elif args.target[0] == 'ctype':
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
-    parse_fn = _parse_tfrec_fn_rna
+    parse_fn = parse_tfrec_fn_rna
 tfr_dir = tfr_dir/label
 
 
@@ -190,165 +190,15 @@ print(outcomes[list(outcomes.keys())[3]])
 outcome_labels = dict(zip(range(len(unique_outcomes)), unique_outcomes))
 print(outcome_labels)
 
-# ooooooooooooooooooooooooooooooo
-# (ap) outcome_labels 
-# ooooooooooooooooooooooooooooooo
-# import ipdb; ipdb.set_trace()
-# unique_outcomes = data[header].unique().astype(str)
-# outcome_labels = dict(zip(range(len(unique_outcomes)), unique_outcomes))
-# print(outcome_labels)
-
-
 # ---------------
 # Create manifest - done
 # ---------------
-# __init__ --> _trainer --> get_manifest --> update_manifest_at_dir
-
-directory = tfr_dir
-tfr_files = list(directory.glob('*.tfrec*'))
-manifest_path = directory/"manifest.json"
-manifest = {}
-
-if manifest_path.exists():
-    print('Loading existing manifest.')
-    with open(manifest_path, 'r') as data_file:
-        global_manifest = json.load(data_file)
-        
-    MANIFEST = manifest = global_manifest
-
-else:
-    print('Creating manifest.')
-    relative_tfrecord_paths = [f.name for f in tfr_files]
-    slide_names_from_annotations = [n.split('.tfr')[0] for n in relative_tfrecord_paths]
-
-    # ap
-    n = len(relative_tfrecord_paths)
-
-    for i, rel_tfr in enumerate(relative_tfrecord_paths):
-        # print(f'processing {i}')
-        tfr = str(directory/rel_tfr)  #join(directory, rel_tfr)
-
-        manifest.update({rel_tfr: {}})
-        try:
-            raw_dataset = tf.data.TFRecordDataset(tfr)
-        except Exception as e:
-            print(f"Unable to open TFRecords file with Tensorflow: {str(e)}")
-            
-        print(f"\r\033[K + Verifying tiles in ({i+1} out of {n} tfrecords) {green(rel_tfr)}...", end="")
-        total = 0
-        
-        try:
-            for raw_record in raw_dataset:
-                example = tf.train.Example()
-                example.ParseFromString(raw_record.numpy())
-                slide = example.features.feature['slide'].bytes_list.value[0].decode('utf-8')  # get the slide name
-                if slide not in manifest[rel_tfr]:
-                    manifest[rel_tfr][slide] = 1
-                else:
-                    manifest[rel_tfr][slide] += 1
-                total += 1
-                
-        except tf.python.framework.errors_impl.DataLossError:
-            print('\r\033[K', end="")
-            log.error(f"Corrupt or incomplete TFRecord at {tfr}", 1)
-            log.info(f"Deleting and removing corrupt TFRecord from manifest...", 1)
-            del(raw_dataset)
-            os.remove(tfr)
-            del(manifest[rel_tfr])
-            continue
-            
-        manifest[rel_tfr]['total'] = total
-        print('\r\033[K', end="")
-
-    del raw_dataset
-
-    # Update manifest to use full paths to tfrecords
-    tfrecord_dir = str(tfr_dir)
-    global_manifest = {}
-    for record in manifest:
-        global_manifest.update({os.path.join(tfrecord_dir, record): manifest[record]})
-
-    MANIFEST = manifest = global_manifest
-
-    print(f'Items in manifest {len(manifest)}')
-    
-    # Save manifest
-    with open(manifest_path, "w") as data_file:
-        json.dump(manifest, data_file, indent=1)
-        
+manifest = create_manifest(directory=tfr_dir)
 print('\nmanifest:')
 print(type(manifest))
 print(len(manifest))
 print(list(manifest.keys())[:3])
 print(manifest[list(manifest.keys())[3]])
-
-
-# ooooooooooooooooooooooooooooooo
-# (ap) manifest
-# ooooooooooooooooooooooooooooooo
-# import ipdb; ipdb.set_trace()
-
-# directory = tfr_dir
-# tfr_files = list(directory.glob('*.tfrec*'))
-# mn_path = directory/"mn.json"
-# mn = {}
-
-# if mn_path.exists():
-#     print('Loading existing mn.')
-#     with open(mn_path, 'r') as file:
-#         global_mn = json.load(file)
-#     MANIFEST = mn = global_mn
-
-# else:
-#     print('Creating mn.')
-#     relative_tfrecord_paths = [f.name for f in tfr_files]
-#     #slide_names_from_annotations = [n.split('.tfr')[0] for n in relative_tfrecord_paths]  # not used
-
-#     # ap
-#     n = len(relative_tfrecord_paths)
-
-#     for i, rel_tfr in enumerate(relative_tfrecord_paths):
-#         tfr = str(directory/rel_tfr)
-#         mn.update({rel_tfr: {}})
-#         raw_dataset = tf.data.TFRecordDataset(tfr)
-            
-#         print(f"\r\033[K + Verifying tiles in ({i+1} out of {n} tfrecords) {green(rel_tfr)}...", end="")
-#         total = 0  # total tiles in the tfrecord
-        
-#         for raw_record in raw_dataset:
-#             example = tf.train.Example()
-#             example.ParseFromString(raw_record.numpy())
-#             slide = example.features.feature['slide'].bytes_list.value[0].decode('utf-8')  # get the slide name
-#             if slide not in mn[rel_tfr]:
-#                 mn[rel_tfr][slide] = 1
-#             else:
-#                 mn[rel_tfr][slide] += 1
-#             total += 1
-            
-#         mn[rel_tfr]['total'] = total  # in case tfrecords contains tiles of multiple slides
-#         print('\r\033[K', end="")
-
-#     del raw_dataset
-
-#     # Update mn to use pull paths to tfrecords
-#     tfrecord_dir = str(tfr_dir)
-#     global_mn = {}
-#     for record in mn:
-#         global_mn.update({os.path.join(tfrecord_dir, record): mn[record]})
-
-#     MANIFEST = mn = global_mn
-#     print(f'Items in mn {len(mn)}')
-    
-#     # Save mn
-#     with open(mn_path, "w") as file:
-#         json.dump(mn, file, indent=1)
-
-# print('\nmanifest:')
-# print(type(mn))
-# print(len(mn))
-# print(list(mn.keys())[:3])
-# print(mn[list(mn.keys())[3]])
-
 
 # --------------------------------------------------
 # Create training_tfrecords and validation_tfrecords - done
@@ -390,8 +240,8 @@ print(manifest[list(manifest.keys())[3]])
 # import ipdb; ipdb.set_trace()
 
 # T/V/E filenames
-# splitdir = appdir/'annotations.splits'
-splitdir = appdir/f'annotations.splits/split_on_{split_on}'
+# splitdir = prjdir/'annotations.splits'
+splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
 split_id = 0
 
 split_pattern = f'1fold_s{split_id}_*_id.txt'
@@ -449,24 +299,32 @@ test_tfrecords = te_tfr_files
 
 # import ipdb; ipdb.set_trace()
 
-# data = data.astype({args.id_name: str})
-# dtr = data[data[args.id_name].isin(tr_smp_names)]
-# dvl = data[data[args.id_name].isin(vl_smp_names)]
-# dte = data[data[args.id_name].isin(te_smp_names)]
+tr_ge_df, tr_dd_df = tr_df[ge_cols], tr_df[dd_cols]
+vl_ge_df, vl_dd_df = vl_df[ge_cols], vl_df[dd_cols]
+te_ge_df, te_dd_df = te_df[ge_cols], te_df[dd_cols]
 
-# assert sorted(tr_smp_names) == sorted(dtr[args.id_name].values.tolist()), "Sample names \
-#     in the s_tr and dtr don't match."
-# assert sorted(vl_smp_names) == sorted(dvl[args.id_name].values.tolist()), "Sample names \
-#     in the s_te and dte don't match."
-# assert sorted(te_smp_names) == sorted(dte[args.id_name].values.tolist()), "Sample names \
-#     in the s_te and dte don't match."
+tr_dd_df = pd.DataFrame(dd_scaler.transform(tr_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
+vl_dd_df = pd.DataFrame(dd_scaler.transform(vl_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
+te_dd_df = pd.DataFrame(dd_scaler.transform(te_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
+
+tr_ge_df = pd.DataFrame(ge_scaler.transform(tr_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
+vl_ge_df = pd.DataFrame(ge_scaler.transform(vl_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
+te_ge_df = pd.DataFrame(ge_scaler.transform(te_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
+
+tr_x_df = pd.concat([tr_ge_df, tr_dd_df], axis=1)
+vl_x_df = pd.concat([vl_ge_df, vl_dd_df], axis=1)
+te_x_df = pd.concat([te_ge_df, te_dd_df], axis=1)
+
+tr_y_df = tr_df[args.target]
+vl_y_df = vl_df[args.target]
+te_y_df = te_df[args.target]
 
 assert sorted(tr_smp_names) == sorted(tr_df[args.id_name].values.tolist()), "Sample names \
-    in the s_tr and dtr don't match."
+    in the tr_smp_names and tr_df don't match."
 assert sorted(vl_smp_names) == sorted(vl_df[args.id_name].values.tolist()), "Sample names \
-    in the s_te and dte don't match."
+    in the vl_smp_names and vl_df don't match."
 assert sorted(te_smp_names) == sorted(te_df[args.id_name].values.tolist()), "Sample names \
-    in the s_te and dte don't match."
+    in the te_smp_names and te_df don't match."
 
 split_outdir = outdir/f'split_{split_id}'
 os.makedirs(split_outdir, exist_ok=True)
@@ -491,15 +349,15 @@ print(manifest[list(manifest.keys())[3]])
 # import ipdb; ipdb.set_trace()
 
 #DATA_DIR = '/vol/ml/apartin/projects/slideflow-proj/sf_pdx_bin_rsp2/project/models/ctype-Xception_v0-kfold1';
-DATA_DIR = appdir
+DATA_DIR = prjdir
 os.makedirs(DATA_DIR, exist_ok=True)
 MANIFEST = manifest
-IMAGE_SIZE = image_size = tile_px
-DTYPE = 'float16' if use_fp16 else 'float32'
+# IMAGE_SIZE = image_size = params.tile_px
+DTYPE = 'float16' if params.use_fp16 else 'float32'
 SLIDE_ANNOTATIONS = slide_annotations = outcomes
 TRAIN_TFRECORDS = train_tfrecords
 VALIDATION_TFRECORDS = val_tfrecords
-model_type = MODEL_TYPE = model_type
+# model_type = MODEL_TYPE = model_type
 #SLIDES = list(slide_annotations.keys())
 SAMPLES = list(slide_annotations.keys())
 DATASETS = {}
@@ -508,66 +366,65 @@ DATASETS = {}
 #outcomes_ = [slide_annotations[slide]['outcome'] for slide in SLIDES]
 outcomes_ = [slide_annotations[smp]['outcome'] for smp in SAMPLES]
 
-normalizer = None
+# normalizer = None
 
-if model_type == 'categorical':
+if params.model_type == 'categorical':
     NUM_CLASSES = len(list(set(outcomes_)))  # infer this from other variables
 
 #ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SLIDES, outcomes_), -1)]
 ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SAMPLES, outcomes_), -1)]
 
 
-pretrain_model_format = None
-resume_training = None
-checkpoint = None
-log_frequency = 100
+# pretrain_model_format = None
+# resume_training = None
+# checkpoint = None
+# log_frequency = 100
 # multi_image = False
-validate_on_batch = 16
+# validate_on_batch = 16
 val_batch_size = 32
 validation_steps = 200
 max_tiles_per_slide = 0
 min_tiles_per_slide = 0
 starting_epoch = 0  # what's that??
-ema_observations = 20
-ema_smoothing = 2
+# ema_observations = 20
+# ema_smoothing = 2
 steps_per_epoch_override = None  # what's that??
 
-AUGMENT = True
+# AUGMENT = True
 
 
 # import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
     # Response
-    parse_fn = _parse_tfrec_fn_rsp
+    parse_fn = parse_tfrec_fn_rsp
     parse_fn_kwargs = {
-        'use_tile': use_tile,
-        'use_ge': use_ge,
-        'use_dd': use_dd,
+        'use_tile': params.use_tile,
+        'use_ge': params.use_ge,
+        'use_dd': params.use_dd,
         'ge_scaler': ge_scaler,
         'dd_scaler': dd_scaler,
         'id_name': args.id_name,
-        'AUGMENT': AUGMENT,
+        'AUGMENT': params.augment,
         'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
     }
-
 else:
     # Ctype
-    parse_fn = _parse_tfrec_fn_rna
+    parse_fn = parse_tfrec_fn_rna
     parse_fn_kwargs = {
-        'use_tile': use_tile,
-        'use_ge': use_ge,
+        'use_tile': params.use_tile,
+        'use_ge': params.use_ge,
         'ge_scaler': ge_scaler,
         'id_name': args.id_name,
-        'MODEL_TYPE': MODEL_TYPE,
+        'MODEL_TYPE': params.model_type,
         'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES,
-        'AUGMENT': AUGMENT,
+        'AUGMENT': params.augment,
     }
 
 train_data, _, num_tiles = interleave_tfrecords(
     tfrecords=TRAIN_TFRECORDS,
-    batch_size=batch_size,
-    balance=balanced_training,
+    batch_size=params.batch_size,
+    balance=params.balanced_training,
     finite=False,
     max_tiles=max_tiles_per_slide,
     min_tiles=min_tiles_per_slide,
@@ -579,13 +436,19 @@ train_data, _, num_tiles = interleave_tfrecords(
     **parse_fn_kwargs
 )
 
+# Determine feature shapes from data
 bb = next(train_data.__iter__())
 
 # import ipdb; ipdb.set_trace()
-if use_ge:
+if params.use_ge:
     ge_shape = bb[0]['ge_data'].numpy().shape[1:]
-if use_dd:
+else:
+    ge_shape = None
+
+if params.use_dd:
     dd_shape = bb[0]['dd_data'].numpy().shape[1:]
+else:
+    dd_shape = None
 
 for i, item in enumerate(bb):
     print(f"\nItem {i}")
@@ -593,13 +456,12 @@ for i, item in enumerate(bb):
         for k in item.keys():
             print(f"\t{k}: {item[k].numpy().shape}")
 
-recs = []
 for i, rec in enumerate(train_data.take(4)):
-    recs.append(rec)
     tf.print(rec[1])
 
-using_validation = 25
+using_validation = True
 
+# Test data
 if using_validation:
     val_data, val_data_with_smp_names, _ = interleave_tfrecords(
         tfrecords=VALIDATION_TFRECORDS,
@@ -618,7 +480,7 @@ if using_validation:
 
     if validation_steps:
         validation_data_for_training = val_data.repeat()
-        print(f"Using {validation_steps} batches ({validation_steps * batch_size} samples) each validation check")
+        print(f"Using {validation_steps} batches ({validation_steps * params.batch_size} samples) each validation check")
     else:
         validation_data_for_training = val_data
         print(f"Using entire validation set each validation check")
@@ -627,6 +489,7 @@ else:
     validation_data_for_training = None
     validation_steps = 0
 
+# Test data
 test_data, te_data_with_smp_names, _ = interleave_tfrecords(
     tfrecords=test_tfrecords,
     batch_size=val_batch_size,
@@ -651,22 +514,22 @@ test_data, te_data_with_smp_names, _ = interleave_tfrecords(
 results = {'epochs': {}}
 
 # Calculate parameters
-if max([finetune_epochs]) <= starting_epoch:
+if max([params.finetune_epochs]) <= starting_epoch:
     print(f"Starting epoch ({starting_epoch}) cannot be greater than the \
-          maximum target epoch ({max(finetune_epochs)})")
+          maximum target epoch ({max(params.finetune_epochs)})")
     
-if early_stop and early_stop_method == 'accuracy' and model_type != 'categorical':
+if early_stop and early_stop_method == 'accuracy' and params.model_type != 'categorical':
     print(f"Unable to use early stopping method 'accuracy' with a non-categorical \
-          model type (type: '{model_type}')")
+          model type (type: '{params.model_type}')")
     
 if starting_epoch != 0:
     print(f"Starting training at epoch {starting_epoch}")
     
-total_epochs = toplayer_epochs + (max([finetune_epochs]) - starting_epoch)
+total_epochs = toplayer_epochs + (max([params.finetune_epochs]) - starting_epoch)
 # TODO: this might need to change??
-steps_per_epoch = round(num_tiles/batch_size) if steps_per_epoch_override is None else steps_per_epoch_override
+steps_per_epoch = round(num_tiles/params.batch_size) if steps_per_epoch_override is None else steps_per_epoch_override
 results_log = os.path.join(DATA_DIR, 'results_log.csv')
-metrics = ['accuracy'] if model_type != 'linear' else [loss]
+metrics = ['accuracy'] if params.model_type != 'linear' else [loss]
 
 
 # Create callbacks for early stopping, checkpoint saving, summaries, and history
@@ -694,19 +557,35 @@ if DTYPE == 'float16':
     print("Training with mixed precision")
     policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
     mixed_precision.set_policy(policy)
-print('Compute dtype: %s' % policy.compute_dtype)
-print('Variable dtype: %s' % policy.variable_dtype)
+    print('Compute dtype: %s' % policy.compute_dtype)
+    print('Variable dtype: %s' % policy.variable_dtype)
 
 
 # -------------
 # Train model
 # -------------
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
-    model = build_model_rsp(ge_shape=ge_shape, dd_shape=dd_shape,
-                            model_type=model_type, NUM_CLASSES=NUM_CLASSES)
+    if params.use_tile is True:
+        model = build_model_rsp(use_ge=params.use_ge, use_dd=params.use_dd,
+                                use_tile=params.use_tile,
+                                ge_shape=ge_shape, dd_shape=dd_shape,
+                                model_type=params.model_type, NUM_CLASSES=NUM_CLASSES)
+    if params.use_tile is False:
+        model = build_model_rsp_simple(use_ge=params.use_ge, use_dd=params.use_dd,
+                                       ge_shape=ge_shape, dd_shape=dd_shape,
+                                       model_type=params.model_type, NUM_CLASSES=NUM_CLASSES)
+        fit_kwargs = {'x': tr_x_df,
+                      'y': tr_y_df,
+                      'validation_data': (vl_x_df, vl_y_df)
+                      }
+        x = {"ge_data": tr_ge_df.values, "dd_data": tr_dd_df.values}
+        y = {"Response": tr_y_df.values}
+        validation_data = ({"ge_data": vl_ge_df.values,
+                            "dd_data": vl_dd_df.values,},
+                           {"Response": vl_y_df.values})
 else:
     raise NotImplementedError('Need to check this method')
     model = build_model_rna()
@@ -715,21 +594,29 @@ print()
 print(model.summary())
 
 model.compile(loss=loss,
-              optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+              optimizer=tf.keras.optimizers.Adam(learning_rate=params.learning_rate),
               metrics=metrics)
 
 # import ipdb; ipdb.set_trace()
 
 t = time()
 print('Start training ...')
-history = model.fit(train_data,
-                    steps_per_epoch=steps_per_epoch,
-                    epochs=total_epochs,
-                    verbose=1,
-                    initial_epoch=toplayer_epochs,
-                    validation_data=validation_data_for_training,
-                    validation_steps=validation_steps,
-                    callbacks=callbacks)
+if params.use_tile is True:
+    history = model.fit(x=train_data,
+                        steps_per_epoch=steps_per_epoch,
+                        epochs=total_epochs,
+                        verbose=1,
+                        initial_epoch=toplayer_epochs,
+                        validation_data=validation_data_for_training,
+                        validation_steps=validation_steps,
+                        callbacks=callbacks)
+if params.use_tile is False:
+    history = model.fit(x=x,
+                        y=y,
+                        epochs=total_epochs,
+                        verbose=1,
+                        validation_data=validation_data,
+                        callbacks=callbacks)
 print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 
 

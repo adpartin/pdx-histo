@@ -19,9 +19,6 @@ import tensorflow as tf
 from tensorflow import keras
 assert tf.__version__ >= "2.0"
 print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-AUTO = tf.data.experimental.AUTOTUNE
-# REPLICAS = strategy.num_replicas_in_sync
-# print(f'REPLICAS: {REPLICAS}')
 
 # To plot pretty figures
 # import matplotlib as mpl
