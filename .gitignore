@@ -3,6 +3,7 @@
 *.pyc
 /__pycache__
 /apps
+/projects
 /data
 /nbs/histolab
 

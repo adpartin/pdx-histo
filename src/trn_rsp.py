@@ -1,3 +1,6 @@
+"""
+Prediction of drug response with TFRecords.
+"""
 import os
 import sys
 assert sys.version_info >= (3, 5)
@@ -240,7 +243,6 @@ print(manifest[list(manifest.keys())[3]])
 # import ipdb; ipdb.set_trace()
 
 # T/V/E filenames
-# splitdir = prjdir/'annotations.splits'
 splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
 split_id = 0
 
@@ -257,7 +259,7 @@ def cast_list(ll, dtype=int):
     return [dtype(i) for i in ll]
 
 # Get indices for the split
-# assert len(single_split_files) >= 2, f'The split {s} contains only one file.'
+assert len(single_split_files) >= 2, f'Split {s} contains only one file.'
 for id_file in single_split_files:
     if 'tr_id' in id_file:
         # tr_id = pd.read_csv(id_file).values.reshape(-1,)
@@ -269,9 +271,6 @@ for id_file in single_split_files:
         # te_id = pd.read_csv(id_file).values.reshape(-1,)
         te_id = cast_list(read_lines(id_file), int)
 
-# -----------------------------------------------
-# Get data based on splits
-# -----------------------------------------------
 # Dataframes of T/V/E samples
 tr_df = data.iloc[tr_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
 vl_df = data.iloc[vl_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
@@ -310,10 +309,6 @@ te_dd_df = pd.DataFrame(dd_scaler.transform(te_dd_df), columns=dd_cols, dtype=cf
 tr_ge_df = pd.DataFrame(ge_scaler.transform(tr_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
 vl_ge_df = pd.DataFrame(ge_scaler.transform(vl_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
 te_ge_df = pd.DataFrame(ge_scaler.transform(te_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-
-tr_x_df = pd.concat([tr_ge_df, tr_dd_df], axis=1)
-vl_x_df = pd.concat([vl_ge_df, vl_dd_df], axis=1)
-te_x_df = pd.concat([te_ge_df, te_dd_df], axis=1)
 
 tr_y_df = tr_df[args.target]
 vl_y_df = vl_df[args.target]
@@ -577,10 +572,6 @@ if args.target[0] == 'Response':
         model = build_model_rsp_simple(use_ge=params.use_ge, use_dd=params.use_dd,
                                        ge_shape=ge_shape, dd_shape=dd_shape,
                                        model_type=params.model_type, NUM_CLASSES=NUM_CLASSES)
-        fit_kwargs = {'x': tr_x_df,
-                      'y': tr_y_df,
-                      'validation_data': (vl_x_df, vl_y_df)
-                      }
         x = {"ge_data": tr_ge_df.values, "dd_data": tr_dd_df.values}
         y = {"Response": tr_y_df.values}
         validation_data = ({"ge_data": vl_ge_df.values,

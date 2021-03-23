@@ -23,7 +23,6 @@ warnings.filterwarnings('ignore')
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
 print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-AUTO = tf.data.experimental.AUTOTUNE
 
 from tensorflow import keras
 from tensorflow.keras import backend as K
@@ -44,11 +43,11 @@ np.random.seed(seed)
 tf.random.set_seed(seed)
 
 
-APPNAME = 'bin_ctype_balance_02'
+prjname = 'bin_ctype_balance_02'
 
-# Load data
-appdir = cfg.MAIN_APPDIR/APPNAME
-annotations_file = appdir/cfg.SF_ANNOTATIONS_FILENAME
+# Load dataframe (annotations)
+prjdir = cfg.MAIN_PRJDIR/prjname
+annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
 
