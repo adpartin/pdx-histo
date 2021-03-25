@@ -7,7 +7,8 @@ import pandas as pd
 import numpy as np
 
 fdir = Path(__file__).resolve().parent
-from config import cfg
+# from config import cfg
+from src.config import cfg
 
 
 PDX_SAMPLE_COLS = ['model', 'patient_id', 'specimen_id', 'sample_id']
@@ -208,7 +209,6 @@ def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
     return cref
 
 
-# def load_pdx_meta(path=cfg.METAPATH/cfg.PDX_META_FNAME):
 def load_pdx_meta():
     """ PDX meta (from Yitan). """
     path = '../data/meta/PDX_Meta_Information.xlsx'

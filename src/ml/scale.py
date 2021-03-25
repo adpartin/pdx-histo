@@ -28,7 +28,7 @@ def scale_fea(xdata, scaler_name='stnd', dtype=np.float32, verbose=False):
         return xdata
 
     cols = xdata.columns
-    return pd.DataFrame( scaler.fit_transform(xdata), columns=cols, dtype=dtype )    
+    return pd.DataFrame(scaler.fit_transform(xdata), columns=cols, dtype=dtype)
 
 
 def get_scaler(fea_df):

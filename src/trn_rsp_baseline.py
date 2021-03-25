@@ -7,6 +7,7 @@ assert sys.version_info >= (3, 5)
 
 import argparse
 import glob
+import shutil
 from time import time
 from pathlib import Path
 from pprint import pprint
@@ -14,8 +15,6 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import plot_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
 
 import warnings
@@ -27,22 +26,14 @@ print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('
 
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
-from tensorflow.keras import layers
 from tensorflow.keras import losses
-from tensorflow.keras import optimizers
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.optimizers import Adam
 
-
-# from tf_utils import get_tfr_files
-# from sf_utils import (green, interleave_tfrecords,
-#                       parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
-#                       create_manifest)
-from models import build_model_rsp, build_model_rna, build_model_rsp_simple
+from models import build_model_rsp_baseline
 from ml.scale import get_scaler
-from ml.evals import calc_scores, calc_preds
-from utils.utils import Params
+from ml.evals import calc_scores, calc_preds, dump_preds
+from utils.utils import Params, dump_dict
+from datasets.tidy import split_data_and_extract_fea
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
@@ -74,35 +65,34 @@ parser.add_argument('--split_on',
                     help='Specify the hard split variable/column (default: None).')
 parser.add_argument('--prjname',
                     type=str,
-                    default='bin_rsp_balance_02',
+                    default='bin_rsp_all',
+                    help='Project name (folder that contains the annotations.csv dataframe).')
+parser.add_argument('--dataname',
+                    type=str,
+                    default='tidy_all',
                     help='Project name (folder that contains the annotations.csv dataframe).')
 
 args, other_args = parser.parse_known_args()
 pprint(args)
 
+import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
-annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
+# annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
+annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
 
-# import ipdb; ipdb.set_trace()
-
-# Args
-epochs = 20
-batch_size = 32
-# y_encoding = 'onehot'
-y_encoding = 'label'
-
-# Import parameters
-prm_dir = prjdir/'params.json'
-params = Params(prm_dir)
-
 # Outdir
 split_on = 'none' if args.split_on is (None or 'none') else args.split_on
-# outdir = prjdir/f'results/split_on_{split_on}'
-# os.makedirs(outdir, exist_ok=True)
+outdir = prjdir/f'baseline/split_on_{split_on}'
+os.makedirs(outdir, exist_ok=True)
+
+# Import parameters
+shutil.copy(fdir/"default_params.json", prjdir/"baseline/params.json")
+prm_dir = prjdir/"baseline/params.json"
+params = Params(prm_dir)
 
 if args.target[0] == 'Response':
     pprint(data.groupby(['ctype', 'Response']).agg({
@@ -130,10 +120,9 @@ else:
 # Data splits
 # -----------------------------------------------
 
-# import ipdb; ipdb.set_trace()
-
 # T/V/E filenames
-splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
+# splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
+splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
 split_id = 0
 
 split_pattern = f'1fold_s{split_id}_*_id.txt'
@@ -158,35 +147,29 @@ for id_file in single_split_files:
     elif 'te_id' in id_file:
         te_id = cast_list(read_lines(id_file), int)
 
-# Dataframes of T/V/E samples
-tr_df = data.iloc[tr_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-vl_df = data.iloc[vl_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-te_df = data.iloc[te_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-print('Total samples {}'.format(tr_df.shape[0] + vl_df.shape[0] + te_df.shape[0]))
+kwargs = {"ge_cols": ge_cols,
+          "dd_cols": dd_cols,
+          "ge_scaler": ge_scaler,
+          "dd_scaler": dd_scaler,
+          "ge_dtype": cfg.GE_DTYPE,
+          "dd_dtype": cfg.DD_DTYPE
+}
+tr_ge, tr_dd = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
+vl_ge, vl_dd = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
+te_ge, te_dd = split_data_and_extract_fea(data, ids=te_id, **kwargs)
 
-tr_ge_df, tr_dd_df = tr_df[ge_cols], tr_df[dd_cols]
-vl_ge_df, vl_dd_df = vl_df[ge_cols], vl_df[dd_cols]
-te_ge_df, te_dd_df = te_df[ge_cols], te_df[dd_cols]
+ge_shape = (te_ge.shape[1],)
+dd_shape = (tr_dd.shape[1],)
 
-tr_dd_df = pd.DataFrame(dd_scaler.transform(tr_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
-vl_dd_df = pd.DataFrame(dd_scaler.transform(vl_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
-te_dd_df = pd.DataFrame(dd_scaler.transform(te_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
+# Variables (dict/dataframes/arrays) that are passed as features to the NN
+xtr = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
+xvl = {"ge_data": vl_ge.values, "dd_data": vl_dd.values}
+xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
 
-tr_ge_df = pd.DataFrame(ge_scaler.transform(tr_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-vl_ge_df = pd.DataFrame(ge_scaler.transform(vl_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-te_ge_df = pd.DataFrame(ge_scaler.transform(te_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-
-ge_shape = (tr_ge_df.shape[1], )
-dd_shape = (tr_dd_df.shape[1], )
-
-xtr = {"ge_data": tr_ge_df.values, "dd_data": tr_dd_df.values}
-xvl = {"ge_data": vl_ge_df.values, "dd_data": vl_dd_df.values}
-xte = {"ge_data": te_ge_df.values, "dd_data": te_dd_df.values}
-
-# ydata = data[args.target].values
-# ytr = ydata[tr_id]
-# yvl = ydata[vl_id]
-# yte = ydata[te_id]
+# Extarct meta for T/V/E
+tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
 
 # Onehot encoding
 ydata = data[args.target[0]].values
@@ -195,23 +178,20 @@ y_onehot = pd.get_dummies(ydata)
 ydata_label = np.argmax(y_onehot.values, axis=1)
 num_classes = len(np.unique(ydata_label))
 
-# # Scale RNA
-# xdata = data[ge_cols]
-# x_scaler = StandardScaler()
-# x1 = pd.DataFrame(x_scaler.fit_transform(xdata), columns=ge_cols, dtype=np.float32)
-# xdata = x1; del x1
+def keras_callbacks(outdir, monitor='val_loss'):
+    """ ... """
+    from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
+    checkpointer = ModelCheckpoint(str(outdir/'model_best_at_{epoch}.ckpt'), monitor='val_loss',
+                                   verbose=0, save_weights_only=False, save_best_only=True)
+    csv_logger = CSVLogger(outdir/'training.log')
+    reduce_lr = ReduceLROnPlateau(monitor=monitor, factor=0.5, patience=10,
+                                  verbose=1, mode='auto', min_delta=0.0001,
+                                  cooldown=0, min_lr=0)
+    early_stop = EarlyStopping(monitor=monitor, patience=20, verbose=1, mode='auto')
 
-# # Split
-# tr_ids, te_ids = train_test_split(range(xdata.shape[0]), test_size=0.2, random_state=seed, stratify=ydata)
-# xtr = xdata.iloc[tr_ids, :].reset_index(drop=True)
-# xte = xdata.iloc[te_ids, :].reset_index(drop=True)
+    return [checkpointer, csv_logger, early_stop, reduce_lr]
 
-
-# Create callbacks for early stopping, checkpoint saving, summaries, and history
-history_callback = tf.keras.callbacks.History()
-checkpoint_path = os.path.join(prjdir, "cp.ckpt")
-cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=False, verbose=1)
-callbacks = [history_callback, cp_callback]
+callbacks = keras_callbacks(outdir, monitor='val_loss')
 
 # https://www.tensorflow.org/guide/mixed_precision
 # Mixed precision
@@ -224,7 +204,8 @@ callbacks = [history_callback, cp_callback]
 #     print('Compute dtype: %s' % policy.compute_dtype)
 #     print('Variable dtype: %s' % policy.variable_dtype)
 
-# import ipdb; ipdb.set_trace()
+# y_encoding = 'onehot'
+y_encoding = 'label'
 
 if y_encoding == 'onehot':
     ytr = y_onehot.iloc[tr_id, :].reset_index(drop=True)
@@ -247,35 +228,48 @@ ytr = {"Response": ytr}
 yvl = {"Response": yvl}
 yte = {"Response": yte}
 
-model = build_model_rsp_simple(use_ge=params.use_ge, use_dd=params.use_dd,
-                               ge_shape=ge_shape, dd_shape=dd_shape,
-                               model_type=params.model_type, NUM_CLASSES=num_classes)
+# --------------------------
+# Define and Train
+# --------------------------
+model = build_model_rsp_baseline(use_ge=params.use_ge,
+                                 use_dd=params.use_dd,
+                                 ge_shape=ge_shape,
+                                 dd_shape=dd_shape,
+                                 model_type=params.model_type,
+                                 NUM_CLASSES=num_classes)
 print()
 print(model.summary())
 
 model.compile(loss=loss,
-              optimizer=tf.keras.optimizers.Adam(learning_rate=params.learning_rate),
+              optimizer=Adam(learning_rate=params.learning_rate),
               metrics=["accuracy"])
 
 t = time()
 history = model.fit(x=xtr,
                     y=ytr,
-                    epochs=epochs,
+                    batch_size=params.batch_size,
+                    epochs=params.epochs,
                     verbose=1,
                     validation_data=(xvl, yvl),
                     callbacks=callbacks)
 print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 
-import ipdb; ipdb.set_trace()
+# --------------------------
+# Evaluate
+# --------------------------
+# import ipdb; ipdb.set_trace()
 
 # Predictions
 yte_prd = model.predict(xte)
 yte_prd_label = np.argmax(yte_prd, axis=1)
-# yte_true_label = np.argmax(yte.values, axis=1)
 
 cnf_mtrx = confusion_matrix(yte_label, yte_prd_label)
 # disp = ConfusionMatrixDisplay(cnf_mtrx, display_labels=list(y_onehot.columns))
 # disp.plot(xticks_rotation=65);
 pprint(cnf_mtrx)
+
+scores = calc_scores(yte_label, yte_prd[:, 1], mltype="cls")
+dump_dict(scores, outdir/"test_scores.txt")
+dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds.csv")
 
 print('\nDone.')

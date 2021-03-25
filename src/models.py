@@ -21,9 +21,9 @@ fdir = Path(__file__).resolve().parent
 from config import cfg
 
 
-def build_model_rsp_simple(use_ge=True, use_dd=True,
-                           ge_shape=None, dd_shape=None, model_type='categorical',
-                           NUM_CLASSES=None):
+def build_model_rsp_baseline(use_ge=True, use_dd=True,
+                             ge_shape=None, dd_shape=None, model_type='categorical',
+                             NUM_CLASSES=None):
     """ Doesn't use image data. """
     model_inputs = []
     merge_inputs = []

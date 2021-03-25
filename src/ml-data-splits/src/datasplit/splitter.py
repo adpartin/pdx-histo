@@ -248,12 +248,9 @@ def print_intersect_on_var(df, tr_id, vl_id, te_id, grp_col='CELL', print_fn=pri
         tr_grp_unq = set( df.loc[tr_id, grp_col] )
         vl_grp_unq = set( df.loc[vl_id, grp_col] )
         te_grp_unq = set( df.loc[te_id, grp_col] )
-        print_fn(f'\tTotal intersects on {grp_col} btw tr and vl:\
-                 {len(tr_grp_unq.intersection(vl_grp_unq))}')
-        print_fn(f'\tTotal intersects on {grp_col} btw tr and te:\
-                 {len(tr_grp_unq.intersection(te_grp_unq))}')
-        print_fn(f'\tTotal intersects on {grp_col} btw vl and te:\
-                 {len(vl_grp_unq.intersection(te_grp_unq))}')
+        print_fn(f'\tTotal intersects on {grp_col} btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}')
+        print_fn(f'\tTotal intersects on {grp_col} btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}')
+        print_fn(f'\tTotal intersects on {grp_col} btw vl and te: {len(vl_grp_unq.intersection(te_grp_unq))}')
         print_fn(f'\tUnique {grp_col} in tr: {len(tr_grp_unq)}')
         print_fn(f'\tUnique {grp_col} in vl: {len(vl_grp_unq)}')
         print_fn(f'\tUnique {grp_col} in te: {len(te_grp_unq)}')

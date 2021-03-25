@@ -1,11 +1,17 @@
 #!/bin/bash
 
+# Data name
+# dataname=tidy_all
+dataname=tidy_partially_balanced
+
+# Project name
+# prjname=bin_rsp_balance_02
+# prjname=bin_rsp_all
+prjname=bin_rsp_partially_balanced
+
+id_name=smp
 split_on=slide
 target=Response
-id_name=smp
-
-# appname=bin_rsp_balance_01
-prjname=bin_rsp_balance_02
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"
@@ -13,4 +19,5 @@ CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_r
     --target $target \
     --id_name $id_name \
     --split_on $split_on \
-    --prjname $prjname
+    --prjname $prjname \
+    --dataname $dataname

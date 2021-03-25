@@ -381,7 +381,7 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
     # (ap)
-    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    # dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     return dataset, dataset_with_smp_names, global_num_tiles
 

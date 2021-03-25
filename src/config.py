@@ -1,21 +1,20 @@
 # https://github.com/jkjung-avt/keras_imagenet/blob/master/config.py
 # https://github.com/jkjung-avt/keras_imagenet/blob/master/utils/dataset.py
 
-import os
-import sys
 import types
 from pathlib import Path
 import numpy as np
-import tensorflow as tf
 
 fdir = Path(__file__).resolve().parent
 
 cfg = types.SimpleNamespace()
 
+# Data
 cfg.MAIN_PRJDIR = (fdir/'../projects').resolve()
 cfg.DATADIR = (fdir/'../data').resolve()
 cfg.SLIDES_DIR = (cfg.DATADIR/'doe-globus-pdx-data').resolve()
 # cfg.TILES_DIR = cfg.DATADIR/'tiles_png'  # old pipeline
+cfg.DATA_PROCESSED_DIR = (fdir/'../data/processed').resolve()
 
 # Annotaions
 cfg.ANNOTATIONS_FILENAME = 'annotations.csv'
