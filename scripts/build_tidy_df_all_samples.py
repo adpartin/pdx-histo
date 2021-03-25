@@ -73,8 +73,7 @@ data.insert(loc=5, column='slide', value=data['image_id'], allow_duplicates=True
 
 df = data; del data
 
-df = df.reset_index()
-pprint(df.groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
+pprint(df.reset_index().groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
 pprint(df[target].value_counts())
 
 # Save annotations file

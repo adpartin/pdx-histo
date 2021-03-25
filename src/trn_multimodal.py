@@ -19,7 +19,12 @@ from typing import List, Optional, Union
 import pandas as pd
 import numpy as np
 
-from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import plot_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
+
+import warnings
+warnings.filterwarnings('ignore')
 
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
@@ -86,14 +91,10 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-import ipdb; ipdb.set_trace()
-
-# use_ge, use_dd = True, True
-# use_tile = True
+# import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
-# annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
 annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
@@ -107,11 +108,11 @@ os.makedirs(outdir, exist_ok=True)
 # import ipdb; ipdb.set_trace()
 prm_file_path = prjdir/"multimodal/params.json"
 if prm_file_path.exists() is False:
-    shutil.copy(fdir/"default_params.json", prm_file_path)
+    shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
 params = Params(prm_file_path)
 
 if args.target[0] == 'Response':
-    pprint(data.groupby(['ctype', 'Response']).agg({
+    pprint(data.reset_index().groupby(['ctype', 'Response']).agg({
         'index': 'nunique'}).reset_index().rename(columns={'index': 'count'}))
 else:
     pprint(data[args.target[0]].value_counts())
@@ -624,7 +625,7 @@ if args.target[0] == 'Response':
                                 dd_shape=dd_shape,
                                 model_type=params.model_type,
                                 NUM_CLASSES=NUM_CLASSES)
-    elif params.use_tile is False:
+    else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
                                          use_dd=params.use_dd,
                                          ge_shape=ge_shape,
@@ -676,7 +677,7 @@ print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 # import ipdb; ipdb.set_trace()
 
 def calc_per_tile_preds(data_with_smp_names, model, outdir):
-
+    """ ... """
     y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
     for i, batch in enumerate(data_with_smp_names):
         fea = batch[0]
@@ -695,7 +696,7 @@ def calc_per_tile_preds(data_with_smp_names, model, outdir):
 
     prd = pd.DataFrame({'smp': smp_list, 'y_true': y_true, 'y_pred_label': y_pred_label})
     prd = pd.concat([prd, y_pred_prob], axis=1)
-    prd.to_csv(outdir/'test_preds_per_tiles.csv', index=False)
+    # prd.to_csv(outdir/'test_preds_per_tiles.csv', index=False)
     return prd
 
 
@@ -707,11 +708,11 @@ def agg_per_smp_preds(prd, id_name, outdir):
         df = prd[prd[id_name] == sample]
         dd['y_true'] = df.y_true.unique()[0]
         dd['y_pred_label'] = np.argmax(np.bincount(df.y_pred_label))
-        dd['pred_acc'] = sum(df.y_true == df.y_pred_label)/df.shape[0]
+        dd['smp_acc'] = sum(df.y_true == df.y_pred_label)/df.shape[0]
         aa.append(dd)
 
     agg_preds = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
-    agg_preds.to_csv(outdir/'test_preds_per_smp.csv', index=False)
+    # agg_preds.to_csv(outdir/'test_preds_per_smp.csv', index=False)
 
     # Efficient use of groupby().apply() !!
     # xx = prd.groupby('smp').apply(lambda x: pd.Series({
@@ -724,13 +725,34 @@ def agg_per_smp_preds(prd, id_name, outdir):
     return agg_preds
 
 
-import ipdb; ipdb.set_trace()
+# Predictions per tile
 test_tile_preds = calc_per_tile_preds(test_data_with_smp_names, model=model, outdir=outdir)
-test_smp_preds = agg_per_smp_preds(test_preds_tiles, id_name=args.id_name, outdir=outdir)
 
+# Aggregate predictions per sample
+# import ipdb; ipdb.set_trace()
+test_smp_preds = agg_per_smp_preds(test_tile_preds, id_name=args.id_name, outdir=outdir)
+test_smp_preds = test_smp_preds.merge(te_meta, on="smp", how="inner")
+
+test_tile_preds.to_csv(outdir/'test_preds_per_tile.csv', index=False)
+test_smp_preds.to_csv(outdir/'test_preds_per_tile.csv', index=False)
+# dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds_per_smp.csv")
+
+# Scores
 tile_scores = calc_scores(test_tile_preds['y_true'].values, test_tile_preds['prob_1'].values, mltype="cls")
-smp_scores = calc_scores(test_smp_preds['y_true'].values, test_smp_preds['prob_1'].values, mltype="cls")
-dump_dict(scores, outdir/"test_scores.txt")
-dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds.csv")
+smp_scores = calc_scores(test_smp_preds['y_true'].values, test_smp_preds['y_pred_label'].values, mltype="cls")
 
-print('Done.')
+dump_dict(tile_scores, outdir/"test_tile_scores.txt")
+dump_dict(smp_scores, outdir/"test_smp_scores.txt")
+
+# Confusion
+cnf_mtrx = confusion_matrix(test_smp_preds["y_true"], test_smp_preds["y_pred_label"])
+pprint(cnf_mtrx)
+
+fig, ax = plt.subplots(figsize=(5, 5))
+sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
+ax.set_xticklabels(["Non-response", "Response"])
+ax.set_yticklabels(["Non-response", "Response"])
+ax.set(ylabel="True", xlabel="Predicted")
+plt.savefig(outdir/"confusion.png", bbox_inches='tight', dpi=150)
+
+print('\nDone.')

@@ -15,7 +15,7 @@ target=Response
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"
-CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_rsp.py \
+CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_multimodal.py \
     --target $target \
     --id_name $id_name \
     --split_on $split_on \

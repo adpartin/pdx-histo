@@ -14,8 +14,6 @@ import sys
 assert sys.version_info >= (3, 5)
 
 from pathlib import Path
-from pprint import pprint
-import pandas as pd
 import numpy as np
 from typing import Optional
 
@@ -29,8 +27,19 @@ from tf_utils import _float_feature, _bytes_feature, _int64_feature
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
+# sys.path.append(str(fdir/'..'))
+# import src
+# from src.config import cfg
+# from src import load_data
+# from src.load_data import PDX_SAMPLE_COLS
+# from src.tfrecords import FEA_SPEC, FEA_SPEC_RSP, FEA_SPEC_RNA_NEW, original_tfr_names
+# from src.tf_utils import _float_feature, _bytes_feature, _int64_feature
 
+# Seed
 seed = 42
+np.random.seed(seed)
+tf.random.set_seed(seed)
+
 
 LABEL = '299px_302um'
 directory = cfg.SF_TFR_DIR/LABEL
@@ -248,7 +257,6 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None) -> None:
     # ------------------
     # Inspect a TFRecord
     # ------------------
-
     # import ipdb; ipdb.set_trace()
 
     smp = samples[0]

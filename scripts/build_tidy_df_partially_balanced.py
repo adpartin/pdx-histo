@@ -113,8 +113,8 @@ df = df.sort_values('smp', ascending=True).reset_index(drop=True)
 del dfs, aa, ctype, count
 # --------------------------------------------------------------
 
-df = df.reset_index()
-pprint(df.groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
+# df = df.reset_index()
+pprint(df.reset_index().groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
 pprint(df[target].value_counts())
 
 # Save annotations file

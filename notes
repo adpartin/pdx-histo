@@ -12,3 +12,18 @@ Note! I haven't setup a working Makefile yet.
 
 # Activate the env
 source ./venv/bin/activate
+
+# ----------------------
+# Put this into Makefile
+# ----------------------
+# Build tidy datasets
+python scripts/build_tidy_df_all_samples.py
+python scripts/build_tidy_df_partially_balanced.py
+
+# Generate data splits
+# (need to update the bash scripts as needed)
+./scripts/split_new.bash
+
+# Train
+./scripts/baseline.bash 2
+./scripts/multimodal.bash 2

@@ -1,5 +1,5 @@
 """
-Train drug response using rna and dd data (w/o tfrecords).
+Train baseline model for drug response using rna and dd data (w/o tfrecords).
 """
 import os
 import sys
@@ -15,6 +15,8 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import plot_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
 
 import warnings
@@ -75,11 +77,10 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
-# annotations_file = prjdir/cfg.SF_ANNOTATIONS_FILENAME
 annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 print(data.shape)
@@ -90,12 +91,13 @@ outdir = prjdir/f'baseline/split_on_{split_on}'
 os.makedirs(outdir, exist_ok=True)
 
 # Import parameters
-shutil.copy(fdir/"default_params.json", prjdir/"baseline/params.json")
-prm_dir = prjdir/"baseline/params.json"
-params = Params(prm_dir)
+prm_file_path = prjdir/"baseline/params.json"
+if prm_file_path.exists() is False:
+    shutil.copy(fdir/"../default_params/default_params_baseline.json", prm_file_path)
+params = Params(prm_file_path)
 
 if args.target[0] == 'Response':
-    pprint(data.groupby(['ctype', 'Response']).agg({
+    pprint(data.reset_index().groupby(['ctype', 'Response']).agg({
         'index': 'nunique'}).reset_index().rename(columns={'index': 'count'}))
 else:
     pprint(data[args.target[0]].value_counts())
@@ -121,7 +123,6 @@ else:
 # -----------------------------------------------
 
 # T/V/E filenames
-# splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
 splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
 split_id = 0
 
@@ -262,14 +263,20 @@ print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 # Predictions
 yte_prd = model.predict(xte)
 yte_prd_label = np.argmax(yte_prd, axis=1)
-
-cnf_mtrx = confusion_matrix(yte_label, yte_prd_label)
-# disp = ConfusionMatrixDisplay(cnf_mtrx, display_labels=list(y_onehot.columns))
-# disp.plot(xticks_rotation=65);
-pprint(cnf_mtrx)
+dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds.csv")
 
 scores = calc_scores(yte_label, yte_prd[:, 1], mltype="cls")
 dump_dict(scores, outdir/"test_scores.txt")
-dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds.csv")
+
+# Confusion
+cnf_mtrx = confusion_matrix(yte_label, yte_prd_label)
+pprint(cnf_mtrx)
+
+fig, ax = plt.subplots(figsize=(5, 5))
+sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
+ax.set_xticklabels(["Non-response", "Response"])
+ax.set_yticklabels(["Non-response", "Response"])
+ax.set(ylabel="True", xlabel="Predicted")
+plt.savefig(outdir/"confusion.png", bbox_inches='tight', dpi=150)
 
 print('\nDone.')
