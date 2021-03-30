@@ -9,8 +9,10 @@ dataname=tidy_partially_balanced
 prjname=bin_rsp_partially_balanced
 
 id_name=smp
-split_on=slide
 target=Response
+
+# split_on=slide
+split_on=Group
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"

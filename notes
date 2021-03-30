@@ -27,3 +27,18 @@ python scripts/build_tidy_df_partially_balanced.py
 # Train
 ./scripts/baseline.bash 2
 ./scripts/multimodal.bash 2
+
+# ----------------------
+# Improve code
+# ----------------------
+# Group partition and stratification
+# http://www.xavierdupre.fr/app/pandas_streaming/helpsphinx/pandas_streaming/df/connex_split.html
+
+# Change input shape dimensions for fine-tuning with Keras
+# https://www.pyimagesearch.com/2019/06/24/change-input-shape-dimensions-for-fine-tuning-with-keras/
+
+# Working TFRecords and transfer learning for computer vision
+# https://www.kaggle.com/learn/computer-vision
+# https://www.kaggle.com/cdeotte/triple-stratified-kfold-with-tfrecords/
+# https://www.kaggle.com/agentauers/incredible-tpus-finetune-effnetb0-b6-at-once
+# https://www.kaggle.com/samusram/hpa-classifier-explainability-segmentation

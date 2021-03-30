@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
 
 def calc_preds(model, x, y, mltype):
     """ Calc predictions. """
@@ -85,6 +89,16 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
     return scores
 
 
+def save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
+                          outpath="confusion.jpeg"):
+    """ ... """
+    fig, ax = plt.subplots(figsize=(5, 5))
+    sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
+    ax.set_xticklabels(labels)
+    ax.set_yticklabels(labels)
+    ax.set(ylabel="True", xlabel="Predicted")
+    plt.savefig(outpath, bbox_inches='tight', dpi=150)
+
 # def scores_to_df(scores_all):
 #     """ Dict to df. """
 #     df = pd.DataFrame(scores_all)
@@ -94,6 +108,3 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
 #     df = df.reset_index(drop=False)
 #     df.columns.name = None
 #     return df
-
-
-

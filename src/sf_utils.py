@@ -282,7 +282,7 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
         # Create a list of tf datasets and a corresponding list of categories (outcomes)
         if filename not in DATASETS:
             # buffer_size=1024*1024*100 num_parallel_reads=tf.data.experimental.AUTOTUNE
-            DATASETS.update({filename: tf.data.TFRecordDataset(filename, num_parallel_reads=32)}) 
+            DATASETS.update({filename: tf.data.TFRecordDataset(filename, num_parallel_reads=32)})
         datasets += [DATASETS[filename]]
         datasets_categories += [category]
 
@@ -354,6 +354,9 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
     # uniform probability.
     try:
         dataset = tf.data.experimental.sample_from_datasets(datasets, weights=prob_weights, seed=None)
+        # (ap)
+        # tfr_files = tf.data.Dataset.from_tensor_slices(tfrecords)
+        # dataset = tf.data.experimental.sample_from_datasets(tfr_files, weights=prob_weights, seed=None)
     except IndexError:
         print(f"No TFRecords found after filter criteria; please ensure all tiles \
               have been extracted and all TFRecords are in the appropriate folder")

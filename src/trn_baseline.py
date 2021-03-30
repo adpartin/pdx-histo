@@ -14,10 +14,7 @@ from pprint import pprint
 
 import pandas as pd
 import numpy as np
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import plot_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -33,7 +30,7 @@ from tensorflow.keras.optimizers import Adam
 
 from models import build_model_rsp_baseline
 from ml.scale import get_scaler
-from ml.evals import calc_scores, calc_preds, dump_preds
+from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
 from utils.utils import Params, dump_dict
 from datasets.tidy import split_data_and_extract_fea
 
@@ -63,7 +60,7 @@ parser.add_argument('--id_name',
 parser.add_argument('--split_on',
                     type=str,
                     default=None,
-                    choices=['Sample', 'slide'],
+                    choices=['Sample', 'slide', 'Group'],
                     help='Specify the hard split variable/column (default: None).')
 parser.add_argument('--prjname',
                     type=str,
@@ -77,7 +74,7 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
@@ -96,9 +93,12 @@ if prm_file_path.exists() is False:
     shutil.copy(fdir/"../default_params/default_params_baseline.json", prm_file_path)
 params = Params(prm_file_path)
 
+import ipdb; ipdb.set_trace()
 if args.target[0] == 'Response':
-    pprint(data.reset_index().groupby(['ctype', 'Response']).agg({
-        'index': 'nunique'}).reset_index().rename(columns={'index': 'count'}))
+    # pprint(data.reset_index().groupby(['ctype', 'Response']).agg({
+    #     'index': 'nunique'}).reset_index().rename(columns={'index': 'count'}))
+    pprint(data.groupby(["ctype", "Response"]).agg(
+        {"grp_name": "nunique", "smp": "nunique"}).reset_index())
 else:
     pprint(data[args.target[0]].value_counts())
 
@@ -122,13 +122,14 @@ else:
 # Data splits
 # -----------------------------------------------
 
+""" AP
+
 # T/V/E filenames
 splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
 split_id = 0
 
 split_pattern = f'1fold_s{split_id}_*_id.txt'
 single_split_files = glob.glob(str(splitdir/split_pattern))
-# single_split_files = list(splitdir.glob(split_pattern))
 
 def read_lines(file_path):
     with open(file_path, 'r') as file:
@@ -147,6 +148,15 @@ for id_file in single_split_files:
         vl_id = cast_list(read_lines(id_file), int)
     elif 'te_id' in id_file:
         te_id = cast_list(read_lines(id_file), int)
+"""
+
+# Yitan's splits
+splitdir = "/vol/ml/apartin/projects/pdx-histo/data/PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
+split_id = 0
+tr_id = cast_list(read_lines(splitdir/f"cv_{split_id}"/"TrainList.txt"), int)
+vl_id = cast_list(read_lines(splitdir/f"cv_{split_id}"/"ValList.txt"), int)
+te_id = cast_list(read_lines(splitdir/f"cv_{split_id}"/"TestList.txt"), int)
+
 
 kwargs = {"ge_cols": ge_cols,
           "dd_cols": dd_cols,
@@ -171,6 +181,10 @@ xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
 tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
 vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
 te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+
+pprint(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+pprint(vl_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+pprint(te_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
 
 # Onehot encoding
 ydata = data[args.target[0]].values
@@ -270,13 +284,8 @@ dump_dict(scores, outdir/"test_scores.txt")
 
 # Confusion
 cnf_mtrx = confusion_matrix(yte_label, yte_prd_label)
+save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
+                      outpath=outdir/"confusion.png")
 pprint(cnf_mtrx)
-
-fig, ax = plt.subplots(figsize=(5, 5))
-sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
-ax.set_xticklabels(["Non-response", "Response"])
-ax.set_yticklabels(["Non-response", "Response"])
-ax.set(ylabel="True", xlabel="Predicted")
-plt.savefig(outdir/"confusion.png", bbox_inches='tight', dpi=150)
 
 print('\nDone.')

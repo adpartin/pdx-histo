@@ -1,6 +1,10 @@
 """ 
 Build a dataset for binary classification with multimodal features.
 The dataset contains all the available samples.
+
+Note, this is a simplified approach where each Sample-treatatment are
+treated as a single data sample. A proper approach is to treat every
+family/specimen-treatment as a single data sample.
 """
 # print(__name__)
 import os
@@ -13,7 +17,7 @@ import pandas as pd
 import numpy as np
 
 # import pdb; pdb.set_trace()
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 fdir = Path(__file__).resolve().parent
 sys.path.append(str(fdir/'..'))

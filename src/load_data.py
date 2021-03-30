@@ -56,33 +56,118 @@ def parse_Sample_col(df):
 def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     """ Load drug response data. """
     rsp = pd.read_csv(rsp_dpath, sep='\t')
+    rsp = rsp.reset_index()
     rsp = drop_dups(rsp)
-    rsp = rsp.drop(columns=['Source', 'Model'])
+    # rsp = rsp.drop(columns=['Source', 'Model'])
+
+    # import ipdb; ipdb.set_trace()
+
+    # Cast
+    rsp["Drug1"] = rsp["Drug1"].map(lambda s: s.strip())
+    rsp["Drug2"] = rsp["Drug2"].map(lambda s: s.strip())
+    rsp = rsp.astype({"Sample": str, "Drug1": str, "Drug2": str})
+
+    if "Image_ID" in rsp.columns:
+        # rsp = rsp.astype({"Image_ID": str})
+        rsp = rsp.drop(columns="Image_ID")
+    
+
+    # Remove PDX samples that were generated from cryo-preserved samples
+    # https://pdmr.cancer.gov/database/default.htm
+    rsp = rsp[rsp["Sample"].map(lambda s: True if "RG" not in s else False)].reset_index(drop=True)
+    
+    # Remove 'NCIPDM.' from sample name
+    rsp['Sample'] = rsp['Sample'].map(lambda x: x.split('NCIPDM.')[1])    
+    
+    # ------------------------------------
+    # Augment Drug2 from Drug1
+    # TODO: need to test the code below!
+    # ------------------------------------
+    # # Copy Drug1 to Drug2 in case of single drug treatments
+    # drug2 = []
+    # for i, (d1, d2) in enumerate(zip(rsp["Drug1"], rsp["Drug2"])):
+    #     if isinstance(d2, str) and d2.startswith("NSC."):
+    #         drug2.append(d2)  # drug pair
+    #     else:
+    #         drug2.append(d1)  # single drug; copy to drug1 to drug2
+    # rsp["Drug2"] = drug2        
+
+    # # Create drug treatment string ids
+    # rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]        
+
+    # # Create treatment groups (specimen-treatment pairs)
+    # gg = rsp[["model", "trt"]].drop_duplicates(subset=["model", "trt"]).reset_index(drop=True)
+    # gg = gg.reset_index().rename(columns={"index": "grp"})
+    # gg = gg[["model", "trt", "grp"]]
+
+    # # Assign treatment groups into master df
+    # rsp = rsp.merge(gg, on=["model", "trt"], how="inner")
+
+    # # Augment drug-pair treatments
+    # rsp = rsp.reset_index(drop=True)  # reset index just in case
+    # rsp["aug"] = False
+
+    # # Find ids of drug-pair treatments
+    # aug_ids = [ii for ii, (d1, d2) in enumerate(zip(rsp["Drug1"], rsp["Drug2"])) if d1 != d2]
+    # df_aug = rsp.loc[aug_ids]
+    # df_aug = df_aug.rename(columns={"Drug1": "Drug2", "Drug2": "Drug1"})
+    # df_aug["aug"] = True        
+
+    # # Create and save the final drug response dataset
+    # rsp = pd.concat([rsp, df_aug], axis=0)
+    # rsp = rsp.sort_values(["grp", "aug", "Sample"]).reset_index(drop=True)
+    # ------------------------------------
+    
+    # import ipdb; ipdb.set_trace()
 
     # Single drug or drug pairs
     if single_drug:
-        rsp = rsp[rsp.Drug2.isna()].reset_index(drop=True)
+        rsp = rsp.reset_index(drop=True)
+        ids = [True if d1 == d2 else False for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
+        rsp = rsp[ids].reset_index(drop=True)
         rsp = rsp.drop(columns=['Drug2'])
         rsp = rsp.drop_duplicates()
-    else:
-        raise ValueError("Didn't test this...")
-        # rsp.loc[rsp.Drug2.isna(), 'Drug2'] = 'Drug1'
-        
-    # Remove 'NCIPDM.' from sample name
-    rsp['Sample'] = rsp['Sample'].map(lambda x: x.split('NCIPDM.')[1])
+        rsp["trt"] = rsp["Drug1"]  # Create drug treatment string ids
 
+        # rsp = rsp[rsp.Drug2.isna()].reset_index(drop=True)
+        # rsp = rsp.drop(columns=['Drug2'])
+        # rsp["trt"] = rsp["Drug1"]  # Create drug treatment string ids
+        # rsp = rsp.drop_duplicates()
+    else:
+        raise ValueError("Haven't tested. This requires the 'model' column ...") 
+        
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     # rsp = parse_Sample_col(rsp)
     
     # Create column of unique treatments
     col_name = 'smp'
     if col_name not in rsp.columns:
-        smp = [str(s) + '_' + str(d) for s, d in zip(rsp['Sample'], rsp['Drug1'])]
-        rsp.insert(loc=0, column=col_name, value=smp, allow_duplicates=False)
-        
+        # smp = [str(s) + '_' + str(d) for s, d in zip(rsp['Sample'], rsp['Drug1'])]
+        smp = [str(s) + '_' + str(d) for s, d in zip(rsp['Sample'], rsp['trt'])]
+        # rsp.insert(loc=0, column=col_name, value=smp, allow_duplicates=False)
+        rsp.insert(loc=1, column=col_name, value=smp, allow_duplicates=False)
+
+    # import ipdb; ipdb.set_trace()
+
+    # Create grp_name
+    col_name = 'grp_name'
+    if col_name not in rsp.columns:
+        patient_id = rsp['Sample'].map(lambda x: x.split('~')[0])
+        specimen_id = rsp['Sample'].map(lambda x: x.split('~')[1])
+        sample_id = rsp['Sample'].map(lambda x: x.split('~')[2])
+        model = [a + '~' + b for a, b in zip(patient_id, specimen_id)]
+        grp_name_values = [str(a) + "_" + str(b) for a, b in zip(model, rsp["trt"])]
+        # rsp.insert(loc=1, column='model', value=model, allow_duplicates=True)
+        # rsp.insert(loc=1, column=col_name, value=grp_name_values, allow_duplicates=True)
+        rsp[col_name] = grp_name_values
+
+    if single_drug:
+        # rsp = rsp[["smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
+        rsp = rsp[["index", "smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
+
     if verbose:
-        print('\nUnique samples {}'.format(rsp['Sample'].nunique()))
-        print('Unique drugs   {}'.format(rsp['Drug1'].nunique()))
+        print('\nUnique samples   {}'.format(rsp['Sample'].nunique()))
+        print('Unique treatments {}'.format(rsp['trt'].nunique()))
         print(rsp['Response'].value_counts())
         print(rsp.shape)
         pprint(rsp[:2])

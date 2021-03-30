@@ -18,10 +18,7 @@ from typing import List, Optional, Union
 
 import pandas as pd
 import numpy as np
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import plot_confusion_matrix, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -48,7 +45,7 @@ from sf_utils import (green, interleave_tfrecords,
                       create_manifest)
 from models import build_model_rsp, build_model_rna, build_model_rsp_baseline
 from ml.scale import get_scaler
-from ml.evals import calc_scores, calc_preds, dump_preds
+from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
 from utils.utils import Params, dump_dict
 from datasets.tidy import split_data_and_extract_fea
 
@@ -91,7 +88,7 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
@@ -439,7 +436,7 @@ steps_per_epoch_override = None  # what's that??
 # AUGMENT = True
 
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
     # Response
@@ -451,6 +448,7 @@ if args.target[0] == 'Response':
         'ge_scaler': ge_scaler,
         'dd_scaler': dd_scaler,
         'id_name': args.id_name,
+        'MODEL_TYPE': params.model_type,
         'AUGMENT': params.augment,
         'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
     }
@@ -746,13 +744,8 @@ dump_dict(smp_scores, outdir/"test_smp_scores.txt")
 
 # Confusion
 cnf_mtrx = confusion_matrix(test_smp_preds["y_true"], test_smp_preds["y_pred_label"])
+save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
+                      outpath=outdir/"confusion.png")
 pprint(cnf_mtrx)
-
-fig, ax = plt.subplots(figsize=(5, 5))
-sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
-ax.set_xticklabels(["Non-response", "Response"])
-ax.set_yticklabels(["Non-response", "Response"])
-ax.set(ylabel="True", xlabel="Predicted")
-plt.savefig(outdir/"confusion.png", bbox_inches='tight', dpi=150)
 
 print('\nDone.')

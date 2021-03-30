@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # Data name
-# dataname=tidy_all
-dataname=tidy_partially_balanced
+dataname=tidy_all
+# dataname=tidy_partially_balanced
 
 # Project name
-# prjname=bin_rsp_balance_02
-# prjname=bin_rsp_all
-prjname=bin_rsp_partially_balanced
+prjname=bin_rsp_all
+# prjname=bin_rsp_partially_balanced
 
 id_name=smp
 split_on=slide

@@ -32,11 +32,20 @@ cfg.CROSSREF_FNAME = '_ImageID_PDMRID_CrossRef.xlsx'
 cfg.PDX_META_FNAME = 'PDX_Meta_Information2.csv'
 cfg.SLIDES_META_FNAME = 'meta_from_wsi_slides.csv'
 
-cfg.RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
+# Drug response file
+# cfg.RSP_DPATH = cfg.DATADIR/'studies/pdm/ncipdm_drug_response'
+cfg.RSP_DPATH = cfg.DATADIR/'PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Drug_Pair_Response.txt'
+
+# Gene expression file
 # cfg.RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000'
 cfg.RNA_DPATH = cfg.DATADIR/'combined_rnaseq_data_lincs1000_combat'
+# cfg.RNA_DPATH = cfg.DATADIR/'PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Standardized_Normalized_RNA-seq_Data_lincs1000.txt'
+# cfg.RNA_DPATH = cfg.DATADIR/'PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Standardized_Unnormalized_RNA-seq_Data_lincs1000.txt'
+
+# Drug descriptors file
 cfg.DD_DPATH = cfg.DATADIR/'dd.mordred.with.nans'
 
+# Metadata path
 cfg.METAPATH = cfg.DATADIR/'meta'
 # cfg.META_DPATH = cfg.METAPATH/'meta_merged.csv'
 

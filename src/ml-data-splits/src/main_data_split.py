@@ -25,7 +25,7 @@ fdir = Path(__file__).resolve().parent
 
 # Seed
 seed = 42
-np.random.seed(seed)
+# np.random.seed(seed)
 
 
 def parse_args(args):
@@ -57,7 +57,7 @@ def parse_args(args):
     parser.add_argument('--split_on',
                         type=str,
                         default=None,
-                        choices=['Sample', 'slide'],
+                        choices=['Sample', 'slide', 'Group'],
                         help='Specify which variable (column) to make a hard split on (default: None).')
     parser.add_argument('--ml_task',
                         type=str,
@@ -91,9 +91,10 @@ def verify_size(s: Union[int, float]) -> Union[int, float]:
     #         print('te_size must be either int or float.')
     #         sys.exit()
 
+
 def run(args):
 
-    print('\nInput args:')
+    print("\nInput args:")
     pprint(vars(args))
 
     t0 = time()
@@ -106,8 +107,8 @@ def run(args):
     te_method = cv_method
 
     # Specify ML task (regression or classification)
-    if cv_method == 'strat':
-        mltask = 'cls'  # cast mltask to cls in case of stratification
+    if cv_method == "strat":
+        mltask = "cls"  # cast mltask to cls in case of stratification
     else:
         mltask = args.ml_task
 
@@ -123,72 +124,78 @@ def run(args):
     # -----------------------------------------------
     if args.gout is not None:
         gout = Path(args.gout).resolve()
-        sufx = 'none' if args.split_on is None else args.split_on
-        gout = gout/datapath.with_suffix('.splits')
+        sufx = "none" if args.split_on is None else args.split_on
+        gout = gout/datapath.with_suffix(".splits")
         if args.split_on is not None:
-            gout = gout/f'split_on_{sufx}'
+            gout = gout/f"split_on_{sufx}"
         else:
-            gout = gout/f'split_on_none'
+            gout = gout/f"split_on_none"
     else:
         # Note! useful for drug response
-        sufx = 'none' if args.split_on is None else args.split_on
-        gout = datapath.with_suffix('.splits')
+        sufx = "none" if args.split_on is None else args.split_on
+        gout = datapath.with_suffix(".splits")
 
-    outfigs = gout/'outfigs'
+    outfigs = gout/"outfigs"
     os.makedirs(gout, exist_ok=True)
     os.makedirs(outfigs, exist_ok=True)
 
     # -----------------------------------------------
     #       Create logger
     # -----------------------------------------------
-    lg = Logger(gout/'data.splitter.log')
+    lg = Logger(gout/"data.splitter.log")
     print_fn = get_print_func(lg.logger)
-    print_fn(f'File path: {fdir}')
-    print_fn(f'\n{pformat(vars(args))}')
-    dump_dict(vars(args), outpath=gout/'data.splitter.args.txt')
+    print_fn(f"File path: {fdir}")
+    print_fn(f"\n{pformat(vars(args))}")
+    dump_dict(vars(args), outpath=gout/"data.splitter.args.txt")
 
     # -----------------------------------------------
     #       Load data
     # -----------------------------------------------
-    print_fn('\nLoad master dataset.')
+    print_fn("\nLoad master dataset.")
     data = load_data(datapath)
-    print_fn('data.shape {}'.format(data.shape))
+    print_fn("data.shape {}".format(data.shape))
 
-    ydata = data[trg_name] if trg_name in data.columns else None
-    if (cv_method == 'strat') and (ydata is None):
-        raise ValueError('Prediction target column must be available if splits need to be stratified.')
-    # assert (cv_method == 'strat') and (ydata is not None), 'prediction target column \
-    #     data must be available if splits need to be stratified.'
+    # ydata = data[trg_name] if trg_name in data.columns else None
+    # if (cv_method == "strat") and (ydata is None):
+    #     raise ValueError("Prediction target column must be available if splits need to be stratified.")
 
-    if ydata is not None:
-        plot_hist(ydata, title=f'{trg_name}', fit=None, bins=100,
-                  path=outfigs/f'{trg_name}_hist_all.png')
+    if (cv_method == "strat") and (trg_name not in data.columns):
+        raise ValueError("Prediction target column must be available if splits need to be stratified.")
+
+    # if ydata is not None:
+    #     plot_hist(ydata, title=f"{trg_name}", fit=None, bins=100,
+    #               path=outfigs/f"{trg_name}_hist_all.png")
+
+    if trg_name in data.columns:
+        plot_hist(data[trg_name], title=f"{trg_name}", fit=None, bins=100,
+                  path=outfigs/f"{trg_name}_hist_all.png")
 
     # -----------------------------------------------
     #       Generate splits (train/val/test)
     # -----------------------------------------------
-    print_fn('\n{}'.format('-' * 50))
-    print_fn('Split data into hold-out train/val/test')
-    print_fn('{}'.format('-' * 50))
+    print_fn("\n{}".format("-" * 50))
+    print_fn("Split data into hold-out train/val/test")
+    print_fn("{}".format("-" * 50))
 
-    kwargs = {'data': data,
-              'cv_method': cv_method,
-              'te_method': te_method,
-              'te_size': te_size,
-              'mltask': mltask,
-              'split_on': args.split_on
+    kwargs = {"cv_method": cv_method,
+              "te_method": te_method,
+              "te_size": te_size,
+              "mltask": mltask,
+              "split_on": args.split_on
               }
 
-    data_splitter(n_splits = args.n_splits,
+    data_splitter(data = data,
+                  n_splits = args.n_splits,
                   gout = gout,
                   outfigs = outfigs,
-                  ydata = ydata,
+                  # ydata = ydata,
+                  target_name = trg_name,
                   print_fn = print_fn,
                   seed = seed,
                   **kwargs)
 
-    print_fn('Runtime: {:.1f} min'.format( (time()-t0)/60) )
-    print_fn('Done.')
+    print_fn("Runtime: {:.1f} min".format( (time()-t0)/60) )
+    print_fn("Done.")
     lg.close_logger()
 
 
