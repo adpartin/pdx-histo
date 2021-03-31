@@ -198,14 +198,14 @@ def gen_single_split(data,
         tr_id, vl_id, te_id = sorted(tr_id), sorted(vl_id), sorted(te_id)
 
     # Make sure indices do not overlap
-    assert len( set(tr_id).intersection(set(vl_id)) ) == 0, 'Overlapping indices btw tr and vl'
-    assert len( set(tr_id).intersection(set(te_id)) ) == 0, 'Overlapping indices btw tr and te'
-    assert len( set(vl_id).intersection(set(te_id)) ) == 0, 'Overlapping indices btw tr and vl'
+    assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
+    assert len( set(tr_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and te"
+    assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and vl"
 
     # Print split ratios
-    print_fn('Train samples {} ({:.2f}%)'.format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
-    print_fn('Val   samples {} ({:.2f}%)'.format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
-    print_fn('Test  samples {} ({:.2f}%)'.format( len(te_id), 100*len(te_id)/data.shape[0] ))
+    print_fn("Train samples {} ({:.2f}%)".format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
+    print_fn("Val   samples {} ({:.2f}%)".format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
+    print_fn("Test  samples {} ({:.2f}%)".format( len(te_id), 100*len(te_id)/data.shape[0] ))
 
     # Confirm that group splits are correct (no intersect)
     if split_on is not None:

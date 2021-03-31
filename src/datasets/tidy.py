@@ -52,21 +52,30 @@ class TidyData():
             pass
 
 
-
-def split_data_and_extract_fea(data, ids, ge_cols, dd_cols,
+def split_data_and_extract_fea(data, ids,
+                               ge_cols, dd_cols,
                                ge_scaler, dd_scaler,
+                               index_col_name: Optional[str]=None,
                                ge_dtype=np.float32, dd_dtype=np.float32):
     """ Split data into T/V/E using the provided ids and extract the separate
     features.
+
+    Args:
+        index_col_name : column that is used to index the dataset
 
     TODO:
     create class TidyData
     """
     # Obtain the relevant ids
-    # df = data.iloc[ids, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-    df = data.iloc[ids, :].reset_index(drop=True)
+    if index_col_name in data.columns:
+        df = data[data[index_col_name].isin(ids)]
+        df = df.reset_index(drop=True)
+    else:
+        df = data.iloc[ids, :].reset_index(drop=True)
+
     # Extract features
     ge, dd = df[ge_cols], df[dd_cols]
+
     # Scale
     dd = pd.DataFrame(dd_scaler.transform(dd), columns=dd_cols, dtype=dd_dtype)
     ge = pd.DataFrame(ge_scaler.transform(ge), columns=ge_cols, dtype=ge_dtype)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional, List
 
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
@@ -22,35 +23,46 @@ from config import cfg
 
 
 def build_model_rsp_baseline(use_ge=True, use_dd=True,
-                             ge_shape=None, dd_shape=None, model_type='categorical',
-                             NUM_CLASSES=None):
+                             ge_shape=None, dd_shape=None, model_type="categorical",
+                             NUM_CLASSES=None, output_bias=None):
     """ Doesn't use image data. """
+    if output_bias is not None:
+        output_bias = tf.keras.initializers.Constant(output_bias)
+
     model_inputs = []
     merge_inputs = []
 
     if use_ge:
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
         x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
+        # x_ge = BatchNormalization(0.2)(x_ge)
+        # x_ge = Dropout(0.4)(x_ge)
         model_inputs.append(ge_input_tensor)
         merge_inputs.append(x_ge)
 
     if use_dd:
         dd_input_tensor = tf.keras.Input(shape=dd_shape, name="dd_data")
         x_dd = Dense(512, activation=tf.nn.relu, name="dense_dd_1")(dd_input_tensor)
+        # x_dd = BatchNormalization(0.2)(x_dd)
+        # x_dd = Dropout(0.4)(x_dd)
         model_inputs.append(dd_input_tensor)
         merge_inputs.append(x_dd)
 
     # Merge towers
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
-    hidden_layer_width = 1000
+    # hidden_layer_width = 1000
+    hidden_layer_width = 500
     merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
                                          name="hidden_1", kernel_regularizer=None)(merged_model)
+    merged_model = Dropout(0.4)(merged_model)
 
     # Add the softmax prediction layer
-    activation = 'linear' if model_type == 'linear' else 'softmax'
-    final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-    softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
+    # activation = "linear" if model_type == "linear" else "softmax"
+    # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
+    # softmax_output = tf.keras.layers.Activation(activation, dtype="float32", name="Response")(final_dense_layer)
+
+    softmax_output = tf.keras.layers.Dense(1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)

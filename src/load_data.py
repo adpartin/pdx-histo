@@ -53,14 +53,22 @@ def parse_Sample_col(df):
     return df
 
 
+def get_model_from_Sample(Sample):
+    """ ... """
+    patient_id = Sample.map(lambda x: x.split('~')[0])
+    specimen_id = Sample.map(lambda x: x.split('~')[1])
+    # sample_id = Sample.map(lambda x: x.split('~')[2])
+    model = [a + '~' + b for a, b in zip(patient_id, specimen_id)]
+    return model
+
+
 def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     """ Load drug response data. """
+    # import ipdb; ipdb.set_trace()
     rsp = pd.read_csv(rsp_dpath, sep='\t')
     rsp = rsp.reset_index()
     rsp = drop_dups(rsp)
     # rsp = rsp.drop(columns=['Source', 'Model'])
-
-    # import ipdb; ipdb.set_trace()
 
     # Cast
     rsp["Drug1"] = rsp["Drug1"].map(lambda s: s.strip())
@@ -71,7 +79,6 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         # rsp = rsp.astype({"Image_ID": str})
         rsp = rsp.drop(columns="Image_ID")
     
-
     # Remove PDX samples that were generated from cryo-preserved samples
     # https://pdmr.cancer.gov/database/default.htm
     rsp = rsp[rsp["Sample"].map(lambda s: True if "RG" not in s else False)].reset_index(drop=True)
@@ -127,48 +134,48 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         rsp = rsp[ids].reset_index(drop=True)
         rsp = rsp.drop(columns=['Drug2'])
         rsp = rsp.drop_duplicates()
-        rsp["trt"] = rsp["Drug1"]  # Create drug treatment string ids
+
+        # Create drug treatment string ids
+        rsp["trt"] = rsp["Drug1"]
 
         # rsp = rsp[rsp.Drug2.isna()].reset_index(drop=True)
         # rsp = rsp.drop(columns=['Drug2'])
         # rsp["trt"] = rsp["Drug1"]  # Create drug treatment string ids
         # rsp = rsp.drop_duplicates()
     else:
-        raise ValueError("Haven't tested. This requires the 'model' column ...") 
-        
+        # Create drug treatment string ids
+        rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]        
+
+        # Augment drug-pair treatments
+        rsp["aug"] = [True if d1 != d2 else False for (d1, d2) in zip(rsp["Drug1"], rsp["Drug2"])]
+
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     # rsp = parse_Sample_col(rsp)
     
     # Create column of unique treatments
-    col_name = 'smp'
+    col_name = "smp"
     if col_name not in rsp.columns:
-        # smp = [str(s) + '_' + str(d) for s, d in zip(rsp['Sample'], rsp['Drug1'])]
-        smp = [str(s) + '_' + str(d) for s, d in zip(rsp['Sample'], rsp['trt'])]
+        smp = [str(s) + "_" + str(d) for s, d in zip(rsp["Sample"], rsp["trt"])]
         # rsp.insert(loc=0, column=col_name, value=smp, allow_duplicates=False)
         rsp.insert(loc=1, column=col_name, value=smp, allow_duplicates=False)
 
-    # import ipdb; ipdb.set_trace()
-
     # Create grp_name
-    col_name = 'grp_name'
+    col_name = "grp_name"
     if col_name not in rsp.columns:
-        patient_id = rsp['Sample'].map(lambda x: x.split('~')[0])
-        specimen_id = rsp['Sample'].map(lambda x: x.split('~')[1])
-        sample_id = rsp['Sample'].map(lambda x: x.split('~')[2])
-        model = [a + '~' + b for a, b in zip(patient_id, specimen_id)]
+        model = get_model_from_Sample(rsp["Sample"])
         grp_name_values = [str(a) + "_" + str(b) for a, b in zip(model, rsp["trt"])]
-        # rsp.insert(loc=1, column='model', value=model, allow_duplicates=True)
-        # rsp.insert(loc=1, column=col_name, value=grp_name_values, allow_duplicates=True)
         rsp[col_name] = grp_name_values
 
     if single_drug:
         # rsp = rsp[["smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
         rsp = rsp[["index", "smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
+    else:
+        rsp = rsp[["index", "smp", "Sample", "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]]
 
     if verbose:
-        print('\nUnique samples   {}'.format(rsp['Sample'].nunique()))
-        print('Unique treatments {}'.format(rsp['trt'].nunique()))
-        print(rsp['Response'].value_counts())
+        print("\nUnique samples   {}".format(rsp["Sample"].nunique()))
+        print("Unique treatments {}".format(rsp["trt"].nunique()))
+        print(rsp["Response"].value_counts())
         print(rsp.shape)
         pprint(rsp[:2])
     return rsp
@@ -177,18 +184,22 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
 def load_rna(rna_dpath=cfg.RNA_DPATH, add_prefix: bool=True, fea_dtype=np.float32):
     """ Load RNA-Seq data.
     Args:
-        add_prefix: prefix each gene column name with 'ge_'.    
+        add_prefix: prefix each gene column name with "ge_".    
     """
-    rna = pd.read_csv(rna_dpath, sep='\t')
+    rna = pd.read_csv(rna_dpath, sep="\t")
     rna = drop_dups(rna)
 
+    # Yitan's file
+    if rna.columns[0] != "Sample":
+        rna = rna.rename(columns={rna.columns[0]: "Sample"})
+
     fea_id0 = 1
-    fea_pfx = 'ge_'
+    fea_pfx = "ge_"
 
     # Extract NCIPDM samples from master dataframe
-    rna = rna[rna.Sample.map(lambda x: x.split('.')[0]) == 'NCIPDM'].reset_index(drop=True)
+    rna = rna[rna["Sample"].map(lambda x: x.split(".")[0]) == "NCIPDM"].reset_index(drop=True)
     # Remove 'NCIPDM.' from sample name
-    rna['Sample'] = rna['Sample'].map(lambda x: x.split('NCIPDM.')[1])
+    rna["Sample"] = rna["Sample"].map(lambda x: x.split("NCIPDM.")[1])
 
     # Add prefix to gene names
     if add_prefix:
@@ -203,12 +214,21 @@ def load_rna(rna_dpath=cfg.RNA_DPATH, add_prefix: bool=True, fea_dtype=np.float3
     return rna
 
 
-def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, fea_dtype=np.float32):
+def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, add_prefix: bool=True, fea_dtype=np.float32):
     """ Load drug descriptors. """
     dd = pd.read_csv(dd_dpath, sep='\t')
     dd = drop_dups(dd)
 
-    fea_pfx = 'dd_'
+    # Yitan's file
+    if dd.columns[0] != "ID":
+        dd = dd.rename(columns={dd.columns[0]: "ID"})
+
+    fea_id0 = 1
+    fea_pfx = "dd_"
+
+    # Add prefix to drug features
+    if add_prefix:
+        dd = dd.rename(columns={c: fea_pfx + c for c in dd.columns[fea_id0:] if ~c.startswith(fea_pfx)})
 
     dd_fea_names = [c for c in dd.columns if c.startswith(fea_pfx)]
     dd_fea = dd[dd_fea_names]
@@ -217,15 +237,15 @@ def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, fea_dtype=np.float32):
     # Filter dd
     if treat_nan and sum(dd.isna().sum() > 0):
 
-        print('Descriptors with all NaN: {}'.format( sum(dd_fea.isna().sum(axis=0) == dd_fea.shape[0])) )
-        print('Descriptors with any NaN: {}'.format( sum(dd_fea.isna().sum(axis=0) > 0) ))
+        print("Descriptors with all NaN: {}".format( sum(dd_fea.isna().sum(axis=0) == dd_fea.shape[0])) )
+        print("Descriptors with any NaN: {}".format( sum(dd_fea.isna().sum(axis=0) > 0) ))
 
         # Drop cols with all NaN
-        print('Drop descriptors with all NaN ...')
-        dd_fea = dd_fea.dropna(axis=1, how='all')
+        print("Drop descriptors with all NaN ...")
+        dd_fea = dd_fea.dropna(axis=1, how="all")
 
         # There are descriptors with a single unique value excluding NA (drop those)
-        print('Drop descriptors with a single unique value (excluding NaNs) ...')
+        print("Drop descriptors with a single unique value (excluding NaNs) ...")
         # print(dd_fea.nunique(dropna=True).sort_values())
         col_ids = dd_fea.nunique(dropna=True).values == 1  # takes too long for large dataset
         dd_fea = dd_fea.iloc[:, ~col_ids]
@@ -237,16 +257,16 @@ def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, fea_dtype=np.float32):
         # ii = dd_fea.nunique(dropna=True) == 1
         # gg = dd_fea.iloc[:, ii.values]
 
-        print('Impute NaN.')
+        print("Impute NaN.")
         from sklearn.impute import SimpleImputer
         imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
         # imputer = KNNImputer(missing_values=np.nan, n_neighbors=5,
-        #                      weights='uniform', metric='nan_euclidean',
+        #                      weights="uniform", metric="nan_euclidean",
         #                      add_indicator=False)
         col_names = dd_fea.columns
         # dd_fea = pd.DataFrame(imputer.fit_transform(dd_fea), columns=col_names, dtype=fea_dtype)
         dd_fea = pd.DataFrame(imputer.fit_transform(dd_fea), columns=col_names)
-        print('Descriptors with any NaN: {}'.format( sum(dd_fea.isna().sum(axis=0) > 0) ))
+        print("Descriptors with any NaN: {}".format( sum(dd_fea.isna().sum(axis=0) > 0) ))
 
         dd = pd.concat([dd_meta, dd_fea], axis=1)
 
