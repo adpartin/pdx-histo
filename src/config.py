@@ -26,6 +26,7 @@ cfg.SF_TFR_DIR = (fdir/"../../slideflow-proj/PDX_FIXED").resolve()
 cfg.SF_TFR_DIR_RNA = (fdir/"../../slideflow-proj/PDX_FIXED_RNA").resolve()
 cfg.SF_TFR_DIR_RNA_NEW = (fdir/"../../slideflow-proj/PDX_FIXED_RNA_NEW").resolve()
 cfg.SF_TFR_DIR_RSP = (fdir/"../../slideflow-proj/PDX_FIXED_RSP").resolve()
+cfg.SF_TFR_DIR_RSP_DRUG_PAIR = (fdir/"../../slideflow-proj/PDX_FIXED_RSP_DRUG_PAIR").resolve()
 
 # Meta file names
 cfg.CROSSREF_FNAME = "_ImageID_PDMRID_CrossRef.xlsx"

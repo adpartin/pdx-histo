@@ -89,15 +89,20 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
     return scores
 
 
-def save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
-                          outpath="confusion.jpeg"):
+def save_confusion_matrix(true_labels, predictions, p=0.5,
+                          labels=["Non-response", "Response"],
+                          outpath="confusion.jpeg", figsize=(3, 3)):
     """ ... """
-    fig, ax = plt.subplots(figsize=(5, 5))
-    sns.heatmap(cnf_mtrx, annot=True, cmap='Blues', linewidths=0.1, linecolor='white')
+    cnf_mtrx = confusion_matrix(true_labels, predictions > p)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(cnf_mtrx, annot=True, fmt="d", cmap='Blues', linewidths=0.2, linecolor='white')
     ax.set_xticklabels(labels)
     ax.set_yticklabels(labels)
     ax.set(ylabel="True", xlabel="Predicted")
-    plt.savefig(outpath, bbox_inches='tight', dpi=150)
+    ax.set_title("Confusion matrix at p={:.2f}".format(p))
+    plt.savefig(outpath, bbox_inches="tight", dpi=150)
+
 
 # def scores_to_df(scores_all):
 #     """ Dict to df. """

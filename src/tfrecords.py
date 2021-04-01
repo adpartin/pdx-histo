@@ -1,5 +1,6 @@
 import tensorflow as tf
-from config import cfg
+# from config import cfg
+from src.config import cfg
 
 
 FEA_SPEC = {
@@ -66,6 +67,42 @@ FEA_SPEC_RSP = {
     # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
     'ge_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     'dd_data': tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+}
+
+
+FEA_SPEC_RSP_DRUG_PAIR = {
+    "slide":     tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "image_raw": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    "index":    tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "smp":      tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "Group":    tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "grp_name": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    "Sample":      tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "model":       tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "patient_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "specimen_id": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "sample_id":   tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "image_id":    tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    "ctype":     tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "csite":     tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "ctype_src": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "csite_src": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    "Drug1": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "Drug2": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "trt":   tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "aug":   tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+
+    "Response": tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+
+    # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
+    # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
+    "ge_data":  tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "dd1_data": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "dd2_data": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 }
 
 

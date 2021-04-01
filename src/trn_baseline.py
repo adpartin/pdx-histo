@@ -8,6 +8,7 @@ assert sys.version_info >= (3, 5)
 import argparse
 import glob
 import shutil
+import tempfile
 from time import time
 from pathlib import Path
 from pprint import pprint
@@ -27,12 +28,12 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import losses
 from tensorflow.keras.optimizers import Adam
 
-from models import build_model_rsp_baseline
+from models import build_model_rsp_baseline, METRICS
 from ml.scale import get_scaler
 from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
-from utils.utils import Params, dump_dict
+from utils.utils import Params, dump_dict, read_lines, cast_list
 
-from datasets.tidy import split_data_and_extract_fea
+from datasets.tidy import split_data_and_extract_fea, extract_fea
 
 fdir = Path(__file__).resolve().parent
 from config import cfg
@@ -83,8 +84,8 @@ data = pd.read_csv(annotations_file)
 print(data.shape)
 
 # Outdir
-split_on = 'none' if args.split_on is (None or 'none') else args.split_on
-outdir = prjdir/f'baseline/split_on_{split_on}'
+split_on = "none" if args.split_on is (None or "none") else args.split_on
+outdir = prjdir/f"baseline/split_on_{split_on}"
 os.makedirs(outdir, exist_ok=True)
 
 # Import parameters
@@ -95,40 +96,32 @@ params = Params(prm_file_path)
 
 # import ipdb; ipdb.set_trace()
 print("\nFull dataset:")
-if args.target[0] == 'Response':
+if args.target[0] == "Response":
     pprint(data.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
         columns={split_on: f"{split_on}_unq", "smp": "smp_unq"}))
 else:
     pprint(data[args.target[0]].value_counts())
 
-ge_cols = [c for c in data.columns if c.startswith('ge_')]
-dd_cols = [c for c in data.columns if c.startswith('dd_')]
-data = data.astype({'image_id': str, 'slide': str})
+ge_cols = [c for c in data.columns if c.startswith("ge_")]
+dd1_cols = [c for c in data.columns if c.startswith("dd1_")]
+dd2_cols = [c for c in data.columns if c.startswith("dd2_")]
+data = data.astype({"image_id": str, "slide": str})
 
-# RNA scaler
-if params.use_ge:
+# Scalers for each feature set
+ge_scaler, dd1_scaler, dd2_scaler = None, None, None
+
+if params.use_ge and len(ge_cols) > 0:
     ge_scaler = get_scaler(data[ge_cols])
-else:
-    ge_scaler = None
 
-# Descriptors scaler
-if params.use_dd:
-    dd_scaler = get_scaler(data[dd_cols])
-else:
-    dd_scaler = None
+if params.use_dd1 and len(dd1_cols) > 0:
+    dd1_scaler = get_scaler(data[dd1_cols])
+
+if params.use_dd2 and len(dd2_cols) > 0:
+    dd2_scaler = get_scaler(data[dd2_cols])
 
 # -----------------------------------------------
 # Data splits
 # -----------------------------------------------
-
-def read_lines(file_path):
-    with open(file_path, 'r') as file:
-        lines = file.read().splitlines()
-    return lines
-
-def cast_list(ll, dtype=int):
-    return [dtype(i) for i in ll]
-
 
 # ------------------------------------------------------------
 # My (ap) splits
@@ -168,35 +161,51 @@ vl_id = sorted(set(data[index_col_name]).intersection(set(vl_id)))
 te_id = sorted(set(data[index_col_name]).intersection(set(te_id)))
 # ------------------------------------------------------------
 
+# # Obtain the relevant ids
+# if index_col_name in data.columns:
+#     tr = data[data[index_col_name].isin(tr_id)].sort_values([split_on], ascending=True).reset_index(drop=True)
+#     vl = data[data[index_col_name].isin(vl_id)].sort_values([split_on], ascending=True).reset_index(drop=True)
+#     te = data[data[index_col_name].isin(te_id)].sort_values([split_on], ascending=True).reset_index(drop=True)
+# else:
+#     tr = data.iloc[tr_id, :].sort_values([split_on], ascending=True).reset_index(drop=True)
+#     vl = data.iloc[vl_id, :].sort_values([split_on], ascending=True).reset_index(drop=True)
+#     te = data.iloc[te_id, :].sort_values([split_on], ascending=True).reset_index(drop=True)
+# kwargs = {"ge_cols": ge_cols,
+#           "dd1_cols": dd1_cols,
+#           "dd2_cols": dd2_cols,
+#           "ge_scaler": ge_scaler,
+#           "dd1_scaler": dd1_scaler,
+#           "dd2_scaler": dd2_scaler,
+#           "ge_dtype": cfg.GE_DTYPE,
+#           "dd_dtype": cfg.DD_DTYPE,
+# }
+# import ipdb; ipdb.set_trace()
+# tr_ge, tr_dd1, tr_dd2 = extract_fea(tr, **kwargs)
+# vl_ge, vl_dd1, vl_dd2 = extract_fea(vl, **kwargs)
+# te_ge, te_dd1, te_dd2 = extract_fea(te, **kwargs)
+
 kwargs = {"ge_cols": ge_cols,
-          "dd_cols": dd_cols,
+          "dd1_cols": dd1_cols,
+          "dd2_cols": dd2_cols,
           "ge_scaler": ge_scaler,
-          "dd_scaler": dd_scaler,
+          "dd1_scaler": dd1_scaler,
+          "dd2_scaler": dd2_scaler,
           "ge_dtype": cfg.GE_DTYPE,
           "dd_dtype": cfg.DD_DTYPE,
-          "index_col_name": index_col_name
+          "index_col_name": index_col_name,
+          "split_on": split_on
 }
-tr_ge, tr_dd = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
-vl_ge, vl_dd = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
-te_ge, te_dd = split_data_and_extract_fea(data, ids=te_id, **kwargs)
+tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
+vl_ge, vl_dd1, vl_dd2, vl_meta = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
+te_ge, te_dd1, te_dd2, te_meta = split_data_and_extract_fea(data, ids=te_id, **kwargs)
 
-ge_shape = (te_ge.shape[1],)
-dd_shape = (tr_dd.shape[1],)
+ge_shape = (tr_ge.shape[1],)
+dd_shape = (tr_dd1.shape[1],)
 
 # Variables (dict/dataframes/arrays) that are passed as features to the NN
-xtr = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
-xvl = {"ge_data": vl_ge.values, "dd_data": vl_dd.values}
-xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
-
-# Extarct meta for T/V/E
-if index_col_name in data.columns:
-    tr_meta = data[data[index_col_name].isin(tr_id)].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-    vl_meta = data[data[index_col_name].isin(vl_id)].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-    te_meta = data[data[index_col_name].isin(te_id)].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-else:
-    tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-    vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-    te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+xtr = {"ge_data": tr_ge.values, "dd1_data": tr_dd1.values, "dd2_data": tr_dd2.values}
+xvl = {"ge_data": vl_ge.values, "dd1_data": vl_dd1.values, "dd2_data": vl_dd2.values}
+xte = {"ge_data": te_ge.values, "dd1_data": te_dd1.values, "dd2_data": te_dd2.values}
 
 # import ipdb; ipdb.set_trace()
 print("\nTrain:")
@@ -261,13 +270,12 @@ callbacks = keras_callbacks(outdir, monitor='val_loss')
 #     print('Compute dtype: %s' % policy.compute_dtype)
 #     print('Variable dtype: %s' % policy.variable_dtype)
 
-# y_encoding = 'onehot'
-y_encoding = 'label'
+# y_encoding = "onehot"
+y_encoding = "label"  # to be used binary cross-entropy
 
-import ipdb; ipdb.set_trace()
-
-if y_encoding == 'onehot':
+if y_encoding == "onehot":
     if index_col_name in data.columns:
+        # Using Yitan's T/V/E splits
         # print(te_meta[["index", "Group", "grp_name", "Response"]])
         ytr = pd.get_dummies(tr_meta[args.target[0]].values)
         yvl = pd.get_dummies(vl_meta[args.target[0]].values)
@@ -279,8 +287,9 @@ if y_encoding == 'onehot':
 
     loss = losses.CategoricalCrossentropy()
 
-elif y_encoding == 'label':
+elif y_encoding == "label":
     if index_col_name in data.columns:
+        # Using Yitan's T/V/E splits
         ytr = tr_meta[args.target[0]].values
         yvl = vl_meta[args.target[0]].values
         yte = te_meta[args.target[0]].values
@@ -292,7 +301,7 @@ elif y_encoding == 'label':
         loss = losses.SparseCategoricalCrossentropy()
 
 else:
-    raise ValueError(f'Unknown value for y_encoding ({y_encoding}).')
+    raise ValueError(f"Unknown value for y_encoding ({y_encoding}).")
     
 # ytr_label = ydata_label[tr_id]
 # yvl_label = ydata_label[vl_id]
@@ -309,48 +318,13 @@ yte_label = te_meta[args.target[0]].values
 # --------------------------
 # Define and Train
 # --------------------------
-# import ipdb; ipdb.set_trace()
+
 neg, pos = np.bincount(data["Response"])
 total = neg + pos
 print('Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n'.format(total, pos, 100 * pos / total))
 output_bias = np.log([pos/neg])
 print(output_bias)
 # output_bias = None
-
-model = build_model_rsp_baseline(use_ge=params.use_ge,
-                                 use_dd=params.use_dd,
-                                 ge_shape=ge_shape,
-                                 dd_shape=dd_shape,
-                                 model_type=params.model_type,
-                                 output_bias=output_bias)
-print()
-print(model.summary())
-
-# METRICS = [
-#       keras.metrics.TruePositives(name='tp'),
-#       keras.metrics.FalsePositives(name='fp'),
-#       keras.metrics.TrueNegatives(name='tn'),
-#       keras.metrics.FalseNegatives(name='fn'),
-#       keras.metrics.BinaryAccuracy(name='accuracy'),
-#       keras.metrics.Precision(name='precision'),
-#       keras.metrics.Recall(name='recall'),
-#       keras.metrics.AUC(name='auc'),
-# ]
-
-METRICS = [
-      keras.metrics.TruePositives(name='tp'),
-      keras.metrics.AUC(name='auc'),
-]
-
-model.compile(loss=loss,
-              optimizer=Adam(learning_rate=params.learning_rate),
-              metrics=METRICS)
-
-# import ipdb; ipdb.set_trace()
-
-# With output_bias initialized properly, the initial loss is much smaller
-# results = model.evaluate(xtr, ytr, batch_size=params.batch_size, verbose=0)
-# print("Loss: {:0.4f}".format(results[0]))
 
 # Scaling by total/2 helps keep the loss to a similar magnitude.
 # The sum of the weights of all examples stays the same.
@@ -363,6 +337,34 @@ if weighted:
     print('Weight for class 1: {:.2f}'.format(weight_for_1))
 else:
     class_weight = None
+
+# import ipdb; ipdb.set_trace()
+model = build_model_rsp_baseline(use_ge=params.use_ge,
+                                 use_dd1=params.use_dd1,
+                                 use_dd2=params.use_dd2,
+                                 ge_shape=ge_shape,
+                                 dd_shape=dd_shape,
+                                 model_type=params.model_type,
+                                 output_bias=output_bias)
+print()
+print(model.summary())
+
+# Save weights
+# initial_weights = os.path.join(tempfile.mkdtemp(), "initial_weights")
+initial_weights = str(outdir/"initial_weights")
+print(initial_weights)
+model.save_weights(initial_weights)
+model.load_weights(initial_weights)
+
+model.compile(loss=loss,
+              optimizer=Adam(learning_rate=params.learning_rate),
+              metrics=METRICS)
+
+# import ipdb; ipdb.set_trace()
+
+# With output_bias initialized properly, the initial loss is much smaller
+# results = model.evaluate(xtr, ytr, batch_size=params.batch_size, verbose=0)
+# print("Loss: {:0.4f}".format(results[0]))
 
 t = time()
 history = model.fit(x=xtr,
@@ -379,29 +381,41 @@ print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 # --------------------------
 # Evaluate
 # --------------------------
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
 # Predictions
-p = 0.5
 yte_prd = model.predict(xte)
+yte_prd = np.around(yte_prd, 3)
+
+p = 0.5
 if yte_prd.shape[1] > 1:
+    # cross-entropy
     yte_prd_label = np.argmax(yte_prd, axis=1)
     dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds.csv")
     scores = calc_scores(yte_label, yte_prd[:, 1], mltype="cls")
     dump_dict(scores, outdir/"test_scores.txt")
-
 else:
+    # binary cross-entropy
     yte_prd = yte_prd.reshape(-1,)
-    # yte_prd_label = yte_prd > p
     yte_prd_label = [1 if ii > p else 0 for ii in yte_prd]
-    dump_preds(yte_label, yte_prd, te_meta, outpath=outdir/"test_preds.csv")
+
+    # dump_preds(yte_label, yte_prd, te_meta, outpath=outdir/"test_preds.csv")
+    y_true = pd.Series(yte_label, name='y_true')
+    y_pred = pd.Series(yte_prd, name='y_pred')
+    y_pred_label = pd.Series(yte_prd_label, name='y_pred_label')
+    test_pred = pd.concat([te_meta, y_true, y_pred, y_pred_label], axis=1)
+    test_pred = test_pred.sort_values(split_on, ascending=True)
+    test_pred.to_csv(outdir/"test_preds.csv", index=False)
+
     scores = calc_scores(yte_label, yte_prd, mltype="cls")
     dump_dict(scores, outdir/"test_scores.txt")
 
 # Confusion
 cnf_mtrx = confusion_matrix(yte_label, yte_prd_label)
-save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
-                      outpath=outdir/"confusion.png")
 pprint(cnf_mtrx)
 
+save_confusion_matrix(true_labels=yte_label, predictions=yte_prd, p=p,
+                      labels=["Non-response", "Response"],
+                      outpath=outdir/"confusion.png")
+pprint(scores)
 print('\nDone.')

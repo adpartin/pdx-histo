@@ -52,9 +52,9 @@ class TidyData():
             pass
 
 
-def split_data_and_extract_fea(data, ids,
-                               ge_cols, dd_cols,
-                               ge_scaler, dd_scaler,
+def split_data_and_extract_fea(data, ids, split_on,
+                               ge_cols, dd1_cols, dd2_cols,
+                               ge_scaler=None, dd2_scaler=None, dd1_scaler=None,
                                index_col_name: Optional[str]=None,
                                ge_dtype=np.float32, dd_dtype=np.float32):
     """ Split data into T/V/E using the provided ids and extract the separate
@@ -69,14 +69,52 @@ def split_data_and_extract_fea(data, ids,
     # Obtain the relevant ids
     if index_col_name in data.columns:
         df = data[data[index_col_name].isin(ids)]
-        df = df.reset_index(drop=True)
     else:
-        df = data.iloc[ids, :].reset_index(drop=True)
+        df = data.iloc[ids, :]
+
+    # df = df.sort_values(split_on, ascending=True)  # TODO: this line makes the model worse! why??
+    df = df.reset_index(drop=True)
 
     # Extract features
-    ge, dd = df[ge_cols], df[dd_cols]
+    ge, dd1, dd2 = df[ge_cols], df[dd1_cols], df[dd2_cols]
+
+    # Extract meta
+    meta = df.drop(columns=ge_cols + dd1_cols + dd2_cols)
 
     # Scale
-    dd = pd.DataFrame(dd_scaler.transform(dd), columns=dd_cols, dtype=dd_dtype)
-    ge = pd.DataFrame(ge_scaler.transform(ge), columns=ge_cols, dtype=ge_dtype)
-    return ge, dd
+    if dd1_scaler is not None:
+        dd1 = pd.DataFrame(dd1_scaler.transform(dd1), columns=dd1_cols, dtype=dd_dtype)
+
+    if dd2_scaler is not None:
+        dd2 = pd.DataFrame(dd2_scaler.transform(dd2), columns=dd2_cols, dtype=dd_dtype)
+
+    if ge_scaler is not None:
+        ge = pd.DataFrame(ge_scaler.transform(ge), columns=ge_cols, dtype=ge_dtype)
+
+    return ge, dd1, dd2, meta
+
+
+def extract_fea(data, 
+                ge_cols, dd1_cols, dd2_cols,
+                ge_scaler=None, dd2_scaler=None, dd1_scaler=None,
+                ge_dtype=np.float32, dd_dtype=np.float32):
+    """ Split data into T/V/E using the provided ids and extract the separate
+    features.
+
+    TODO:
+    create class TidyData
+    """
+    # Extract features
+    ge, dd1, dd2 = data[ge_cols], data[dd1_cols], data[dd2_cols]
+
+    # Scale
+    if dd1_scaler is not None:
+        dd1 = pd.DataFrame(dd1_scaler.transform(dd1), columns=dd1_cols, dtype=dd_dtype)
+
+    if dd2_scaler is not None:
+        dd2 = pd.DataFrame(dd2_scaler.transform(dd2), columns=dd2_cols, dtype=dd_dtype)
+
+    if ge_scaler is not None:
+        ge = pd.DataFrame(ge_scaler.transform(ge), columns=ge_cols, dtype=ge_dtype)
+
+    return ge, dd1, dd2

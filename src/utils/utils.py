@@ -59,6 +59,16 @@ def get_print_func(logger=None):
     return print if logger is None else logger.info
 
 
+def read_lines(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.read().splitlines()
+    return lines
+
+
+def cast_list(ll, dtype=int):
+    return [dtype(i) for i in ll]
+
+
 class Params():
     """
     Taken from:

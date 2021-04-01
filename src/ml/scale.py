@@ -32,6 +32,7 @@ def scale_fea(xdata, scaler_name='stnd', dtype=np.float32, verbose=False):
 
 
 def get_scaler(fea_df):
+    fea_df = fea_df.drop_duplicates().reset_index(drop=True)
     if fea_df.shape[0] == 0:
         # TODO: add warning!
         return None
