@@ -50,7 +50,7 @@ print(rsp_rna.shape)
 print('Merge with descriptors')
 print(rsp_rna.shape)
 print(dd.shape)
-rsp_rna_dd = rsp_rna.merge(dd, left_on='Drug1', right_on='ID', how='inner').reset_index(drop=True)
+rsp_rna_dd = rsp_rna.merge(dd, left_on='Drug1', right_on='ID', how='inner')
 print(rsp_rna_dd.shape)
 
 # Merge with pdx meta
@@ -65,14 +65,13 @@ print('Merge with cref')
 # (we loose some samples because we filter the bad slides)
 print(cref.shape)
 print(rsp_rna_dd_pdx.shape)
-data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='inner')
+data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='inner').reset_index(drop=True)
 print(data.shape)
 
 # Add 'slide' column
 data.insert(loc=5, column='slide', value=data['image_id'], allow_duplicates=True)
 
 df = data; del data
-
 pprint(df.reset_index().groupby(['ctype', target]).agg({'index': 'nunique'}).reset_index().rename(columns={'index': 'samples'}))
 pprint(df[target].value_counts())
 
