@@ -6,18 +6,15 @@ import sys
 assert sys.version_info >= (3, 5)
 
 import argparse
-from pathlib import Path
-from pprint import pprint
-import json
-import csv
 import glob
 import shutil
+import tempfile
+from pathlib import Path
+from pprint import pprint
 from time import time
-from functools import partial
-from typing import List, Optional, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 import warnings
@@ -25,32 +22,39 @@ warnings.filterwarnings('ignore')
 
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
 
 from tensorflow import keras
 from tensorflow.keras import backend as K
-# from tensorflow.keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
-# from tensorflow.keras import layers
-# from tensorflow.keras import losses
-# from tensorflow.keras import optimizers
+from tensorflow.keras import losses
 from tensorflow.keras.optimizers import Adam
-# from tensorflow.keras.models import Sequential, Model, load_model
-
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
+# from tensorflow.keras.models import Sequential, Model, load_model
 # from tensorflow.keras.utils import plot_model
 
-from tf_utils import get_tfr_files
-from sf_utils import (green, interleave_tfrecords,
-                      parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
-                      create_manifest)
-from models import build_model_rsp, build_model_rna, build_model_rsp_baseline
-from ml.scale import get_scaler
-from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
-from utils.utils import Params, dump_dict
-from datasets.tidy import split_data_and_extract_fea
+# from models import build_model_rsp, build_model_rna, build_model_rsp_baseline, METRICS
+# from ml.scale import get_scaler
+# from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
+# from utils.utils import Params, dump_dict, read_lines, cast_list
+# from datasets.tidy import split_data_and_extract_fea, extract_fea
+# from tf_utils import get_tfr_files
+# from sf_utils import (green, interleave_tfrecords,
+#                       parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
+#                       create_manifest)
 
 fdir = Path(__file__).resolve().parent
-from config import cfg
+# from config import cfg
+sys.path.append(str(fdir/".."))
+import src
+from src.config import cfg
+from src.models import build_model_rsp, build_model_rna, build_model_rsp_baseline
+from src.ml.scale import get_scaler
+from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
+from src.utils.utils import Params, dump_dict, read_lines, cast_list, Timer
+from src.datasets.tidy import split_data_and_extract_fea, extract_fea
+from src.tf_utils import get_tfr_files
+from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_class_weights,
+                          parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
+                          create_manifest)
 
 # Seed
 seed = 42
@@ -62,20 +66,18 @@ parser = argparse.ArgumentParser("Train NN.")
 parser.add_argument('-t', '--target',
                     type=str,
                     nargs='+',
-                    # default=['ctype'],
                     default=['Response'],
                     choices=['Response', 'ctype', 'csite'],
                     help='Name of target output.')
 parser.add_argument('--id_name',
                     type=str,
-                    # default='slide',
                     default='smp',
                     choices=['slide', 'smp'],
                     help='Column name of the ID.')
 parser.add_argument('--split_on',
                     type=str,
                     default=None,
-                    choices=['Sample', 'slide'],
+                    choices=['Sample', 'slide', 'Group'],
                     help='Specify the hard split variable/column (default: None).')
 parser.add_argument('--prjname',
                     type=str,
@@ -88,7 +90,7 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-import ipdb; ipdb.set_trace()
+single_drug = False
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
@@ -97,7 +99,7 @@ data = pd.read_csv(annotations_file)
 print(data.shape)
 
 # Outdir
-split_on = 'none' if args.split_on is (None or 'none') else args.split_on
+split_on = "none" if args.split_on is (None or "none") else args.split_on
 outdir = prjdir/f"multimodal/split_on_{split_on}"
 os.makedirs(outdir, exist_ok=True)
 
@@ -108,27 +110,31 @@ if prm_file_path.exists() is False:
     shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
 params = Params(prm_file_path)
 
-if args.target[0] == 'Response':
-    pprint(data.reset_index().groupby(['ctype', 'Response']).agg({
-        'index': 'nunique'}).reset_index().rename(columns={'index': 'count'}))
+# import ipdb; ipdb.set_trace()
+print("\nFull dataset:")
+if args.target[0] == "Response":
+    pprint(data.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
+        columns={split_on: f"{split_on}_unq", "smp": "smp_unq"}))
 else:
     pprint(data[args.target[0]].value_counts())
 
-ge_cols = [c for c in data.columns if c.startswith('ge_')]
-dd_cols = [c for c in data.columns if c.startswith('dd_')]
-data = data.astype({'image_id': str, 'slide': str})
+ge_cols  = [c for c in data.columns if c.startswith("ge_")]
+dd1_cols = [c for c in data.columns if c.startswith("dd1_")]
+dd2_cols = [c for c in data.columns if c.startswith("dd2_")]
+data = data.astype({"image_id": str, "slide": str})
 
-# RNA scaler
-if params.use_ge:
+# Scalers for each feature set
+ge_scaler, dd1_scaler, dd2_scaler = None, None, None
+
+if params.use_ge and len(ge_cols) > 0:
     ge_scaler = get_scaler(data[ge_cols])
-else:
-    ge_scaler = None
 
-# Descriptors scaler
-if params.use_dd:
-    dd_scaler = get_scaler(data[dd_cols])
-else:
-    dd_scaler = None
+if params.use_dd1 and len(dd1_cols) > 0:
+    dd1_scaler = get_scaler(data[dd1_cols])
+
+if params.use_dd2 and len(dd2_cols) > 0:
+    dd2_scaler = get_scaler(data[dd2_cols])
+
 
 
 BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
@@ -171,8 +177,13 @@ label = f'{params.tile_px}px_{params.tile_um}um'
 
 
 if args.target[0] == 'Response':
-    tfr_dir = cfg.SF_TFR_DIR_RSP
-    parse_fn = parse_tfrec_fn_rsp
+    if params.single_drug:
+        tfr_dir = cfg.SF_TFR_DIR_RSP
+        parse_fn = parse_tfrec_fn_rsp
+    else:
+        tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
+        parse_fn = parse_tfrec_fn_rsp  # TODO: update this!
+
 elif args.target[0] == 'ctype':
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
     parse_fn = parse_tfrec_fn_rna
@@ -206,7 +217,9 @@ print(outcome_labels)
 # ---------------
 # Create manifest - done
 # ---------------
-manifest = create_manifest(directory=tfr_dir)
+timer = Timer()
+manifest = create_manifest(directory=tfr_dir, n_files=None)
+timer.display_timer()
 print('\nmanifest:')
 print(type(manifest))
 print(len(manifest))
@@ -250,58 +263,123 @@ print(manifest[list(manifest.keys())[3]])
 # Data splits
 # -----------------------------------------------
 
+# ------------------------------------------------------------
+# My (ap) splits
+# --------------
+# splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
+# split_id = 0
+
+# split_pattern = f'1fold_s{split_id}_*_id.txt'
+# single_split_files = glob.glob(str(splitdir/split_pattern))
+
+# assert len(single_split_files) >= 2, f'Split {split_id} contains only one file.'
+# for id_file in single_split_files:
+#     if 'tr_id' in id_file:
+#         tr_id = cast_list(read_lines(id_file), int)
+#     elif 'vl_id' in id_file:
+#         vl_id = cast_list(read_lines(id_file), int)
+#     elif 'te_id' in id_file:
+#         te_id = cast_list(read_lines(id_file), int)
+# ------------------------------------------------------------
+
+# ------------------------------------------------------------
+# Yitan's splits
+# --------------
 # import ipdb; ipdb.set_trace()
+splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
+# split_id = 0
+split_id = 2
 
-# T/V/E filenames
-# splitdir = prjdir/f'annotations.splits/split_on_{split_on}'
-splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
-split_id = 0
+index_col_name = "index"
+tr_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TrainList.txt")), int)
+vl_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"ValList.txt")), int)
+te_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TestList.txt")), int)
 
-split_pattern = f'1fold_s{split_id}_*_id.txt'
-single_split_files = glob.glob(str(splitdir/split_pattern))
-# single_split_files = list(splitdir.glob(split_pattern))
+# Update ids
+tr_id = sorted(set(data[index_col_name]).intersection(set(tr_id)))
+vl_id = sorted(set(data[index_col_name]).intersection(set(vl_id)))
+te_id = sorted(set(data[index_col_name]).intersection(set(te_id)))
+# ------------------------------------------------------------
 
-def read_lines(file_path):
-    with open(file_path, 'r') as file:
-        lines = file.read().splitlines()
-    return lines
+# kwargs = {"ge_cols": ge_cols,
+#           "dd_cols": dd_cols,
+#           "ge_scaler": ge_scaler,
+#           "dd_scaler": dd_scaler,
+#           "ge_dtype": cfg.GE_DTYPE,
+#           "dd_dtype": cfg.DD_DTYPE
+# }
+# tr_ge, tr_dd = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
+# vl_ge, vl_dd = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
+# te_ge, te_dd = split_data_and_extract_fea(data, ids=te_id, **kwargs)
 
-def cast_list(ll, dtype=int):
-    return [dtype(i) for i in ll]
+# ge_shape = (te_ge.shape[1],)
+# dd_shape = (tr_dd.shape[1],)
 
-# Get indices for the split
-assert len(single_split_files) >= 2, f'Split {split_id} contains only one file.'
-for id_file in single_split_files:
-    if 'tr_id' in id_file:
-        tr_id = cast_list(read_lines(id_file), int)
-    elif 'vl_id' in id_file:
-        vl_id = cast_list(read_lines(id_file), int)
-    elif 'te_id' in id_file:
-        te_id = cast_list(read_lines(id_file), int)
+# # Variables (dict/dataframes/arrays) that are passed as features to the NN
+# xtr = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
+# xvl = {"ge_data": vl_ge.values, "dd_data": vl_dd.values}
+# xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
+
+# # Extarct meta for T/V/E
+# tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+# vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+# te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
 
 kwargs = {"ge_cols": ge_cols,
-          "dd_cols": dd_cols,
+          "dd1_cols": dd1_cols,
+          "dd2_cols": dd2_cols,
           "ge_scaler": ge_scaler,
-          "dd_scaler": dd_scaler,
+          "dd1_scaler": dd1_scaler,
+          "dd2_scaler": dd2_scaler,
           "ge_dtype": cfg.GE_DTYPE,
-          "dd_dtype": cfg.DD_DTYPE
+          "dd_dtype": cfg.DD_DTYPE,
+          "index_col_name": index_col_name,
+          "split_on": split_on
 }
-tr_ge, tr_dd = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
-vl_ge, vl_dd = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
-te_ge, te_dd = split_data_and_extract_fea(data, ids=te_id, **kwargs)
+tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
+vl_ge, vl_dd1, vl_dd2, vl_meta = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
+te_ge, te_dd1, te_dd2, te_meta = split_data_and_extract_fea(data, ids=te_id, **kwargs)
 
-ge_shape = (te_ge.shape[1],)
-dd_shape = (tr_dd.shape[1],)
+ge_shape = (tr_ge.shape[1],)
+dd_shape = (tr_dd1.shape[1],)
 
 # Variables (dict/dataframes/arrays) that are passed as features to the NN
-xtr = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
-xvl = {"ge_data": vl_ge.values, "dd_data": vl_dd.values}
-xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
+xtr = {"ge_data": tr_ge.values, "dd1_data": tr_dd1.values, "dd2_data": tr_dd2.values}
+xvl = {"ge_data": vl_ge.values, "dd1_data": vl_dd1.values, "dd2_data": vl_dd2.values}
+xte = {"ge_data": te_ge.values, "dd1_data": te_dd1.values, "dd2_data": te_dd2.values}
 
-# Extarct meta for T/V/E
-tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
+# import ipdb; ipdb.set_trace()
+print("\nTrain:")
+pprint(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print("\nVal:")
+pprint(vl_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print("\nTest:")
+pprint(te_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+
+# Make sure indices do not overlap
+assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
+assert len( set(tr_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and te"
+assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and vl"
+
+# Print split ratios
+print("")
+print("Train samples {} ({:.2f}%)".format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
+print("Val   samples {} ({:.2f}%)".format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
+print("Test  samples {} ({:.2f}%)".format( len(te_id), 100*len(te_id)/data.shape[0] ))
+
+tr_grp_unq = set(tr_meta[split_on].values)
+vl_grp_unq = set(vl_meta[split_on].values)
+te_grp_unq = set(te_meta[split_on].values)
+print("")
+print(f"Total intersects on {split_on} btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}")
+print(f"Total intersects on {split_on} btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}")
+print(f"Total intersects on {split_on} btw vl and te: {len(vl_grp_unq.intersection(te_grp_unq))}")
+print(f"Unique {split_on} in tr: {len(tr_grp_unq)}")
+print(f"Unique {split_on} in vl: {len(vl_grp_unq)}")
+print(f"Unique {split_on} in te: {len(te_grp_unq)}")
+
+
+
 
 # List of sample names for T/V/E
 tr_smp_names = list(tr_meta[args.id_name].values)
@@ -314,23 +392,6 @@ vl_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)  # validation_tfrecords
 te_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
 print('Total samples {}'.format(len(tr_tfr_files) + len(vl_tfr_files) + len(te_tfr_files)))
 
-# # Dataframes of T/V/E samples
-# tr_df = data.iloc[tr_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-# vl_df = data.iloc[vl_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-# te_df = data.iloc[te_id, :].sort_values(args.id_name, ascending=True).reset_index(drop=True)
-# print('Total samples {}'.format(tr_df.shape[0] + vl_df.shape[0] + te_df.shape[0]))
-
-# # List of sample names for T/V/E
-# tr_smp_names = list(tr_df[args.id_name].values)
-# vl_smp_names = list(vl_df[args.id_name].values)
-# te_smp_names = list(te_df[args.id_name].values)
-
-# # TFRecords filenames
-# tr_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)  # training_tfrecords
-# vl_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)  # validation_tfrecords
-# te_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
-# print('Total samples {}'.format(len(tr_tfr_files) + len(vl_tfr_files) + len(te_tfr_files)))
-
 # Missing tfrecords
 print('\nThese samples miss a tfrecord ...\n')
 print(data.loc[~data[args.id_name].isin(tr_smp_names + vl_smp_names + te_smp_names), ['smp', 'image_id']])
@@ -339,35 +400,14 @@ train_tfrecords = tr_tfr_files
 val_tfrecords = vl_tfr_files
 test_tfrecords = te_tfr_files
 
-# import ipdb; ipdb.set_trace()
-
-# tr_ge_df, tr_dd_df = tr_df[ge_cols], tr_df[dd_cols]
-# vl_ge_df, vl_dd_df = vl_df[ge_cols], vl_df[dd_cols]
-# te_ge_df, te_dd_df = te_df[ge_cols], te_df[dd_cols]
-
-# tr_dd_df = pd.DataFrame(dd_scaler.transform(tr_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
-# vl_dd_df = pd.DataFrame(dd_scaler.transform(vl_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
-# te_dd_df = pd.DataFrame(dd_scaler.transform(te_dd_df), columns=dd_cols, dtype=cfg.DD_DTYPE)
-
-# tr_ge_df = pd.DataFrame(ge_scaler.transform(tr_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-# vl_ge_df = pd.DataFrame(ge_scaler.transform(vl_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-# te_ge_df = pd.DataFrame(ge_scaler.transform(te_ge_df), columns=ge_cols, dtype=cfg.GE_DTYPE)
-
-# tr_y_df = tr_df[args.target]
-# vl_y_df = vl_df[args.target]
-# te_y_df = te_df[args.target]
-
 ydata = data[args.target[0]].values
 ytr = ydata[tr_id]
 yvl = ydata[vl_id]
 yte = ydata[te_id]
 
-assert sorted(tr_smp_names) == sorted(tr_meta[args.id_name].values.tolist()), "Sample names \
-    in the tr_smp_names and tr_meta don't match."
-assert sorted(vl_smp_names) == sorted(vl_meta[args.id_name].values.tolist()), "Sample names \
-    in the vl_smp_names and vl_meta don't match."
-assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "Sample names \
-    in the te_smp_names and te_meta don't match."
+assert sorted(tr_smp_names) == sorted(tr_meta[args.id_name].values.tolist()), "Sample names in the tr_smp_names and tr_meta don't match."
+assert sorted(vl_smp_names) == sorted(vl_meta[args.id_name].values.tolist()), "Sample names in the vl_smp_names and vl_meta don't match."
+assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "Sample names in the te_smp_names and te_meta don't match."
 
 # split_outdir = outdir/f'split_{split_id}'
 # os.makedirs(split_outdir, exist_ok=True)
@@ -436,21 +476,34 @@ steps_per_epoch_override = None  # what's that??
 # AUGMENT = True
 
 
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
     # Response
     parse_fn = parse_tfrec_fn_rsp
+    # parse_fn_kwargs = {
+    #     'use_tile': params.use_tile,
+    #     'use_ge': params.use_ge,
+    #     'use_dd': params.use_dd,
+    #     'ge_scaler': ge_scaler,
+    #     'dd_scaler': dd_scaler,
+    #     'id_name': args.id_name,
+    #     'MODEL_TYPE': params.model_type,
+    #     'AUGMENT': params.augment,
+    #     'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
+    # }
     parse_fn_kwargs = {
-        'use_tile': params.use_tile,
-        'use_ge': params.use_ge,
-        'use_dd': params.use_dd,
-        'ge_scaler': ge_scaler,
-        'dd_scaler': dd_scaler,
-        'id_name': args.id_name,
-        'MODEL_TYPE': params.model_type,
-        'AUGMENT': params.augment,
-        'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES
+        "use_tile": params.use_tile,
+        "use_ge": params.use_ge,
+        "use_dd1": params.use_dd1,
+        "use_dd2": params.use_dd2,
+        "ge_scaler": ge_scaler,
+        "dd1_scaler": dd1_scaler,
+        "dd2_scaler": dd2_scaler,
+        "id_name": args.id_name,
+        "MODEL_TYPE": params.model_type,
+        "AUGMENT": params.augment,
+        "ANNOTATIONS_TABLES": ANNOTATIONS_TABLES
     }
 else:
     # Ctype
@@ -465,8 +518,36 @@ else:
         'AUGMENT': params.augment,
     }
 
+import ipdb; ipdb.set_trace()
+# class_weights_method = "BY_SAMPLE"
+class_weights_method = "BY_TILE"
+# class_weights_method = "NONE"
+
+# from sklearn.utils.class_weight import compute_class_weight
+# y = tr_meta["Response"].values
+# class_weight = compute_class_weight("balanced", classes=np.unique(y), y=y)
+class_weight = calc_class_weights(TRAIN_TFRECORDS,
+                                  class_weights_method=class_weights_method,
+                                  MANIFEST=MANIFEST,
+                                  SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+                                  MODEL_TYPE=params.model_type)
+
 print("\nTraining TFRecods")
-train_data, _, num_tiles = interleave_tfrecords(
+# train_data, _, num_tiles = interleave_tfrecords(
+#     tfrecords=TRAIN_TFRECORDS,
+#     batch_size=params.batch_size,
+#     balance=params.balanced_training,
+#     finite=False,
+#     max_tiles=max_tiles_per_slide,
+#     min_tiles=min_tiles_per_slide,
+#     include_smp_names=False,
+#     parse_fn=parse_fn,
+#     MANIFEST=MANIFEST,
+#     SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#     SAMPLES=SAMPLES,
+#     **parse_fn_kwargs
+# )
+train_data, _, num_tiles = create_tf_data(
     tfrecords=TRAIN_TFRECORDS,
     batch_size=params.batch_size,
     balance=params.balanced_training,
@@ -486,12 +567,12 @@ bb = next(train_data.__iter__())
 
 # import ipdb; ipdb.set_trace()
 if params.use_ge:
-    ge_shape = bb[0]['ge_data'].numpy().shape[1:]
+    ge_shape = bb[0]["ge_data"].numpy().shape[1:]
 else:
     ge_shape = None
 
-if params.use_dd:
-    dd_shape = bb[0]['dd_data'].numpy().shape[1:]
+if params.use_dd1:
+    dd_shape = bb[0]["dd_data"].numpy().shape[1:]
 else:
     dd_shape = None
 
@@ -611,6 +692,23 @@ if DTYPE == 'float16':
 # -------------
 # Train model
 # -------------
+
+# Note! When I put METRICS in model.py, it immediately occupies a lot of the GPU memory!
+# METRICS = [
+#       keras.metrics.TruePositives(name='tp'),
+#       keras.metrics.FalsePositives(name='fp'),
+#       keras.metrics.TrueNegatives(name='tn'),
+#       keras.metrics.FalseNegatives(name='fn'),
+#       keras.metrics.BinaryAccuracy(name='accuracy'),
+#       keras.metrics.Precision(name='precision'),
+#       keras.metrics.Recall(name='recall'),
+#       keras.metrics.AUC(name='auc'),
+# ]
+
+METRICS = [
+      keras.metrics.TruePositives(name='tp'),
+      keras.metrics.AUC(name='auc'),
+]
 
 # import ipdb; ipdb.set_trace()
 

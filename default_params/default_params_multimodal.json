@@ -11,10 +11,12 @@
     "model_type": "categorical",
     "pooling": "max",
     "pretrain": "imagenet",
+    "single_drug": false,
     "tile_px": 299,
     "tile_um": 302,
     "toplayer_epochs": 0,
-    "use_dd": true,
+    "use_dd1": true,
+    "use_dd2": true,
     "use_fp16": true,
     "use_ge": true,
     "use_tile": true

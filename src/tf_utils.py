@@ -1,7 +1,9 @@
 from pathlib import Path
+from typing import List
+import os
+import glob
 import numpy as np
 import pandas as pd
-from typing import List
 
 try:
     import tensorflow as tf
@@ -192,21 +194,27 @@ def get_tfr_files(tfr_dir, tfr_names) -> List[str]:
     Example:
         get_tfr_files(tr_smp_names)
     """
-    tfr_all_files = sorted(tfr_dir.glob('*.tfrec*'))
+    # tfr_all_files = sorted(tfr_dir.glob('*.tfrec*'))
+    tfr_all_files = sorted(glob.glob(f"{str(tfr_dir)}/*.tfrec*"))
     tfr_sub_files = []
 
-    suffix = np.unique([s.suffix for s in tfr_all_files])
+    # suffix = np.unique([s.suffix for s in tfr_all_files])
+    suffix = np.unique([os.path.splitext(s)[-1] for s in tfr_all_files])
     if len(suffix) < 1:
         raise FileNotFoundError("No files found with suffix '.tfrec*'") 
     if len(suffix) > 1:
         "Multiple files with variations of '.tfrec*' suffix found."
     suffix = suffix[0]
 
-    for sname in tfr_names:
-        fname = tfr_dir/(sname + suffix)
-        if fname not in tfr_all_files:
-            raise ValueError(f'File was not found in:\n\t{fname}')
-        tfr_sub_files.append(str(fname))
+    tfr_query_files = [str(tfr_dir/(fname + suffix)) for fname in tfr_names]
+    tfr_sub_files = list(set(tfr_query_files).intersection(set(tfr_all_files)))
+
+    # # Takes too long!
+    # for ii, sname in enumerate(tfr_names):
+    #     fname = tfr_dir/(sname + suffix)
+    #     if fname not in tfr_all_files:
+    #         raise ValueError(f"File was not found in:\n\t{fname}")
+    #     tfr_sub_files.append(str(fname))
 
     return tfr_sub_files
 

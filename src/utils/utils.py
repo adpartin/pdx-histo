@@ -1,11 +1,9 @@
-import sys
 import json
+import pandas as pd
 from pathlib import Path
 from pprint import pprint, pformat
-
-# import sklearn
-import pandas as pd
-
+import sys
+from time import time
 # from sklearn.preprocessing import LabelEncoder
 
 
@@ -101,3 +99,23 @@ class Params():
     def dict(self):
         """Gives dict-like access to Params instance by `params.dict['learning_rate']`"""
         return self.__dict__
+
+
+class Timer:
+  """
+  Measure runtime.
+  """
+  def __init__(self):
+    self.start = time()
+
+  def timer_end(self):
+    self.end = time()
+    time_diff = self.end - self.start
+    return time_diff
+
+  def display_timer(self):
+    time_diff = self.timer_end()
+    if (time_diff)//3600 > 0:
+        print("Runtime: {:.1f} hrs".format( (time_diff)/3600) )
+    else:
+        print("Runtime: {:.1f} mins".format( (time_diff)/60) )

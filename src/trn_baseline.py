@@ -9,13 +9,14 @@ import argparse
 import glob
 import shutil
 import tempfile
-from time import time
 from pathlib import Path
 from pprint import pprint
+from time import time
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.metrics import confusion_matrix
+from sklearn.utils.class_weight import compute_class_weight
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -27,12 +28,14 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 from tensorflow.keras import losses
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
+# from tensorflow.keras.models import Sequential, Model, load_model
+# from tensorflow.keras.utils import plot_model
 
-from models import build_model_rsp_baseline, METRICS
+from models import build_model_rsp_baseline
 from ml.scale import get_scaler
 from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
 from utils.utils import Params, dump_dict, read_lines, cast_list
-
 from datasets.tidy import split_data_and_extract_fea, extract_fea
 
 fdir = Path(__file__).resolve().parent
@@ -48,13 +51,11 @@ parser = argparse.ArgumentParser("Train NN.")
 parser.add_argument('-t', '--target',
                     type=str,
                     nargs='+',
-                    # default=['ctype'],
                     default=['Response'],
                     choices=['Response', 'ctype', 'csite'],
                     help='Name of target output.')
 parser.add_argument('--id_name',
                     type=str,
-                    # default='slide',
                     default='smp',
                     choices=['slide', 'smp'],
                     help='Column name of the ID.')
@@ -65,7 +66,6 @@ parser.add_argument('--split_on',
                     help='Specify the hard split variable/column (default: None).')
 parser.add_argument('--prjname',
                     type=str,
-                    default='bin_rsp_all',
                     help='Project name (folder that contains the annotations.csv dataframe).')
 parser.add_argument('--dataname',
                     type=str,
@@ -102,7 +102,7 @@ if args.target[0] == "Response":
 else:
     pprint(data[args.target[0]].value_counts())
 
-ge_cols = [c for c in data.columns if c.startswith("ge_")]
+ge_cols  = [c for c in data.columns if c.startswith("ge_")]
 dd1_cols = [c for c in data.columns if c.startswith("dd1_")]
 dd2_cols = [c for c in data.columns if c.startswith("dd2_")]
 data = data.astype({"image_id": str, "slide": str})
@@ -246,7 +246,6 @@ print(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
 def keras_callbacks(outdir, monitor='val_loss'):
     """ ... """
-    from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
     checkpointer = ModelCheckpoint(str(outdir/'model_best_at_{epoch}.ckpt'), monitor='val_loss',
                                    verbose=0, save_weights_only=False, save_best_only=True)
     csv_logger = CSVLogger(outdir/'training.log')
@@ -319,6 +318,23 @@ yte_label = te_meta[args.target[0]].values
 # Define and Train
 # --------------------------
 
+# Note! When I put METRICS in model.py, it immediately occupies a lot of the GPU memory!
+# METRICS = [
+#       keras.metrics.TruePositives(name='tp'),
+#       keras.metrics.FalsePositives(name='fp'),
+#       keras.metrics.TrueNegatives(name='tn'),
+#       keras.metrics.FalseNegatives(name='fn'),
+#       keras.metrics.BinaryAccuracy(name='accuracy'),
+#       keras.metrics.Precision(name='precision'),
+#       keras.metrics.Recall(name='recall'),
+#       keras.metrics.AUC(name='auc'),
+# ]
+
+METRICS = [
+      keras.metrics.TruePositives(name='tp'),
+      keras.metrics.AUC(name='auc'),
+]
+
 neg, pos = np.bincount(data["Response"])
 total = neg + pos
 print('Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n'.format(total, pos, 100 * pos / total))
@@ -329,7 +345,11 @@ print(output_bias)
 # Scaling by total/2 helps keep the loss to a similar magnitude.
 # The sum of the weights of all examples stays the same.
 weighted = True
+import ipdb; ipdb.set_trace()
 if weighted:
+    # y = data["Response"].values
+    # weights = compute_class_weight("balanced", classes=np.unique(y), y=y)
+    # class_weight = {0: weights[0], 1: weights[1]}
     weight_for_0 = (1 / neg) * (total) / 2.0
     weight_for_1 = (1 / pos) * (total) / 2.0
     class_weight = {0: weight_for_0, 1: weight_for_1}

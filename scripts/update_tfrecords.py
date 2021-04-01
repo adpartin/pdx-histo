@@ -34,6 +34,7 @@ from src import load_data
 from src.load_data import PDX_SAMPLE_COLS
 from src.tfrecords import FEA_SPEC, FEA_SPEC_RSP, FEA_SPEC_RSP_DRUG_PAIR, FEA_SPEC_RNA_NEW, original_tfr_names
 from src.tf_utils import _float_feature, _bytes_feature, _int64_feature
+from src.utils.utils import Timer
 
 # Seed
 seed = 42
@@ -52,8 +53,10 @@ def green(text):
 
 
 n_samples = None
-# n_samples = 4
+# n_samples = 3
 single_drug = False
+
+timer = Timer()
 
 
 def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: bool=False) -> None:
@@ -223,8 +226,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
         rel_tfr = str(slide_name) + ".tfrecords"
         tfr = str(directory/rel_tfr)
         
-        print(f"\r\033[K Creating tfrecords using {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...",
-              end="") 
+        print(f"\r\033[K Creating tfrecords using {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...", end="") 
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
@@ -300,7 +302,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
 
     smp = samples[0]
     tfr_path = str(outpath/(smp + ".tfrecords"))
@@ -312,8 +314,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     else:
         features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP_DRUG_PAIR)
     print(np.frombuffer(features["ge_data"].numpy(), dtype=cfg.GE_DTYPE))
-    print(np.frombuffer(features["dd1_data"].numpy(), dtype=cfg.DD_DTYPE))
-    print(np.frombuffer(features["dd2_data"].numpy(), dtype=cfg.DD_DTYPE))
+    # print(np.frombuffer(features["dd1_data"].numpy(), dtype=cfg.DD_DTYPE))
+    # print(np.frombuffer(features["dd2_data"].numpy(), dtype=cfg.DD_DTYPE))
     tf.print(features.keys())
 
     print("\nDone.")
@@ -479,3 +481,4 @@ def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
 
 # update_tfrecords_with_rna(n_samples)
 update_tfrecords_for_drug_rsp(n_samples, single_drug)
+timer.display_timer()

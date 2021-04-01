@@ -144,7 +144,8 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         # rsp = rsp.drop_duplicates()
     else:
         # Create drug treatment string ids
-        rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]        
+        # rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]        
+        rsp["trt"] = [str(d1) + "_" + str(d2) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
 
         # Augment drug-pair treatments
         rsp["aug"] = [True if d1 != d2 else False for (d1, d2) in zip(rsp["Drug1"], rsp["Drug2"])]
@@ -152,7 +153,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     # rsp = parse_Sample_col(rsp)
     
-    # Create column of unique treatments
+    # Create column of treatments
     col_name = "smp"
     if col_name not in rsp.columns:
         smp = [str(s) + "_" + str(d) for s, d in zip(rsp["Sample"], rsp["trt"])]

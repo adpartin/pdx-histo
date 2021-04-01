@@ -5,7 +5,7 @@
     "batch_size": 32,
     "early_stop_method": "loss",
     "early_stop": true,
-    "epochs": 20,
+    "epochs": 10,
     "image_size": 299,
     "learning_rate": 0.0001,
     "model_type": "categorical",
@@ -14,7 +14,8 @@
     "tile_px": 299,
     "tile_um": 302,
     "toplayer_epochs": 0,
-    "use_dd": true,
+    "use_dd1": true,
+    "use_dd2": true,
     "use_fp16": true,
     "use_ge": true,
     "use_tile": true
