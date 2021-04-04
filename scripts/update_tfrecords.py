@@ -218,6 +218,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     print(f"A total of {len(c_slides)} drug response samples with tfrecords and tabular features.")
 
     # import ipdb; ipdb.set_trace()
+    tile_counter = []
 
     # Create a tfrecord for each sample (iter over samples)
     for i, slide_name in enumerate(sorted(c_slides)):
@@ -239,7 +240,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
             writer = tf.io.TFRecordWriter(tfr_fname)
 
             # Iter over tiles of the current slide
-            for tile_cnt, rec in enumerate(raw_dataset):
+            for tile_id, rec in enumerate(raw_dataset):
                 # Features of the current rec from old tfrecord
                 features = tf.io.parse_single_example(rec, features=FEA_SPEC)
                 # tf.print(features.keys())
@@ -260,6 +261,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                         "smp":         _bytes_feature(bytes(slide_meta["smp"], "utf-8")),
                         "Group":       _bytes_feature(bytes(slide_meta["Group"], "utf-8")),
                         "grp_name":    _bytes_feature(bytes(slide_meta["grp_name"], "utf-8")),
+                        
+                        "tile_id":     _bytes_feature(bytes(tile_id, "utf-8")),
 
                         "Sample":      _bytes_feature(bytes(slide_meta["Sample"], "utf-8")),
                         "model":       _bytes_feature(bytes(slide_meta["model"], "utf-8")),
@@ -294,10 +297,13 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                 
                 writer.write(ex.SerializeToString())
 
-            print(f"Total tiles in the sample {tile_cnt+1}")
+            print(f"Total tiles in the sample {tile_id+1}")
+            tile_counter.append( {"slide": slide_name, "max_tiles": tile_id+1} )
             writer.close()
         print()
         
+    tile_counter = pd.DataFrame(tile_counter)
+    
         
     # ------------------
     # Inspect a TFRecord
