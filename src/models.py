@@ -181,6 +181,9 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     NUM_CLASSES=None, output_bias=None,
                     pooling="max", pretrain="imagenet"):
     """ ... """
+    if output_bias is not None:
+        output_bias = tf.keras.initializers.Constant(output_bias)
+        
     model_inputs = []
     merge_inputs = []
 

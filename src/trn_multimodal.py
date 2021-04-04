@@ -380,7 +380,6 @@ print(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
 
 
-
 # List of sample names for T/V/E
 tr_smp_names = list(tr_meta[args.id_name].values)
 vl_smp_names = list(vl_meta[args.id_name].values)
@@ -502,8 +501,7 @@ if args.target[0] == 'Response':
         "dd2_scaler": dd2_scaler,
         "id_name": args.id_name,
         "MODEL_TYPE": params.model_type,
-        "AUGMENT": params.augment,
-        "ANNOTATIONS_TABLES": ANNOTATIONS_TABLES
+        "AUGMENT": params.augment
     }
 else:
     # Ctype
@@ -518,7 +516,6 @@ else:
         'AUGMENT': params.augment,
     }
 
-import ipdb; ipdb.set_trace()
 # class_weights_method = "BY_SAMPLE"
 class_weights_method = "BY_TILE"
 # class_weights_method = "NONE"
@@ -547,20 +544,20 @@ print("\nTraining TFRecods")
 #     SAMPLES=SAMPLES,
 #     **parse_fn_kwargs
 # )
-train_data, _, num_tiles = create_tf_data(
+import ipdb; ipdb.set_trace()
+
+train_data = create_tf_data(
     tfrecords=TRAIN_TFRECORDS,
-    batch_size=params.batch_size,
-    balance=params.balanced_training,
-    finite=False,
-    max_tiles=max_tiles_per_slide,
-    min_tiles=min_tiles_per_slide,
-    include_smp_names=False,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
     parse_fn=parse_fn,
-    MANIFEST=MANIFEST,
-    SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-    SAMPLES=SAMPLES,
-    **parse_fn_kwargs
-)
+    include_meta=False,
+    **parse_fn_kwargs)
 
 # Determine feature shapes from data
 bb = next(train_data.__iter__())
@@ -585,53 +582,80 @@ for i, item in enumerate(bb):
 for i, rec in enumerate(train_data.take(4)):
     tf.print(rec[1])
 
-using_validation = True
-
-# Test data
-if using_validation:
-    print("\nValidation TFRecods")
-    val_data, val_data_with_smp_names, _ = interleave_tfrecords(
-        tfrecords=VALIDATION_TFRECORDS,
-        batch_size=val_batch_size,
-        balance='NO_BALANCE',
-        finite=True,
-        max_tiles=max_tiles_per_slide,
-        min_tiles=min_tiles_per_slide,
-        include_smp_names=True,
-        parse_fn=parse_fn,
-        MANIFEST=MANIFEST,
-        SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-        SAMPLES=SAMPLES,
-        **parse_fn_kwargs
-    )
-
-    if validation_steps:
-        validation_data_for_training = val_data.repeat()
-        print(f"Using {validation_steps} batches ({validation_steps * params.batch_size} samples) each validation check")
-    else:
-        validation_data_for_training = val_data
-        print(f"Using entire validation set each validation check")
-else:
-    log.info("Validation during training: None", 1)
-    validation_data_for_training = None
-    validation_steps = 0
-
-# Test data
-print("\nTest TFRecods")
-test_data, test_data_with_smp_names, _ = interleave_tfrecords(
-    tfrecords=test_tfrecords,
-    batch_size=val_batch_size,
-    balance='NO_BALANCE',
-    finite=True,
-    max_tiles=max_tiles_per_slide,
-    min_tiles=min_tiles_per_slide,
-    include_smp_names=True,
+val_data = create_tf_data(
+    tfrecords=VAL_TFRECORDS,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
     parse_fn=parse_fn,
-    MANIFEST=MANIFEST,
-    SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-    SAMPLES=SAMPLES,
-    **parse_fn_kwargs
-)
+    include_meta=True,
+    **parse_fn_kwargs)
+
+test_data = create_tf_data(
+    tfrecords=TEST_TFRECORDS,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
+    parse_fn=parse_fn,
+    include_meta=True,
+    **parse_fn_kwargs)
+
+# using_validation = True
+
+# # Test data
+# if using_validation:
+#     print("\nValidation TFRecods")
+#     val_data, val_data_with_smp_names, _ = interleave_tfrecords(
+#         tfrecords=VALIDATION_TFRECORDS,
+#         batch_size=val_batch_size,
+#         balance='NO_BALANCE',
+#         finite=True,
+#         max_tiles=max_tiles_per_slide,
+#         min_tiles=min_tiles_per_slide,
+#         include_smp_names=True,
+#         parse_fn=parse_fn,
+#         MANIFEST=MANIFEST,
+#         SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#         SAMPLES=SAMPLES,
+#         **parse_fn_kwargs
+#     )
+
+#     if validation_steps:
+#         validation_data_for_training = val_data.repeat()
+#         print(f"Using {validation_steps} batches ({validation_steps * params.batch_size} samples) each validation check")
+#     else:
+#         validation_data_for_training = val_data
+#         print(f"Using entire validation set each validation check")
+# else:
+#     log.info("Validation during training: None", 1)
+#     validation_data_for_training = None
+#     validation_steps = 0
+
+# # Test data
+# print("\nTest TFRecods")
+# test_data, test_data_with_smp_names, _ = interleave_tfrecords(
+#     tfrecords=test_tfrecords,
+#     batch_size=val_batch_size,
+#     balance='NO_BALANCE',
+#     finite=True,
+#     max_tiles=max_tiles_per_slide,
+#     min_tiles=min_tiles_per_slide,
+#     include_smp_names=True,
+#     parse_fn=parse_fn,
+#     MANIFEST=MANIFEST,
+#     SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#     SAMPLES=SAMPLES,
+#     **parse_fn_kwargs
+# )
+
 
 # ----------------------
 # Prep for training
@@ -715,11 +739,13 @@ METRICS = [
 if args.target[0] == 'Response':
     if params.use_tile is True:
         model = build_model_rsp(use_ge=params.use_ge,
-                                use_dd=params.use_dd,
+                                use_dd1=params.use_dd1,
+                                use_dd2=params.use_dd2,
                                 use_tile=params.use_tile,
                                 ge_shape=ge_shape,
                                 dd_shape=dd_shape,
                                 model_type=params.model_type,
+                                output_bias=None,
                                 NUM_CLASSES=NUM_CLASSES)
     else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
