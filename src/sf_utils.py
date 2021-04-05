@@ -405,9 +405,9 @@ def parse_tfrec_fn_rsp(record,
                        dd1_scaler=None,
                        dd2_scaler=None,
                        id_name="smp",
+                       augment=True,
                        MODEL_TYPE=None,
                        ANNOTATIONS_TABLES=None,
-                       AUGMENT=True
                        ):
     ''' Parses raw entry read from TFRecord. '''
     feature_description = FEA_SPEC_RSP_DRUG_PAIR
@@ -442,7 +442,7 @@ def parse_tfrec_fn_rsp(record,
 
     if use_tile:
         image_string = features["image_raw"]
-        image = _process_image(image_string, AUGMENT)
+        image = _process_image(image_string, augment)
         image_dict.update({"tile_image": image})
         del image
 
@@ -606,7 +606,7 @@ def create_tf_data(tfrecords,
 
 def calc_class_weights(tfrecords,
                        class_weights_method="BY_TILE",
-                       MANIFEST=None,
+                       manifest=None,
                        SLIDE_ANNOTATIONS=None,
                        MODEL_TYPE=None):
     ''' ... '''
@@ -617,7 +617,7 @@ def calc_class_weights(tfrecords,
         smp = filename.split("/")[-1][:-10]
 
         # Determine total number of tiles available in TFRecord
-        tiles = MANIFEST[filename]["total"]
+        tiles = manifest[filename]["total"]
 
         # Get the category of the current sample
         category = SLIDE_ANNOTATIONS[smp]["outcome"] if MODEL_TYPE == "categorical" else 1

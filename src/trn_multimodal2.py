@@ -20,6 +20,8 @@ from sklearn.metrics import confusion_matrix
 import warnings
 warnings.filterwarnings('ignore')
 
+import ipdb; ipdb.set_trace()
+
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
 
@@ -415,6 +417,35 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # te_df.to_csv(split_outdir/'dte.csv', index=False)
 
 
+# Number of tiles/examples in each dataset
+# import ipdb; ipdb.set_trace()
+# timers = []
+
+# timer = Timer()
+# total_test_tiles = calc_records_in_tfr_files(test_tfrecords) # 268028
+# t_end = timer.timer_end()
+# print(t_end)
+# timers.append(t_end)
+
+# timer = Timer()
+# total_val_tiles = calc_records_in_tfr_files(val_tfrecords) # 261300
+# t_end = timer.timer_end()
+# print(t_end)
+# timers.append(t_end)
+
+# timer = Timer()
+# total_train_tiles = calc_records_in_tfr_files(train_tfrecords) # 2129951
+# t_end = timer.timer_end()
+# print(t_end)
+# timers.append(t_end)
+
+# total_trn_tiles = count_data_items(train_tfrecords)
+tile_cnts = pd.read_csv(cfg.SF_TFR_DIR_RSP_DRUG_PAIR/label/"tile_counts_per_slide.csv")
+total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_tiles"].sum()
+total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_tiles"].sum()
+total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["max_tiles"].sum()
+
+
 # import ipdb; ipdb.set_trace()
 print(len(outcomes))
 print(len(manifest))
@@ -490,8 +521,8 @@ if args.target[0] == 'Response':
         "dd1_scaler": dd1_scaler,
         "dd2_scaler": dd2_scaler,
         "id_name": args.id_name,
+        "augment": params.augment,
         "MODEL_TYPE": params.model_type,
-        "AUGMENT": params.augment
     }
 else:
     # Ctype
@@ -515,7 +546,7 @@ class_weights_method = "NONE"
 # class_weight = compute_class_weight("balanced", classes=np.unique(y), y=y)
 class_weight = calc_class_weights(train_tfrecords,
                                   class_weights_method=class_weights_method,
-                                  MANIFEST=MANIFEST,
+                                  manifest=manifest,
                                   SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
                                   MODEL_TYPE=params.model_type)
 
@@ -535,8 +566,7 @@ print("\nTraining TFRecods")
 #     **parse_fn_kwargs
 # )
 
-import ipdb; ipdb.set_trace()
-
+# import ipdb; ipdb.set_trace()
 train_data = create_tf_data(
     tfrecords=train_tfrecords,
     n_concurrent_shards=16,
@@ -550,9 +580,6 @@ train_data = create_tf_data(
     parse_fn=parse_fn,
     include_meta=False,
     **parse_fn_kwargs)
-
-# total_trn_tiles = calc_records_in_tfr_files(train_tfrecords)
-total_trn_tiles = count_data_items(train_tfrecords)
 
 # Determine feature shapes from data
 bb = next(train_data.__iter__())
@@ -771,8 +798,8 @@ yte_label = te_meta[args.target[0]].values
 # Train model
 # -------------
 
-# Note! When I put METRICS in model.py, it immediately occupies a lot of the GPU memory!
-# METRICS = [
+# Note! When I put metrics in model.py, it immediately occupies a lot of the GPU memory!
+# metrics = [
 #       keras.metrics.TruePositives(name='tp'),
 #       keras.metrics.FalsePositives(name='fp'),
 #       keras.metrics.TrueNegatives(name='tn'),
@@ -783,7 +810,7 @@ yte_label = te_meta[args.target[0]].values
 #       keras.metrics.AUC(name='auc'),
 # ]
 
-METRICS = [
+metrics = [
       keras.metrics.TruePositives(name='tp'),
       keras.metrics.AUC(name='auc'),
 ]
@@ -822,7 +849,7 @@ print(model.summary())
 
 model.compile(loss=losses.BinaryCrossentropy(),
               optimizer=Adam(learning_rate=params.learning_rate),
-              metrics=METRICS)  # metrics
+              metrics=metrics)  # metrics
 
 import ipdb; ipdb.set_trace()
 
@@ -840,21 +867,22 @@ if params.use_tile is True:
     timer = Timer()
     history = model.fit(x=train_data,
                         # batch_size=params.batch_size,
-                        steps_per_epoch=total_trn_tiles/params.batch_size,
-                        epochs=params.finetune_epochs,
-                        verbose=1,
+                        steps_per_epoch=total_train_tiles//params.batch_size,
                         validation_data=val_data,
+                        validation_steps=total_val_tiles//params.batch_size,
                         class_weight=class_weight,
+                        epochs=params.finetune_epochs,
                         shuffle=False,
+                        verbose=1,
                         callbacks=callbacks)
-    history = model.fit(
-        x = get_dataset(files_train, augment=True, shuffle=True, repeat=True, dim=IMG_SIZES[fold], batch_size = BATCH_SIZES[fold]), 
-        epochs = EPOCHS[fold],
-        callbacks = [sv, get_lr_callback(BATCH_SIZES[fold])], 
-        steps_per_epoch = count_data_items(files_train)/BATCH_SIZES[fold]//REPLICAS,
-        validation_data = get_dataset(files_valid, augment=False, shuffle=False, repeat=False, dim=IMG_SIZES[fold]), #class_weight = {0:1,1:2},
-        verbose=VERBOSE
-    )
+    # history = model.fit(
+    #     x = get_dataset(files_train, augment=True, shuffle=True, repeat=True, dim=IMG_SIZES[fold], batch_size = BATCH_SIZES[fold]), 
+    #     epochs = EPOCHS[fold],
+    #     callbacks = [sv, get_lr_callback(BATCH_SIZES[fold])], 
+    #     steps_per_epoch = count_data_items(files_train)/BATCH_SIZES[fold]//REPLICAS,
+    #     validation_data = get_dataset(files_valid, augment=False, shuffle=False, repeat=False, dim=IMG_SIZES[fold]), #class_weight = {0:1,1:2},
+    #     verbose=VERBOSE
+    # )
     timer.display_timer()
 
 elif params.use_tile is False:

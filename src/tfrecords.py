@@ -79,6 +79,8 @@ FEA_SPEC_RSP_DRUG_PAIR = {
     "Group":    tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "grp_name": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
+    "tile_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+
     "Sample":      tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "model":       tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "patient_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.string),
