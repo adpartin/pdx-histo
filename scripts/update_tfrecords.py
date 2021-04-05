@@ -13,8 +13,9 @@ import os
 import sys
 assert sys.version_info >= (3, 5)
 
-from pathlib import Path
 import numpy as np
+import pandas as pd
+from pathlib import Path
 from typing import Optional
 
 import tensorflow as tf
@@ -262,7 +263,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                         "Group":       _bytes_feature(bytes(slide_meta["Group"], "utf-8")),
                         "grp_name":    _bytes_feature(bytes(slide_meta["grp_name"], "utf-8")),
                         
-                        "tile_id":     _bytes_feature(bytes(tile_id, "utf-8")),
+                        # "tile_id":     _bytes_feature(bytes(str(tile_id), "utf-8")),
+                        "tile_id":     _int64_feature(int(tile_id)),
 
                         "Sample":      _bytes_feature(bytes(slide_meta["Sample"], "utf-8")),
                         "model":       _bytes_feature(bytes(slide_meta["model"], "utf-8")),
@@ -298,13 +300,15 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                 writer.write(ex.SerializeToString())
 
             print(f"Total tiles in the sample {tile_id+1}")
-            tile_counter.append( {"slide": slide_name, "max_tiles": tile_id+1} )
+            tile_counter.append( {"smp": smp, "slide": slide_name, "max_tiles": tile_id+1} )
             writer.close()
         print()
         
     tile_counter = pd.DataFrame(tile_counter)
-    
-        
+    tile_counter = tile_counter.drop_duplicates().reset_index(drop=True)
+    tile_counter.to_csv(outpath/"tile_counts_per_slide.csv", index=False)
+
+
     # ------------------
     # Inspect a TFRecord
     # ------------------
@@ -313,8 +317,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     smp = samples[0]
     tfr_path = str(outpath/(smp + ".tfrecords"))
     raw_dataset = tf.data.TFRecordDataset(tfr_path)
+    # rec = next(raw_dataset.take(1).__iter__())
     rec = next(raw_dataset.__iter__())
-    # features = tf.io.parse_single_example(rec, features=fea_spec_new)
     if single_drug:
         features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP)
     else:
@@ -323,6 +327,10 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     # print(np.frombuffer(features["dd1_data"].numpy(), dtype=cfg.DD_DTYPE))
     # print(np.frombuffer(features["dd2_data"].numpy(), dtype=cfg.DD_DTYPE))
     tf.print(features.keys())
+
+    for rec in raw_dataset.take(4):
+        features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP_DRUG_PAIR)
+        tf.print("tile_id:", features["tile_id"])
 
     print("\nDone.")
 
