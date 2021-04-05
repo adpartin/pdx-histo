@@ -174,6 +174,13 @@ def calc_records_in_tfr_files(tfr_files):
     for tfr_path in sorted(tfr_files):
         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
     print('Number of examples in all tfrecords in the folder:', count)
+    return count
+    
+    
+def count_data_items(filenames):
+    import re
+    n = [int(re.compile(r"-([0-9]*)\.").search(filename).group(1)) for filename in filenames]
+    return np.sum(n)
     
     
 def calc_examples_in_tfrecord(tfr_path):

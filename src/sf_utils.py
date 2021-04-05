@@ -420,6 +420,7 @@ def parse_tfrec_fn_rsp(record,
     # Meta
     meta = {}
     meta_fields = ["index", "smp", "Group", "grp_name",
+                   "Response",
                    "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
                    "ctype", "csite",
                    "Drug1", "Drug2", "trt", "aug"]
@@ -432,8 +433,10 @@ def parse_tfrec_fn_rsp(record,
     #else:
     #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
     #    label = ANNOTATIONS_TABLES[0].lookup(smp)
-    # label = {outcome_header[0]: label}  # ap, or {'ctype': label}
+    
+    # TODO: {"Response": ...} doesn't work with class_weight!
     label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
+    # label = tf.cast(features["Response"], tf.int64)
 
     image_dict = {}
 
@@ -489,7 +492,8 @@ def parse_tfrec_fn_rsp(record,
 
 def create_tf_data(tfrecords,
                    n_concurrent_shards=16,
-                   shuffle_size=8192,
+                   shuffle_size=8192,  # 1024*8
+                   repeat=True,
                    epochs=1,
                    batch_size=32,
                    drop_remainder=False,
@@ -499,19 +503,11 @@ def create_tf_data(tfrecords,
                    parse_fn=None,
                    include_meta=False,
                    **parse_fn_kwargs): # global var of SlideFlowModel
-    ''' Generates an interleaved dataset from a collection of tfrecord files,
-    sampling from tfrecord files randomly according to balancing if provided.
-    Requires self.MANIFEST. Assumes TFRecord files are named by slide.
+    """ ...
 
     Args:
-        tfrecords:				Array of paths to TFRecord files
-        batch_size:				Batch size
-        augment:					Whether to use data augmentation (random flip/rotate)
-        finite:					Whether create finite or infinite datasets. WARNING: If finite option is
-                                    used with balancing, some tiles will be skipped.
-        include_smp_names:		Bool, if True, dataset will include slidename (each entry will return image,
-                                label, and slidename)
-    '''
+        ...
+    """
     # TODO: optimizing with data api
     # https://www.tensorflow.org/guide/data_performance
 
@@ -584,36 +580,20 @@ def create_tf_data(tfrecords,
     # (ap) recommended to use batch before map
     # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
-    if include_meta:
-        # num_parallel_calls = 32
-        num_parallel_calls = 8
-        dataset = dataset.map(
-                map_func=partial(parse_fn, include_meta=True, **parse_fn_kwargs),
-                num_parallel_calls=num_parallel_calls,
-                deterministic=None
-        )
-        # dataset_with_smp_names = dataset_with_smp_names.batch(batch_size, drop_remainder=drop_remainder)
-    else:
-        # num_parallel_calls = tf.data.experimental.AUTOTUNE
-        # num_parallel_calls = 64
-        num_parallel_calls = 8
-        dataset = dataset.map(
-            map_func=partial(parse_fn, include_meta=False, **parse_fn_kwargs),
-            num_parallel_calls=num_parallel_calls,
-            deterministic=None
-        )
-
-#     # num_parallel_calls = tf.data.experimental.AUTOTUNE
-#     # num_parallel_calls = 64
-#     num_parallel_calls = 8
-#     dataset = dataset.map(
-#         map_func=partial(parse_fn, include_meta=False, **parse_fn_kwargs),
-#         num_parallel_calls=num_parallel_calls,
-#         deterministic=None
-#     )
+    # num_parallel_calls = tf.data.experimental.AUTOTUNE
+    # num_parallel_calls = 64
+    num_parallel_calls = 8
+    dataset = dataset.map(
+        map_func=partial(parse_fn, include_meta=include_meta, **parse_fn_kwargs),
+        num_parallel_calls=num_parallel_calls,
+        deterministic=None
+    )
 
     # Apply batch after repeat (https://www.tensorflow.org/guide/data)
-    dataset = dataset.repeat(epochs)
+    if repeat:
+        # dataset = dataset.repeat(epochs)
+        dataset = dataset.repeat()
+        
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
     # (ap)

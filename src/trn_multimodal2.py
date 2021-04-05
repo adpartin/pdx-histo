@@ -51,7 +51,7 @@ from src.ml.scale import get_scaler
 from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
 from src.utils.utils import Params, dump_dict, read_lines, cast_list, Timer
 from src.datasets.tidy import split_data_and_extract_fea, extract_fea
-from src.tf_utils import get_tfr_files
+from src.tf_utils import get_tfr_files, calc_records_in_tfr_files, count_data_items
 from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_class_weights,
                           parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
                           create_manifest)
@@ -414,9 +414,6 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # vl_df.to_csv(split_outdir/'dvl.csv', index=False)
 # te_df.to_csv(split_outdir/'dte.csv', index=False)
 
-# num_slide_input = 0
-# input_labels = None
-
 
 # import ipdb; ipdb.set_trace()
 print(len(outcomes))
@@ -443,12 +440,9 @@ VALIDATION_TFRECORDS = val_tfrecords
 #SLIDES = list(slide_annotations.keys())
 SAMPLES = list(slide_annotations.keys())
 DATASETS = {}
-# NUM_SLIDE_INPUT = num_slide_input
 
 #outcomes_ = [slide_annotations[slide]['outcome'] for slide in SLIDES]
 outcomes_ = [slide_annotations[smp]['outcome'] for smp in SAMPLES]
-
-# normalizer = None
 
 if params.model_type == 'categorical':
     NUM_CLASSES = len(list(set(outcomes_)))  # infer this from other variables
@@ -468,11 +462,7 @@ validation_steps = 200
 max_tiles_per_slide = 0
 min_tiles_per_slide = 0
 starting_epoch = 0  # what's that??
-# ema_observations = 20
-# ema_smoothing = 2
 steps_per_epoch_override = None  # what's that??
-
-# AUGMENT = True
 
 
 # import ipdb; ipdb.set_trace()
@@ -517,48 +507,52 @@ else:
     }
 
 # class_weights_method = "BY_SAMPLE"
-class_weights_method = "BY_TILE"
-# class_weights_method = "NONE"
+# class_weights_method = "BY_TILE"
+class_weights_method = "NONE"
 
 # from sklearn.utils.class_weight import compute_class_weight
 # y = tr_meta["Response"].values
 # class_weight = compute_class_weight("balanced", classes=np.unique(y), y=y)
-class_weight = calc_class_weights(TRAIN_TFRECORDS,
+class_weight = calc_class_weights(train_tfrecords,
                                   class_weights_method=class_weights_method,
                                   MANIFEST=MANIFEST,
                                   SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
                                   MODEL_TYPE=params.model_type)
 
 print("\nTraining TFRecods")
-train_data, _, num_tiles = interleave_tfrecords(
-    tfrecords=TRAIN_TFRECORDS,
-    batch_size=params.batch_size,
-    balance=params.balanced_training,
-    finite=False,
-    max_tiles=max_tiles_per_slide,
-    min_tiles=min_tiles_per_slide,
-    include_smp_names=False,
-    parse_fn=parse_fn,
-    MANIFEST=MANIFEST,
-    SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-    SAMPLES=SAMPLES,
-    **parse_fn_kwargs
-)
-
-# import ipdb; ipdb.set_trace()
-
-# train_data = create_tf_data(
+# train_data, _, num_tiles = interleave_tfrecords(
 #     tfrecords=TRAIN_TFRECORDS,
-#     n_concurrent_shards=16,
-#     shuffle_size=8192,
-#     epochs=1,
-#     batch_size=params.batch_size, # 2048
-#     drop_remainder=False,
-#     seed=None,
-#     prefetch=1,
+#     batch_size=params.batch_size,
+#     balance=params.balanced_training,
+#     finite=False,
+#     max_tiles=max_tiles_per_slide,
+#     min_tiles=min_tiles_per_slide,
+#     include_smp_names=False,
 #     parse_fn=parse_fn,
-#     include_meta=False,
-#     **parse_fn_kwargs)
+#     MANIFEST=MANIFEST,
+#     SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#     SAMPLES=SAMPLES,
+#     **parse_fn_kwargs
+# )
+
+import ipdb; ipdb.set_trace()
+
+train_data = create_tf_data(
+    tfrecords=train_tfrecords,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    repeat=True,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
+    parse_fn=parse_fn,
+    include_meta=False,
+    **parse_fn_kwargs)
+
+# total_trn_tiles = calc_records_in_tfr_files(train_tfrecords)
+total_trn_tiles = count_data_items(train_tfrecords)
 
 # Determine feature shapes from data
 bb = next(train_data.__iter__())
@@ -583,112 +577,112 @@ for i, item in enumerate(bb):
 for i, rec in enumerate(train_data.take(4)):
     tf.print(rec[1])
 
-# val_data = create_tf_data(
-#     tfrecords=VALIDATION_TFRECORDS,
-#     n_concurrent_shards=16,
-#     shuffle_size=8192,
-#     epochs=1,
-#     batch_size=params.batch_size, # 2048
-#     drop_remainder=False,
-#     seed=None,
-#     prefetch=1,
-#     parse_fn=parse_fn,
-#     include_meta=True,
-#     **parse_fn_kwargs)
-
-# test_data = create_tf_data(
-#     tfrecords=TEST_TFRECORDS,
-#     n_concurrent_shards=16,
-#     shuffle_size=8192,
-#     epochs=1,
-#     batch_size=params.batch_size, # 2048
-#     drop_remainder=False,
-#     seed=None,
-#     prefetch=1,
-#     parse_fn=parse_fn,
-#     include_meta=True,
-#     **parse_fn_kwargs)
-
-using_validation = True
-
-# Test data
-if using_validation:
-    print("\nValidation TFRecods")
-    val_data, val_data_with_smp_names, _ = interleave_tfrecords(
-        tfrecords=VALIDATION_TFRECORDS,
-        batch_size=val_batch_size,
-        balance='NO_BALANCE',
-        finite=True,
-        max_tiles=max_tiles_per_slide,
-        min_tiles=min_tiles_per_slide,
-        include_smp_names=True,
-        parse_fn=parse_fn,
-        MANIFEST=MANIFEST,
-        SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-        SAMPLES=SAMPLES,
-        **parse_fn_kwargs
-    )
-
-    if validation_steps:
-        validation_data_for_training = val_data.repeat()
-        print(f"Using {validation_steps} batches ({validation_steps * params.batch_size} samples) each validation check")
-    else:
-        validation_data_for_training = val_data
-        print(f"Using entire validation set each validation check")
-else:
-    log.info("Validation during training: None", 1)
-    validation_data_for_training = None
-    validation_steps = 0
-
-# Test data
-print("\nTest TFRecods")
-test_data, test_data_with_smp_names, _ = interleave_tfrecords(
-    tfrecords=test_tfrecords,
-    batch_size=val_batch_size,
-    balance='NO_BALANCE',
-    finite=True,
-    max_tiles=max_tiles_per_slide,
-    min_tiles=min_tiles_per_slide,
-    include_smp_names=True,
+val_data = create_tf_data(
+    tfrecords=val_tfrecords,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    repeat=False,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
     parse_fn=parse_fn,
-    MANIFEST=MANIFEST,
-    SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
-    SAMPLES=SAMPLES,
-    **parse_fn_kwargs
-)
+    include_meta=True,
+    **parse_fn_kwargs)
+
+test_data = create_tf_data(
+    tfrecords=test_tfrecords,
+    n_concurrent_shards=16,
+    shuffle_size=8192,
+    repeat=False,
+    epochs=1,
+    batch_size=params.batch_size, # 2048
+    drop_remainder=False,
+    seed=None,
+    prefetch=1,
+    parse_fn=parse_fn,
+    include_meta=True,
+    **parse_fn_kwargs)
+
+# using_validation = True
+
+# # Test data
+# if using_validation:
+#     print("\nValidation TFRecods")
+#     val_data, val_data_with_smp_names, _ = interleave_tfrecords(
+#         tfrecords=VALIDATION_TFRECORDS,
+#         batch_size=val_batch_size,
+#         balance='NO_BALANCE',
+#         finite=True,
+#         max_tiles=max_tiles_per_slide,
+#         min_tiles=min_tiles_per_slide,
+#         include_smp_names=True,
+#         parse_fn=parse_fn,
+#         MANIFEST=MANIFEST,
+#         SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#         SAMPLES=SAMPLES,
+#         **parse_fn_kwargs
+#     )
+
+#     if validation_steps:
+#         validation_data_for_training = val_data.repeat()
+#         print(f"Using {validation_steps} batches ({validation_steps * params.batch_size} samples) each validation check")
+#     else:
+#         validation_data_for_training = val_data
+#         print(f"Using entire validation set each validation check")
+# else:
+#     log.info("Validation during training: None", 1)
+#     validation_data_for_training = None
+#     validation_steps = 0
+
+# # Test data
+# print("\nTest TFRecods")
+# test_data, test_data_with_smp_names, _ = interleave_tfrecords(
+#     tfrecords=test_tfrecords,
+#     batch_size=val_batch_size,
+#     balance='NO_BALANCE',
+#     finite=True,
+#     max_tiles=max_tiles_per_slide,
+#     min_tiles=min_tiles_per_slide,
+#     include_smp_names=True,
+#     parse_fn=parse_fn,
+#     MANIFEST=MANIFEST,
+#     SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+#     SAMPLES=SAMPLES,
+#     **parse_fn_kwargs
+# )
 
 
 # ----------------------
 # Prep for training
 # ----------------------
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 
-# Prepare results
-results = {'epochs': {}}
+# results = {'epochs': {}}
 
-# Calculate parameters
-if max([params.finetune_epochs]) <= starting_epoch:
-    print(f"Starting epoch ({starting_epoch}) cannot be greater than the \
-          maximum target epoch ({max(params.finetune_epochs)})")
+# if max([params.finetune_epochs]) <= starting_epoch:
+#     print(f"Starting epoch ({starting_epoch}) cannot be greater than the \
+#           maximum target epoch ({max(params.finetune_epochs)})")
     
-if early_stop and early_stop_method == 'accuracy' and params.model_type != 'categorical':
-    print(f"Unable to use early stopping method 'accuracy' with a non-categorical \
-          model type (type: '{params.model_type}')")
+# if early_stop and early_stop_method == 'accuracy' and params.model_type != 'categorical':
+#     print(f"Unable to use early stopping method 'accuracy' with a non-categorical \
+#           model type (type: '{params.model_type}')")
     
-if starting_epoch != 0:
-    print(f"Starting training at epoch {starting_epoch}")
+# if starting_epoch != 0:
+#     print(f"Starting training at epoch {starting_epoch}")
     
-total_epochs = toplayer_epochs + (max([params.finetune_epochs]) - starting_epoch)
-# TODO: this might need to change??
-steps_per_epoch = round(num_tiles/params.batch_size) if steps_per_epoch_override is None else steps_per_epoch_override
-results_log = os.path.join(DATA_DIR, 'results_log.csv')
-metrics = ['accuracy'] if params.model_type != 'linear' else [loss]
+# total_epochs = toplayer_epochs + (max([params.finetune_epochs]) - starting_epoch)
+# # TODO: this might need to change??
+# steps_per_epoch = round(num_tiles/params.batch_size) if steps_per_epoch_override is None else steps_per_epoch_override
+# results_log = os.path.join(DATA_DIR, 'results_log.csv')
+# metrics = ['accuracy'] if params.model_type != 'linear' else [loss]
 
 
 # Create callbacks for early stopping, checkpoint saving, summaries, and history
-history_callback = tf.keras.callbacks.History()
-checkpoint_path = os.path.join(DATA_DIR, "cp.ckpt")
-cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=False, verbose=1)
+# history_callback = tf.keras.callbacks.History()
+# checkpoint_path = os.path.join(DATA_DIR, "cp.ckpt")
+# cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=False, verbose=1)
 # tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=DATA_DIR, histogram_freq=0, write_graph=False, update_freq=log_frequency)
 
 
@@ -696,8 +690,25 @@ class PredictionAndEvaluationCallback(tf.keras.callbacks.Callback):
     pass
 
 
-#callbacks = [history_callback, PredictionAndEvaluationCallback(), cp_callback, tensorboard_callback]
-callbacks = [history_callback, cp_callback]
+# #callbacks = [history_callback, PredictionAndEvaluationCallback(), cp_callback, tensorboard_callback]
+# callbacks = [history_callback, cp_callback]
+
+
+def keras_callbacks(outdir, monitor="val_loss"):
+    """ ... """
+    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"), monitor=monitor,
+                                   verbose=0, save_weights_only=False, save_best_only=True,
+                                   save_freq="epoch")
+    csv_logger = CSVLogger(outdir/"training.log")
+    reduce_lr = ReduceLROnPlateau(monitor=monitor, factor=0.5, patience=10,
+                                  verbose=1, mode="auto", min_delta=0.0001,
+                                  cooldown=0, min_lr=0)
+    early_stop = EarlyStopping(monitor=monitor, patience=20, verbose=1, mode="auto")
+
+    return [checkpointer, csv_logger, early_stop, reduce_lr]
+
+callbacks = keras_callbacks(outdir, monitor="val_loss")
+
 
 # https://www.tensorflow.org/guide/mixed_precision
 if DTYPE == 'float16':
@@ -714,6 +725,48 @@ if DTYPE == 'float16':
     print('Variable dtype: %s' % policy.variable_dtype)
 
 
+# import ipdb; ipdb.set_trace()
+# y_encoding = "onehot"
+y_encoding = "label"  # to be used binary cross-entropy
+
+if y_encoding == "onehot":
+    if index_col_name in data.columns:
+        # Using Yitan's T/V/E splits
+        # print(te_meta[["index", "Group", "grp_name", "Response"]])
+        ytr = pd.get_dummies(tr_meta[args.target[0]].values)
+        yvl = pd.get_dummies(vl_meta[args.target[0]].values)
+        yte = pd.get_dummies(te_meta[args.target[0]].values)
+    else:
+        ytr = y_onehot.iloc[tr_id, :].reset_index(drop=True)
+        yvl = y_onehot.iloc[vl_id, :].reset_index(drop=True)
+        yte = y_onehot.iloc[te_id, :].reset_index(drop=True)
+
+    loss = losses.CategoricalCrossentropy()
+
+elif y_encoding == "label":
+    if index_col_name in data.columns:
+        # Using Yitan's T/V/E splits
+        ytr = tr_meta[args.target[0]].values
+        yvl = vl_meta[args.target[0]].values
+        yte = te_meta[args.target[0]].values
+        loss = losses.BinaryCrossentropy()
+    else:
+        ytr = ydata_label[tr_id]
+        yvl = ydata_label[vl_id]
+        yte = ydata_label[te_id]
+        loss = losses.SparseCategoricalCrossentropy()
+
+else:
+    raise ValueError(f"Unknown value for y_encoding ({y_encoding}).")
+    
+# ytr_label = ydata_label[tr_id]
+# yvl_label = ydata_label[vl_id]
+# yte_label = ydata_label[te_id]
+ytr_label = tr_meta[args.target[0]].values
+yvl_label = vl_meta[args.target[0]].values
+yte_label = te_meta[args.target[0]].values    
+    
+    
 # -------------
 # Train model
 # -------------
@@ -735,7 +788,7 @@ METRICS = [
       keras.metrics.AUC(name='auc'),
 ]
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 if args.target[0] == 'Response':
     if params.use_tile is True:
@@ -746,11 +799,11 @@ if args.target[0] == 'Response':
                                 ge_shape=ge_shape,
                                 dd_shape=dd_shape,
                                 model_type=params.model_type,
-                                output_bias=None,
-                                NUM_CLASSES=NUM_CLASSES)
+                                output_bias=None)
     else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
-                                         use_dd=params.use_dd,
+                                         use_dd1=params.use_dd1,
+                                         use_dd2=params.use_dd2,
                                          ge_shape=ge_shape,
                                          dd_shape=dd_shape,
                                          model_type=params.model_type,
@@ -767,23 +820,43 @@ else:
 print()
 print(model.summary())
 
-model.compile(loss=loss,
+model.compile(loss=losses.BinaryCrossentropy(),
               optimizer=Adam(learning_rate=params.learning_rate),
-              metrics=metrics)
+              metrics=METRICS)  # metrics
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 t = time()
 print('Start training ...')
 if params.use_tile is True:
+#     history = model.fit(x=train_data,
+#                         steps_per_epoch=steps_per_epoch,
+#                         epochs=total_epochs,
+#                         verbose=1,
+#                         initial_epoch=toplayer_epochs,
+#                         validation_data=validation_data_for_training,
+#                         validation_steps=validation_steps,
+#                         callbacks=callbacks)
+    timer = Timer()
     history = model.fit(x=train_data,
-                        steps_per_epoch=steps_per_epoch,
-                        epochs=total_epochs,
+                        # batch_size=params.batch_size,
+                        steps_per_epoch=total_trn_tiles/params.batch_size,
+                        epochs=params.finetune_epochs,
                         verbose=1,
-                        initial_epoch=toplayer_epochs,
-                        validation_data=validation_data_for_training,
-                        validation_steps=validation_steps,
+                        validation_data=val_data,
+                        class_weight=class_weight,
+                        shuffle=False,
                         callbacks=callbacks)
+    history = model.fit(
+        x = get_dataset(files_train, augment=True, shuffle=True, repeat=True, dim=IMG_SIZES[fold], batch_size = BATCH_SIZES[fold]), 
+        epochs = EPOCHS[fold],
+        callbacks = [sv, get_lr_callback(BATCH_SIZES[fold])], 
+        steps_per_epoch = count_data_items(files_train)/BATCH_SIZES[fold]//REPLICAS,
+        validation_data = get_dataset(files_valid, augment=False, shuffle=False, repeat=False, dim=IMG_SIZES[fold]), #class_weight = {0:1,1:2},
+        verbose=VERBOSE
+    )
+    timer.display_timer()
+
 elif params.use_tile is False:
     history = model.fit(x=x,
                         y=y,
@@ -797,7 +870,7 @@ print('Runtime: {:.2f} mins'.format( (time() - t)/60) )
 # --------------------------
 # Evaluate
 # --------------------------
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 def calc_per_tile_preds(data_with_smp_names, model, outdir):
     """ ... """

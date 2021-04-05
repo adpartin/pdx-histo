@@ -246,7 +246,7 @@ print(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
 def keras_callbacks(outdir, monitor='val_loss'):
     """ ... """
-    checkpointer = ModelCheckpoint(str(outdir/'model_best_at_{epoch}.ckpt'), monitor='val_loss',
+    checkpointer = ModelCheckpoint(str(outdir/'model_best_at_{epoch}.ckpt'), monitor=monitor,
                                    verbose=0, save_weights_only=False, save_best_only=True)
     csv_logger = CSVLogger(outdir/'training.log')
     reduce_lr = ReduceLROnPlateau(monitor=monitor, factor=0.5, patience=10,
