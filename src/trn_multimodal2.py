@@ -505,7 +505,7 @@ val_data = create_tf_data(
     **parse_fn_kwargs_non_train)
 
 test_data = create_tf_data(
-    tfrecords=test_tfr_files,
+    tfrecords=test_tfr_files[:2],
     n_concurrent_shards=None,
     shuffle_files=False,
     interleave=False,
@@ -605,7 +605,8 @@ if args.target[0] == "Response":
                                 ge_shape=ge_shape,
                                 dd_shape=dd_shape,
                                 model_type=params.model_type,
-                                output_bias=None)
+                                output_bias=None,
+                                loss=loss)
     else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
                                          use_dd1=params.use_dd1,
@@ -714,8 +715,12 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
 
         # Predictions
         preds = model.predict(fea)
-        y_pred_prob.append( preds )
-        y_pred_label.extend( np.argmax(preds, axis=1).tolist() )
+        y_pred_prob.append(preds)
+        preds = np.squeeze(preds)
+        if np.ndim(preds) > 1:
+            y_pred_label.extend( np.argmax(preds, axis=1).tolist() )  # SparseCategoricalCrossentropy
+        else:
+            y_pred_label.extend( [0 if p<0.5 else 1 for p in preds] )  # BinaryCrossentropy
 
         # True labels
         # y_true.extend( label[args.target[0]].numpy().tolist() )  # when batch[1] is dict
@@ -735,7 +740,10 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
 
     # Predictions
     y_pred_prob = np.vstack(y_pred_prob)
-    df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f"prob_{c}" for c in range(y_pred_prob.shape[1])])
+    if np.ndim(np.squeeze(y_pred_prob)) > 1:
+        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f"prob_{c}" for c in range(y_pred_prob.shape[1])])
+    else:
+        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=["prob"])
 
     # True labels
     df_labels = pd.DataFrame({"y_true": y_true, "y_pred_label": y_pred_label})
@@ -785,7 +793,8 @@ test_smp_preds.to_csv(outdir/"test_preds_per_smp.csv", index=False)
 # dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds_per_smp.csv")
 
 # Scores
-tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob_1"].values, mltype="cls")
+# tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob_1"].values, mltype="cls")
+tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob"].values, mltype="cls")
 smp_scores = calc_scores(test_smp_preds["y_true"].values, test_smp_preds["y_pred_label"].values, mltype="cls")
 
 dump_dict(tile_scores, outdir/"test_tile_scores.txt")
