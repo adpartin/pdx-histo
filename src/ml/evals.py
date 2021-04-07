@@ -96,7 +96,7 @@ def save_confusion_matrix(true_labels, predictions, p=0.5,
     cnf_mtrx = confusion_matrix(true_labels, predictions > p)
 
     fig, ax = plt.subplots(figsize=figsize)
-    sns.heatmap(cnf_mtrx, annot=True, fmt="d", cmap='Blues', linewidths=0.2, linecolor='white')
+    sns.heatmap(cnf_mtrx, annot=True, fmt="d", cmap="Blues", linewidths=0.2, linecolor="white")
     ax.set_xticklabels(labels)
     ax.set_yticklabels(labels)
     ax.set(ylabel="True", xlabel="Predicted")

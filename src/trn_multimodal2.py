@@ -136,9 +136,7 @@ if params.use_dd2 and len(dd2_cols) > 0:
 #     'ctype_label': tf.keras.losses.categorical_crossentropy},
 # loss = {'ctype': tf.keras.losses.SparseCategoricalCrossentropy()}
 
-# outcome_header = ['Response']
 outcome_header = args.target
-# aux_headers = ['ctype', 'csite']  # (ap)
 
 label = f"{params.tile_px}px_{params.tile_um}um"
 
@@ -180,7 +178,7 @@ print(outcomes[list(outcomes.keys())[3]])
 timer = Timer()
 manifest = create_manifest(directory=tfr_dir, n_files=None)
 timer.display_timer()
-print('\nmanifest:')
+print("\nmanifest:")
 print(type(manifest))
 print(len(manifest))
 print(list(manifest.keys())[:3])
@@ -339,37 +337,14 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # vl_df.to_csv(split_outdir/'dvl.csv', index=False)
 # te_df.to_csv(split_outdir/'dte.csv', index=False)
 
-
 # Number of tiles/examples in each dataset
 # import ipdb; ipdb.set_trace()
-# timers = []
-
-# timer = Timer()
-# total_test_tiles = calc_records_in_tfr_files(test_tfr_files) # 268028
-# t_end = timer.timer_end()
-# print(t_end)
-# timers.append(t_end)
-
-# timer = Timer()
-# total_val_tiles = calc_records_in_tfr_files(val_tfr_files) # 261300
-# t_end = timer.timer_end()
-# print(t_end)
-# timers.append(t_end)
-
-# timer = Timer()
-# total_train_tiles = calc_records_in_tfr_files(train_tfr_files) # 2129951
-# t_end = timer.timer_end()
-# print(t_end)
-# timers.append(t_end)
-
-# total_trn_tiles = count_data_items(train_tfr_files)
 tile_cnts = pd.read_csv(cfg.SF_TFR_DIR_RSP_DRUG_PAIR/label/"tile_counts_per_slide.csv")
 # tr_tile_cnts = tile_cnts.merge(tr_meta[["smp", "Group", "grp_name", "Response"]], on="smp", how="inner")
 
 total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_tiles"].sum()
 total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_tiles"].sum()
 total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["max_tiles"].sum()
-
 
 # import ipdb; ipdb.set_trace()
 print(len(outcomes))
@@ -383,15 +358,8 @@ print(manifest[list(manifest.keys())[3]])
 # -------------------------------
 # import ipdb; ipdb.set_trace()
 
-#DATA_DIR = '/vol/ml/apartin/projects/slideflow-proj/sf_pdx_bin_rsp2/project/models/ctype-Xception_v0-kfold1';
-DATA_DIR = outdir
-MANIFEST = manifest
-# IMAGE_SIZE = image_size = params.tile_px
-DTYPE = "float16" if params.use_fp16 else "float32"
-SLIDE_ANNOTATIONS = slide_annotations = outcomes
 #SLIDES = list(slide_annotations.keys())
 SAMPLES = list(slide_annotations.keys())
-DATASETS = {}
 
 #outcomes_ = [slide_annotations[slide]['outcome'] for slide in SLIDES]
 outcomes_ = [slide_annotations[smp]['outcome'] for smp in SAMPLES]
@@ -440,13 +408,10 @@ class_weights_method = "BY_TILE"
 # class_weights_method = "NONE"
 
 # import ipdb; ipdb.set_trace()
-# from sklearn.utils.class_weight import compute_class_weight
-# y = tr_meta["Response"].values
-# class_weight = compute_class_weight("balanced", classes=np.unique(y), y=y)
 class_weight = calc_class_weights(train_tfr_files,
                                   class_weights_method=class_weights_method,
                                   manifest=manifest,
-                                  SLIDE_ANNOTATIONS=SLIDE_ANNOTATIONS,
+                                  outcomes=outcomes,
                                   MODEL_TYPE=params.model_type)
 # class_weight = {"Response": class_weight}
 
@@ -497,7 +462,7 @@ val_data = create_tf_data(
     interleave=False,
     shuffle_size=None,
     repeat=False,
-    batch_size=params.batch_size, # 2048
+    batch_size=8*params.batch_size, # 2048
     seed=None,
     prefetch=2,
     parse_fn=parse_fn,
@@ -511,7 +476,7 @@ test_data = create_tf_data(
     interleave=False,
     shuffle_size=None,
     repeat=False,
-    batch_size=params.batch_size, # 2048
+    batch_size=8*params.batch_size, # 2048
     seed=None,
     prefetch=2,
     parse_fn=parse_fn,
@@ -534,7 +499,7 @@ callbacks = keras_callbacks(outdir, monitor="val_loss")
 
 
 # https://www.tensorflow.org/guide/mixed_precision
-if DTYPE == "float16":
+if params.use_fp16:
     # TF 2.4
     # from tensorflow.keras import mixed_precision
     # policy = tf.keras.mixed_precision.Policy('mixed_float16')
@@ -655,14 +620,6 @@ if train:
                             shuffle=False,
                             verbose=1,
                             callbacks=callbacks)
-        # history = model.fit(
-        #     x = get_dataset(files_train, augment=True, shuffle=True, repeat=True, dim=IMG_SIZES[fold], batch_size = BATCH_SIZES[fold]), 
-        #     epochs = EPOCHS[fold],
-        #     callbacks = [sv, get_lr_callback(BATCH_SIZES[fold])], 
-        #     steps_per_epoch = count_data_items(files_train)/BATCH_SIZES[fold]//REPLICAS,
-        #     validation_data = get_dataset(files_valid, augment=False, shuffle=False, repeat=False, dim=IMG_SIZES[fold]), #class_weight = {0:1,1:2},
-        #     verbose=VERBOSE
-        # )
 
     elif params.use_tile is False:
         history = model.fit(x=x,
@@ -703,9 +660,7 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
     meta_keys = ["smp", "image_id", "tile_id"]
     # meta_keys = ["smp"]
     meta_agg = {k: None for k in meta_keys}
-    y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
-
-    import ipdb; ipdb.set_trace()
+    y_true, y_pred_prob, y_pred_label = [], [], []
 
     for i, batch in enumerate(data_with_meta):
         fea = batch[0]
@@ -750,7 +705,6 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
 
     # Combine
     prd = pd.concat([df_meta, df_y_pred_prob, df_labels], axis=1)
-    # prd.to_csv(outdir/'test_preds_per_tiles.csv', index=False)
     return prd
 
 
@@ -780,8 +734,10 @@ def agg_per_smp_preds(prd, id_name, outdir):
 
 
 # Predictions per tile
+timer = Timer()
 # test_tile_preds = calc_per_tile_preds(test_data_with_smp_names, model=model, outdir=outdir)
 test_tile_preds = calc_per_tile_preds(test_data, model=model, outdir=outdir)
+timer.display_timer()
 
 # Aggregate predictions per sample
 # import ipdb; ipdb.set_trace()
@@ -800,10 +756,21 @@ smp_scores = calc_scores(test_smp_preds["y_true"].values, test_smp_preds["y_pred
 dump_dict(tile_scores, outdir/"test_tile_scores.txt")
 dump_dict(smp_scores, outdir/"test_smp_scores.txt")
 
+import ipdb; ipdb.set_trace()
+
 # Confusion
-cnf_mtrx = confusion_matrix(test_smp_preds["y_true"], test_smp_preds["y_pred_label"])
-save_confusion_matrix(cnf_mtrx, labels=["Non-response", "Response"],
-                      outpath=outdir/"confusion.png")
-pprint(cnf_mtrx)
+smp_cnf_mtrx = confusion_matrix(test_smp_preds["y_true"], test_smp_preds["y_pred_label"])
+save_confusion_matrix(true_labels=test_smp_preds["y_true"].values,
+                      predictions=test_smp_preds["y_pred_label"].values,
+                      labels=["Non-response", "Response"],
+                      outpath=outdir/"smp_confusion.png")
+pprint(smp_cnf_mtrx)
+
+tile_cnf_mtrx = confusion_matrix(test_tile_preds["y_true"], test_tile_preds["y_pred_label"])
+save_confusion_matrix(true_labels=test_tile_preds["y_true"].values,
+                      predictions=test_tile_preds["prob"].values,
+                      labels=["Non-response", "Response"],
+                      outpath=outdir/"tile_confusion.png")
+pprint(tile_cnf_mtrx)
 
 print("\nDone.")

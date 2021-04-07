@@ -587,9 +587,9 @@ def create_tf_data(tfrecords,
 def calc_class_weights(tfrecords,
                        class_weights_method="BY_TILE",
                        manifest=None,
-                       SLIDE_ANNOTATIONS=None,
+                       outcomes=None,
                        MODEL_TYPE=None):
-    ''' ... '''
+    """ ... """
     num_tiles = []
     categories = {}
 
@@ -600,7 +600,7 @@ def calc_class_weights(tfrecords,
         tiles = manifest[filename]["total"]
 
         # Get the category of the current sample
-        category = SLIDE_ANNOTATIONS[smp]["outcome"] if MODEL_TYPE == "categorical" else 1
+        category = outcomes[smp]["outcome"] if MODEL_TYPE == "categorical" else 1
 
         if category not in categories.keys():
             categories.update({category: {"num_samples": 1,
