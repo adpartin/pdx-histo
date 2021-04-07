@@ -505,7 +505,7 @@ val_data = create_tf_data(
     **parse_fn_kwargs_non_train)
 
 test_data = create_tf_data(
-    tfrecords=test_tfr_files[:2],
+    tfrecords=test_tfr_files,
     n_concurrent_shards=None,
     shuffle_files=False,
     interleave=False,
@@ -700,7 +700,7 @@ if not train:
 def calc_per_tile_preds(data_with_meta, model, outdir):
     """ ... """
     # meta_keys = ["smp", "Group", "grp_name", "Response"]
-    meta_keys = ["smp", "image_id", "tile_id", "grp_name", "Group"]
+    meta_keys = ["smp", "image_id", "tile_id"]
     # meta_keys = ["smp"]
     meta_agg = {k: None for k in meta_keys}
     y_true, y_pred_prob, y_pred_label, smp_list = [], [], [], []
