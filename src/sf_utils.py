@@ -74,8 +74,8 @@ def _process_image(image_string, augment):
     return image
 
 
-def decode_np_arr(tensor):
-    return np.frombuffer(tensor.numpy(), dtype=cfg.FEA_DTYPE)
+def decode_np_arr(tensor, dtype=cfg.FEA_DTYPE):
+    return np.frombuffer(tensor.numpy(), dtype=dtype)
 
 
 def scale_fea(data, scaler):
@@ -396,7 +396,7 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
 
 def parse_tfrec_fn_rsp(record,
                        # include_smp_names=True,
-                       include_meta=True,
+                       include_meta=False,
                        use_tile=True,
                        use_ge=False,
                        use_dd2=False,
@@ -405,9 +405,9 @@ def parse_tfrec_fn_rsp(record,
                        dd1_scaler=None,
                        dd2_scaler=None,
                        id_name="smp",
-                       augment=True,
-                       MODEL_TYPE=None,
-                       ANNOTATIONS_TABLES=None,
+                       augment=False,
+                       # MODEL_TYPE=None,
+                       # ANNOTATIONS_TABLES=None,
                        ):
     ''' Parses raw entry read from TFRecord. '''
     feature_description = FEA_SPEC_RSP_DRUG_PAIR
@@ -419,7 +419,7 @@ def parse_tfrec_fn_rsp(record,
 
     # Meta
     meta = {}
-    meta_fields = ["index", "smp", "Group", "grp_name",
+    meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
                    "Response",
                    "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
                    "ctype", "csite",
@@ -435,8 +435,13 @@ def parse_tfrec_fn_rsp(record,
     #    label = ANNOTATIONS_TABLES[0].lookup(smp)
     
     # TODO: {"Response": ...} doesn't work with class_weight!
-    label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
-    # label = tf.cast(features["Response"], tf.int64)
+    # label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
+    label = tf.cast(features["Response"], tf.int64)
+
+    # label = tf.cast(features["Response"].decode("utf-8"), tf.int64)  # probably won't work! didn't test!
+    # label = tf.strings.to_number(features["Response"], tf.int64)  # probably won't work! didn't test!
+    # label = tf.io.decode_raw(features["Response"], tf.int64)  # probably won't work! didn't test!
+    # label = tf.strings.unicode_decode(features["Response"], "UTF-8")  # probably won't work! didn't test!
 
     image_dict = {}
 
@@ -491,10 +496,12 @@ def parse_tfrec_fn_rsp(record,
 
 
 def create_tf_data(tfrecords,
-                   n_concurrent_shards=16,
-                   shuffle_size=8192,  # 1024*8
+                   n_concurrent_shards: Optional[int]=16,
+                   shuffle_files: bool=False,
+                   interleave: bool=False,
+                   shuffle_size: Optional[int]=8192,  # 1024*8
                    repeat=True,
-                   epochs=1,
+                   # epochs=1,
                    batch_size=32,
                    drop_remainder=False,
                    seed=None,
@@ -511,42 +518,6 @@ def create_tf_data(tfrecords,
     # TODO: optimizing with data api
     # https://www.tensorflow.org/guide/data_performance
 
-    # -------------------------------------------------------------------------
-    # https://docs.google.com/presentation/d/16kHNtQslt-yuJ3w8GIx-eEH6t_AvFeQOchqGRFpAD7U/edit#slide=id.g254d08e080_0_370
-    # -------------------------------------------------------------------------
-    # # Use interleave() and prefetch() to read many files concurrently.
-    # files = tf.data.Dataset.list_files("*.tfrecord")
-    # dataset = files.interleave(lambda x: TFRecordDataset(x).prefetch(100),
-    #                            cycle_length=8)
-    # # Use num_parallel_calls to parallelize map().
-    # dataset = dataset.map(lambda record: tf.parse_single_example(record),
-    #                       num_parallel_calls=64)
-    # dataset = dataset.shuffle(10000)
-    # dataset = dataset.repeat(100)
-    # dataset = dataset.batch(128)
-    # dataset = dataset.prefetch(1)  # Use prefetch() to overlap the producer and consumer.
-
-    # -------------------------------------------------------------------------
-    # https://github.com/jkjung-avt/keras_imagenet/blob/master/utils/dataset.py
-    # -------------------------------------------------------------------------
-    # files = tf.io.matching_files(os.path.join(tfrecords_dir, '%s-*' % subset))
-    # shards = tf.data.Dataset.from_tensor_slices(files)
-    # shards = shards.shuffle(tf.cast(tf.shape(files)[0], tf.int64))
-    # shards = shards.repeat()
-    # dataset = shards.interleave(tf.data.TFRecordDataset, cycle_length=4)
-    # dataset = dataset.shuffle(buffer_size=8192)
-    # parser = partial(
-    #     _parse_fn, is_training=True if subset == 'train' else False)
-    # dataset = dataset.apply(
-    #     tf.data.experimental.map_and_batch(
-    #         map_func=parser,
-    #         batch_size=batch_size,
-    #         num_parallel_calls=config.NUM_DATA_WORKERS))
-    # dataset = dataset.prefetch(batch_size)
-
-    # -------------------------------------------------------------------------
-    # (AP)
-    # -------------------------------------------------------------------------
     # Notes:
     # Apply batch() before map():
     #   https://www.tensorflow.org/guide/data_performance#vectorizing_mapping
@@ -557,25 +528,34 @@ def create_tf_data(tfrecords,
 
     # 2. In each epoch:
     # i. Randomly shuffle the list of shard filenames, using Dataset.list_files(...).shuffle(num_shards).
-    # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
-    shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
-    # shards = shards.repeat()
+    if shuffle_files:
+        # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
+        shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
+        # shards = shards.repeat()
 
     # ii. Use dataset.interleave(lambda filename: tf.data.TextLineDataset(filename), cycle_length=N)
     #     to mix together records from N different shards.
     # If num_parallel_calls = tf.data.AUTOTUNE, the cycle_length argument identifies the maximum degree of parallelism
-    dataset = shards.interleave(
-        map_func=lambda x: tf.data.TFRecordDataset(x),
-        cycle_length=n_concurrent_shards,
-        block_length=None,  # defaults to 1
-        num_parallel_calls=None,
-        deterministic=None
-    )
+    if interleave:
+        dataset = shards.interleave(
+            map_func=lambda x: tf.data.TFRecordDataset(x),
+            cycle_length=n_concurrent_shards,
+            block_length=None,  # defaults to 1
+            num_parallel_calls=None,
+            deterministic=None
+        )
+    else:
+        dataset = tf.data.TFRecordDataset(
+            shards,
+            buffer_size=None,
+            num_parallel_reads=None)  # If None, files will be read sequentially.
+
 
     # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
     #      but you will probably want to set it to some value larger than the number of records in a single shard.
-    # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
-    dataset = dataset.shuffle(buffer_size=shuffle_size)  # (ap) shuffles the examples in the relevant filenames
+    if shuffle_size is not None:
+        # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
+        dataset = dataset.shuffle(buffer_size=shuffle_size)  # (ap) shuffles the examples in the relevant filenames
 
     # (ap) recommended to use batch before map
     # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)

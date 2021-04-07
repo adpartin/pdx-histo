@@ -9,6 +9,9 @@ fdir = Path(__file__).resolve().parent
 
 cfg = types.SimpleNamespace()
 
+cfg.seed = 42
+
+
 # Data
 cfg.MAIN_PRJDIR = (fdir/"../projects").resolve()
 cfg.DATADIR = (fdir/"../data").resolve()
@@ -21,12 +24,16 @@ cfg.ANNOTATIONS_FILENAME = "annotations.csv"
 cfg.SF_ANNOTATIONS_FILENAME = "annotations_slideflow.csv"
 
 # TFRecords
+# cfg.TFR_DIR = (cfg.DATADIR/"tfrecords").resolve()
+# cfg.SF_TFR_DIR = (fdir/"../../slideflow-proj/PDX_FIXED").resolve()
+# cfg.SF_TFR_DIR_RNA = (fdir/"../../slideflow-proj/PDX_FIXED_RNA").resolve()
+# cfg.SF_TFR_DIR_RNA_NEW = (fdir/"../../slideflow-proj/PDX_FIXED_RNA_NEW").resolve()
+# cfg.SF_TFR_DIR_RSP = (fdir/"../../slideflow-proj/PDX_FIXED_RSP").resolve()
+# cfg.SF_TFR_DIR_RSP_DRUG_PAIR = (fdir/"../../slideflow-proj/PDX_FIXED_RSP_DRUG_PAIR").resolve()
+
 cfg.TFR_DIR = (cfg.DATADIR/"tfrecords").resolve()
-cfg.SF_TFR_DIR = (fdir/"../../slideflow-proj/PDX_FIXED").resolve()
-cfg.SF_TFR_DIR_RNA = (fdir/"../../slideflow-proj/PDX_FIXED_RNA").resolve()
-cfg.SF_TFR_DIR_RNA_NEW = (fdir/"../../slideflow-proj/PDX_FIXED_RNA_NEW").resolve()
-cfg.SF_TFR_DIR_RSP = (fdir/"../../slideflow-proj/PDX_FIXED_RSP").resolve()
-cfg.SF_TFR_DIR_RSP_DRUG_PAIR = (fdir/"../../slideflow-proj/PDX_FIXED_RSP_DRUG_PAIR").resolve()
+cfg.SF_TFR_DIR = (cfg.DATADIR/"PDX_FIXED").resolve()
+cfg.SF_TFR_DIR_RSP_DRUG_PAIR = (cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR").resolve()
 
 # Meta file names
 cfg.CROSSREF_FNAME = "_ImageID_PDMRID_CrossRef.xlsx"
@@ -40,7 +47,7 @@ cfg.RSP_DPATH = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data
 # Gene expression file
 # cfg.RNA_DPATH = cfg.DATADIR/"combined_rnaseq_data_lincs1000"
 # cfg.RNA_DPATH = cfg.DATADIR/"combined_rnaseq_data_lincs1000_combat"
-cfg.RNA_DPATH = cfg.DATADIR/'PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Standardized_Normalized_RNA-seq_Data_lincs1000.txt'
+cfg.RNA_DPATH = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Standardized_Normalized_RNA-seq_Data_lincs1000.txt"
 # cfg.RNA_DPATH = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Standardized_Unnormalized_RNA-seq_Data_lincs1000.txt"
 
 # Drug descriptors file

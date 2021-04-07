@@ -32,7 +32,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPla
 # from tensorflow.keras.models import Sequential, Model, load_model
 # from tensorflow.keras.utils import plot_model
 
-from models import build_model_rsp_baseline
+from models import build_model_rsp_baseline, keras_callbacks
 from ml.scale import get_scaler
 from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
 from utils.utils import Params, dump_dict, read_lines, cast_list
@@ -244,19 +244,7 @@ print(f"Unique {split_on} in te: {len(te_grp_unq)}")
 # ydata_label = np.argmax(y_onehot.values, axis=1)
 # num_classes = len(np.unique(ydata_label))
 
-def keras_callbacks(outdir, monitor='val_loss'):
-    """ ... """
-    checkpointer = ModelCheckpoint(str(outdir/'model_best_at_{epoch}.ckpt'), monitor=monitor,
-                                   verbose=0, save_weights_only=False, save_best_only=True)
-    csv_logger = CSVLogger(outdir/'training.log')
-    reduce_lr = ReduceLROnPlateau(monitor=monitor, factor=0.5, patience=10,
-                                  verbose=1, mode='auto', min_delta=0.0001,
-                                  cooldown=0, min_lr=0)
-    early_stop = EarlyStopping(monitor=monitor, patience=20, verbose=1, mode='auto')
-
-    return [checkpointer, csv_logger, early_stop, reduce_lr]
-
-callbacks = keras_callbacks(outdir, monitor='val_loss')
+callbacks = keras_callbacks(outdir, monitor="val_loss")
 
 # https://www.tensorflow.org/guide/mixed_precision
 # Mixed precision

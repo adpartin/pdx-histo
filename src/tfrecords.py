@@ -79,7 +79,8 @@ FEA_SPEC_RSP_DRUG_PAIR = {
     "Group":    tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "grp_name": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-    "tile_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+    "tile_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    # "tile_id":  tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
 
     "Sample":      tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "model":       tf.io.FixedLenFeature(shape=[], dtype=tf.string),
@@ -99,6 +100,7 @@ FEA_SPEC_RSP_DRUG_PAIR = {
     "aug":   tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
     "Response": tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+    # "Response": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
     # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
     # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),

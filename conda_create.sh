@@ -3,6 +3,9 @@
 # Run script as follows:
 # $ ./conda_create.sh
 
+# TF-cudnn-cudatoolkit configs
+# https://www.tensorflow.org/install/source#gpu
+
 # Step 1: create conda env and activate env
 # activate conda env from script:
 #   stackoverflow.com/questions/55507519
@@ -10,10 +13,13 @@ conda create -n pdx python=3.7 pip setuptools wheel virtualenv --yes
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate pdx
 
-# Step 2: install cuda tools
+# Step 2: install cudatoolkit tools
 conda install -c anaconda cudatoolkit=10.1 --yes
 
-# Step 3: install openslide (the C library) with conda
+# Step 3: install cudnn tools
+conda install -c anaconda cudnn=7.6 --yes
+
+# Step 4: install openslide (the C library) with conda
 conda install -c conda-forge openslide=3.4.1 --yes
 
 # Note!
@@ -21,12 +27,9 @@ conda install -c conda-forge openslide=3.4.1 --yes
 # packages with requirement.txt
 # $ conda activate pdx
 
-# Step 4: install openslide-python with conda or pip
+# Step 5: install openslide-python with conda or pip
 # conda install -c bioconda openslide-python=1.1.1 --yes
 # pip install openslide-python
-
-# Step 5: (manually) activate pdx
-# conda activate pdx
 
 # Step 6: (manually) activate create venv and install packages with Makefile
 # make dev-venv

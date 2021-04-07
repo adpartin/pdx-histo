@@ -20,10 +20,14 @@ split_on=Group
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"
+
+trn_phase=$2
+
 # CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_multimodal2.py \
 CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal2.py \
     --target $target \
     --split_on $split_on \
     --id_name $id_name \
     --prjname $prjname \
+    --trn_phase $trn_phase \
     --dataname $dataname

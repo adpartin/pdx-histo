@@ -38,9 +38,9 @@ from src.tf_utils import _float_feature, _bytes_feature, _int64_feature
 from src.utils.utils import Timer
 
 # Seed
-seed = 42
-np.random.seed(seed)
-tf.random.set_seed(seed)
+# seed = 42
+np.random.seed(cfg.seed)
+tf.random.set_seed(cfg.seed)
 
 
 LABEL = '299px_302um'
@@ -160,7 +160,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     # -------------------
 
     if n_samples is not None:
-        data = data.sample(n=n_samples, random_state=seed).reset_index(drop=True)
+        data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
 
     # Re-org cols
     dim = data.shape[1]
@@ -216,7 +216,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
     slides = data["image_id"].unique().tolist()
     all_slides = original_tfr_names(label=LABEL)
     c_slides = set(slides).intersection(set(all_slides))
-    print(f"A total of {len(c_slides)} drug response samples with tfrecords and tabular features.")
+    print(f"A total of {len(c_slides)} slides that are relevant for our drug response samples.")
 
     # import ipdb; ipdb.set_trace()
     tile_counter = []
@@ -228,7 +228,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
         rel_tfr = str(slide_name) + ".tfrecords"
         tfr = str(directory/rel_tfr)
         
-        print(f"\r\033[K Creating tfrecords using {green(rel_tfr)} ({i+1} out of {len(c_slides)} tfrecords) ...", end="") 
+        print(f"\r\033[K Creating drug response tfrecords using {green(rel_tfr)} (slide {i+1} out of {len(c_slides)} slides) ...", end="") 
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
             
@@ -263,8 +263,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                         "Group":       _bytes_feature(bytes(slide_meta["Group"], "utf-8")),
                         "grp_name":    _bytes_feature(bytes(slide_meta["grp_name"], "utf-8")),
                         
-                        # "tile_id":     _bytes_feature(bytes(str(tile_id), "utf-8")),
-                        "tile_id":     _int64_feature(int(tile_id)),
+                        "tile_id":     _bytes_feature(bytes(str(tile_id), "utf-8")),
+                        # "tile_id":     _int64_feature(int(tile_id)),
 
                         "Sample":      _bytes_feature(bytes(slide_meta["Sample"], "utf-8")),
                         "model":       _bytes_feature(bytes(slide_meta["model"], "utf-8")),
@@ -288,6 +288,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                         "aug":         _bytes_feature(bytes(slide_meta["aug"], "utf-8")),
 
                         "Response":    _int64_feature(int(slide_meta["Response"])),
+                        # "Response":    _bytes_feature(bytes(str(slide_meta["Response"]), "utf-8")),
 
                         # 'ge_data':     _float_feature(slide_meta['ge_data']),
                         # 'dd_data':     _float_feature(slide_meta['dd_data']),
@@ -299,13 +300,15 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                 
                 writer.write(ex.SerializeToString())
 
-            print(f"Total tiles in the sample {tile_id+1}")
+            # print(f"Total tiles in the sample {tile_id+1}")
             tile_counter.append( {"smp": smp, "slide": slide_name, "max_tiles": tile_id+1} )
             writer.close()
         print()
         
     tile_counter = pd.DataFrame(tile_counter)
     tile_counter = tile_counter.drop_duplicates().reset_index(drop=True)
+    meta = data[["smp", "Group", "grp_name", "Response"]]
+    tile_counter = tile_counter.merge(meta, on="smp", how="inner").reset_index(drop=True)
     tile_counter.to_csv(outpath/"tile_counts_per_slide.csv", index=False)
 
 
@@ -330,7 +333,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
 
     for rec in raw_dataset.take(4):
         features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP_DRUG_PAIR)
-        tf.print("tile_id:", features["tile_id"])
+        print("tile_id: ", features["tile_id"].numpy())
+        print("Response:", features["Response"].numpy())
 
     print("\nDone.")
 
@@ -371,7 +375,7 @@ def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
     print(data.shape)
 
     if n_samples is not None:
-        data = data.sample(n=n_samples, random_state=seed).reset_index(drop=True)
+        data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
 
     # Re-org cols
     dim = data.shape[1]
