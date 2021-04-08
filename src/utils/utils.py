@@ -1,4 +1,5 @@
 import json
+import os
 import pandas as pd
 from pathlib import Path
 from pprint import pprint, pformat
@@ -57,6 +58,20 @@ def get_print_func(logger=None):
     return print if logger is None else logger.info
 
 
+def create_outdir(outdir, args=None):
+    from datetime import datetime
+    t = datetime.now()
+    t = [t.year, "-", str(t.month).zfill(2), "-", str(t.day).zfill(2),
+         "_", "h", str(t.hour).zfill(2), "-", "m", str(t.minute).zfill(2)]
+    t = "".join([str(i) for i in t])
+
+    outdir = Path(outdir)
+    outdir = outdir/t
+    
+    os.makedirs(outdir)
+    return outdir    
+
+
 def read_lines(file_path):
     with open(file_path, 'r') as file:
         lines = file.read().splitlines()
@@ -86,7 +101,7 @@ class Params():
 
     def save(self, json_path):
         """Saves parameters to json file"""
-        with open(json_path, 'w') as f:
+        with open(json_path, "w") as f:
             json.dump(self.__dict__, f, indent=4)
 
     def update(self, json_path):
@@ -113,9 +128,9 @@ class Timer:
     time_diff = self.end - self.start
     return time_diff
 
-  def display_timer(self):
+  def display_timer(self, print_fn=print):
     time_diff = self.timer_end()
     if (time_diff)//3600 > 0:
-        print("Runtime: {:.1f} hrs".format( (time_diff)/3600) )
+        print_fn("Runtime: {:.1f} hrs".format( (time_diff)/3600) )
     else:
-        print("Runtime: {:.1f} mins".format( (time_diff)/60) )
+        print_fn("Runtime: {:.1f} mins".format( (time_diff)/60) )

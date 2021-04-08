@@ -13,7 +13,7 @@ class Logger():
         lg = classlogger.Logger(logfilename=logfilename)
         lg.logger.info(f'File path: {file_path}')
     """
-    def __init__(self, logfilename='logfile.log'):
+    def __init__(self, logfilename="logfile.log"):
         """ Create logger. Output to file and console.
         TODO: example for class logging --> https://airbrake.io/blog/python-exception-handling/attributeerror
         """
@@ -38,7 +38,7 @@ class Logger():
 
         # Create logger and add handlers
         # logger = logging.getLogger(__name__)
-        logger = logging.getLogger('')
+        logger = logging.getLogger("")
         logger.setLevel(logging.INFO)
         logger.addHandler(self.fileHandler)
         logger.addHandler(self.consoleHandler)
@@ -50,17 +50,17 @@ class Logger():
         #     log.addHandler(fh)
         #     log.addHandler(sh)
 
-        self.logger.info('{}'.format('-' * 90))
+        self.logger.info("{}".format("-" * 90))
         self.logger.info(datetime.now())
-        self.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+        self.logger.info(f"Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)")
         #return logger
 
 
     def close_logger(self):
         """ Close logger. """
         n_seps = 70
-        self.logger.info('\nClose logger.')
-        self.logger.info('{}\n'.format('-' * n_seps))
+        self.logger.info("\nClose logger.")
+        self.logger.info("{}\n".format("-" * n_seps))
         self.logger.removeHandler(self.fileHandler)
         self.logger.removeHandler(self.consoleHandler)
 
@@ -68,8 +68,8 @@ class Logger():
     def kill_logger(self):
         """ Kill logger. """
         n_seps = 70
-        self.logger.info('\nKill logger.')
-        self.logger.info('{}\n'.format('-' * n_seps))
+        self.logger.info("\nKill logger.")
+        self.logger.info("{}\n".format("-" * n_seps))
         self.logger.removeHandler(self.fileHandler)
         self.logger.removeHandler(self.consoleHandler)
         # TODO: delete file

@@ -10,7 +10,7 @@ import glob
 import shutil
 import tempfile
 from pathlib import Path
-from pprint import pprint
+from pprint import pprint, pformat
 from time import time
 
 import numpy as np
@@ -39,7 +39,9 @@ from src.config import cfg
 from src.models import build_model_rsp, build_model_rsp_baseline, keras_callbacks
 from src.ml.scale import get_scaler
 from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
-from src.utils.utils import Params, dump_dict, read_lines, cast_list, Timer
+from src.utils.classlogger import Logger
+from src.utils.utils import (cast_list, create_outdir, dump_dict, get_print_func,
+                             read_lines, Params, Timer)
 from src.datasets.tidy import split_data_and_extract_fea, extract_fea
 from src.tf_utils import get_tfr_files, calc_records_in_tfr_files, count_data_items
 from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_class_weights,
@@ -47,7 +49,6 @@ from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_clas
                           create_manifest)
 
 # Seed
-# seed = 42
 np.random.seed(cfg.seed)
 tf.random.set_seed(cfg.seed)
 
@@ -85,18 +86,29 @@ parser.add_argument("--trn_phase",
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-single_drug = False
-
-# Load dataframe (annotations)
-prjdir = cfg.MAIN_PRJDIR/args.prjname
-annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
-data = pd.read_csv(annotations_file)
-print(data.shape)
 
 # Create outdir
+prjdir = cfg.MAIN_PRJDIR/args.prjname
 split_on = "none" if args.split_on is (None or "none") else args.split_on
-outdir = prjdir/f"multimodal/split_on_{split_on}"
-os.makedirs(outdir, exist_ok=True)
+# outdir = prjdir/f"multimodal/split_on_{split_on}"
+# os.makedirs(outdir, exist_ok=True)
+base_outdir = prjdir/f"multimodal"
+outdir = create_outdir(base_outdir)
+
+
+# Logger
+lg = Logger(outdir/"logger.log")
+print_fn = get_print_func(lg.logger)
+print_fn(f"File path: {fdir}")
+print_fn(f"\n{pformat(vars(args))}")
+
+
+# Load dataframe (annotations)
+annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
+data = pd.read_csv(annotations_file)
+data = data.astype({"image_id": str, "slide": str})
+print(data.shape)
+
 
 # Import hyper-parameters
 # import ipdb; ipdb.set_trace()
@@ -104,22 +116,24 @@ prm_file_path = prjdir/"multimodal/params.json"
 if prm_file_path.exists() is False:
     shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
 params = Params(prm_file_path)
+params.save(outdir/"params.json")
+
 
 # import ipdb; ipdb.set_trace()
 print("\nFull dataset:")
 if args.target[0] == "Response":
-    pprint(data.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
+    print_fn(data.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
         columns={split_on: f"{split_on}_unq", "smp": "smp_unq"}))
 else:
-    pprint(data[args.target[0]].value_counts())
+    print_fn(data[args.target[0]].value_counts())
+
+
+# Scalers for each feature set
+ge_scaler, dd1_scaler, dd2_scaler = None, None, None
 
 ge_cols  = [c for c in data.columns if c.startswith("ge_")]
 dd1_cols = [c for c in data.columns if c.startswith("dd1_")]
 dd2_cols = [c for c in data.columns if c.startswith("dd2_")]
-data = data.astype({"image_id": str, "slide": str})
-
-# Scalers for each feature set
-ge_scaler, dd1_scaler, dd2_scaler = None, None, None
 
 if params.use_ge and len(ge_cols) > 0:
     ge_scaler = get_scaler(data[ge_cols])
@@ -131,58 +145,37 @@ if params.use_dd2 and len(dd2_cols) > 0:
     dd2_scaler = get_scaler(data[dd2_cols])
 
 
-
-# loss={'csite_label': tf.keras.losses.categorical_crossentropy,
-#     'ctype_label': tf.keras.losses.categorical_crossentropy},
-# loss = {'ctype': tf.keras.losses.SparseCategoricalCrossentropy()}
-
-outcome_header = args.target
-
-label = f"{params.tile_px}px_{params.tile_um}um"
-
-
+# Determine tfr_dir and the data parsing funcs
 if args.target[0] == "Response":
+    # parse_fn = parse_tfrec_fn_rsp
+
     if params.single_drug:
         tfr_dir = cfg.SF_TFR_DIR_RSP
-        parse_fn = parse_tfrec_fn_rsp
     else:
         tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
-        parse_fn = parse_tfrec_fn_rsp
 
 elif args.target[0] == "ctype":
+    # parse_fn = parse_tfrec_fn_rna
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
-    parse_fn = parse_tfrec_fn_rna
+
+label = f"{params.tile_px}px_{params.tile_um}um"
 tfr_dir = tfr_dir/label
 
 
-# (ap) Create outcomes (for drug response)
-# __init__ --> _trainer --> training_dataset.get_outcomes_from_annotations
+# Create outcomes (for drug response)
 outcomes = {}
 unique_outcomes = list(set(data[args.target[0]].values))
 unique_outcomes.sort()
 
 for smp, o in zip(data[args.id_name], data[args.target[0]]):
     outcomes[smp] = {"outcome": unique_outcomes.index(o)}
-    # outcomes[smp] = {'outcome': unique_outcomes.index(o), 'submitter_id': smp}
-
-print("\n'outcomes':")
-print(type(outcomes))
-print(len(outcomes))
-print(list(outcomes.keys())[:3])
-print(outcomes[list(outcomes.keys())[3]])
 
 
-# -----------------------------------------------
 # Create manifest
-# -----------------------------------------------
+print_fn("\nCreate/load manifest ...")
 timer = Timer()
 manifest = create_manifest(directory=tfr_dir, n_files=None)
-timer.display_timer()
-print("\nmanifest:")
-print(type(manifest))
-print(len(manifest))
-print(list(manifest.keys())[:3])
-print(manifest[list(manifest.keys())[3]])
+timer.display_timer(print_fn)
 
 
 # -----------------------------------------------
@@ -276,12 +269,12 @@ xvl = {"ge_data": vl_ge.values, "dd1_data": vl_dd1.values, "dd2_data": vl_dd2.va
 xte = {"ge_data": te_ge.values, "dd1_data": te_dd1.values, "dd2_data": te_dd2.values}
 
 # import ipdb; ipdb.set_trace()
-print("\nTrain:")
-pprint(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
-print("\nVal:")
-pprint(vl_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
-print("\nTest:")
-pprint(te_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_fn("\nTrain:")
+print_fn(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_fn("\nVal:")
+print_fn(vl_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_fn("\nTest:")
+print_fn(te_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
 
 # Make sure indices do not overlap
 assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
@@ -289,21 +282,21 @@ assert len( set(tr_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw
 assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and vl"
 
 # Print split ratios
-print("")
-print("Train samples {} ({:.2f}%)".format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
-print("Val   samples {} ({:.2f}%)".format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
-print("Test  samples {} ({:.2f}%)".format( len(te_id), 100*len(te_id)/data.shape[0] ))
+print_fn("")
+print_fn("Train samples {} ({:.2f}%)".format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
+print_fn("Val   samples {} ({:.2f}%)".format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
+print_fn("Test  samples {} ({:.2f}%)".format( len(te_id), 100*len(te_id)/data.shape[0] ))
 
 tr_grp_unq = set(tr_meta[split_on].values)
 vl_grp_unq = set(vl_meta[split_on].values)
 te_grp_unq = set(te_meta[split_on].values)
-print("")
-print(f"Total intersects on {split_on} btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}")
-print(f"Total intersects on {split_on} btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}")
-print(f"Total intersects on {split_on} btw vl and te: {len(vl_grp_unq.intersection(te_grp_unq))}")
-print(f"Unique {split_on} in tr: {len(tr_grp_unq)}")
-print(f"Unique {split_on} in vl: {len(vl_grp_unq)}")
-print(f"Unique {split_on} in te: {len(te_grp_unq)}")
+print_fn("")
+print_fn(f"Total intersects on {split_on} btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}")
+print_fn(f"Total intersects on {split_on} btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}")
+print_fn(f"Total intersects on {split_on} btw vl and te: {len(vl_grp_unq.intersection(te_grp_unq))}")
+print_fn(f"Unique {split_on} in tr: {len(tr_grp_unq)}")
+print_fn(f"Unique {split_on} in vl: {len(vl_grp_unq)}")
+print_fn(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
 
 
@@ -347,10 +340,10 @@ total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_til
 total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["max_tiles"].sum()
 
 # import ipdb; ipdb.set_trace()
-print(len(outcomes))
-print(len(manifest))
-print(outcomes[list(outcomes.keys())[3]])
-print(manifest[list(manifest.keys())[3]])
+# print(len(outcomes))
+# print(len(manifest))
+# print(outcomes[list(outcomes.keys())[3]])
+# print(manifest[list(manifest.keys())[3]])
 
 
 # -------------------------------
@@ -358,22 +351,28 @@ print(manifest[list(manifest.keys())[3]])
 # -------------------------------
 # import ipdb; ipdb.set_trace()
 
-#SLIDES = list(slide_annotations.keys())
-SAMPLES = list(slide_annotations.keys())
+#slide_annotations = outcomes
 
-#outcomes_ = [slide_annotations[slide]['outcome'] for slide in SLIDES]
-outcomes_ = [slide_annotations[smp]['outcome'] for smp in SAMPLES]
+##SLIDES = list(slide_annotations.keys())
+#SAMPLES = list(slide_annotations.keys())
 
-if params.model_type == 'categorical':
-    NUM_CLASSES = len(list(set(outcomes_)))  # infer this from other variables
+##outcomes_ = [slide_annotations[slide]['outcome'] for slide in SLIDES]
+#outcomes_ = [slide_annotations[smp]['outcome'] for smp in SAMPLES]
 
-#ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SLIDES, outcomes_), -1)]
-ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SAMPLES, outcomes_), -1)]
+#if params.model_type == 'categorical':
+#    NUM_CLASSES = len(list(set(outcomes_)))  # infer this from other variables
 
+##ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SLIDES, outcomes_), -1)]
+#ANNOTATIONS_TABLES = [tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(SAMPLES, outcomes_), -1)]
+
+
+# -------------------------------
+# Parsing funcs
+# -------------------------------
 
 # import ipdb; ipdb.set_trace()
 
-if args.target[0] == 'Response':
+if args.target[0] == "Response":
     # Response
     parse_fn = parse_tfrec_fn_rsp
     parse_fn_kwargs_train = {
@@ -397,12 +396,16 @@ else:
         'ge_scaler': ge_scaler,
         'id_name': args.id_name,
         'MODEL_TYPE': params.model_type,
-        'ANNOTATIONS_TABLES': ANNOTATIONS_TABLES,
         'AUGMENT': params.augment,
     }
+
 parse_fn_kwargs_non_train = parse_fn_kwargs_train.copy()
 parse_fn_kwargs_non_train["augment"] = False
 
+
+# -------------------------------
+# Class weight
+# -------------------------------
 # class_weights_method = "BY_SAMPLE"
 class_weights_method = "BY_TILE"
 # class_weights_method = "NONE"
@@ -415,7 +418,11 @@ class_weight = calc_class_weights(train_tfr_files,
                                   MODEL_TYPE=params.model_type)
 # class_weight = {"Response": class_weight}
 
-print("\nTraining TFRecods")
+
+# -------------------------------
+# Create TF datasets
+# -------------------------------
+print("\nCreate TF dataset ...")
 
 # import ipdb; ipdb.set_trace()
 train_data = create_tf_data(
@@ -457,7 +464,6 @@ for i, rec in enumerate(train_data.take(4)):
 
 val_data = create_tf_data(
     tfrecords=val_tfr_files,
-    n_concurrent_shards=None,
     shuffle_files=False,
     interleave=False,
     shuffle_size=None,
@@ -471,7 +477,6 @@ val_data = create_tf_data(
 
 test_data = create_tf_data(
     tfrecords=test_tfr_files,
-    n_concurrent_shards=None,
     shuffle_files=False,
     interleave=False,
     shuffle_size=None,
@@ -483,14 +488,11 @@ test_data = create_tf_data(
     include_meta=True,
     **parse_fn_kwargs_non_train)
 
+
 # ----------------------
 # Prep for training
 # ----------------------
 # import ipdb; ipdb.set_trace()
-
-class PredictionAndEvaluationCallback(tf.keras.callbacks.Callback):
-    pass
-
 
 # #callbacks = [history_callback, PredictionAndEvaluationCallback(), cp_callback, tensorboard_callback]
 # callbacks = [history_callback, cp_callback]
@@ -506,11 +508,11 @@ if params.use_fp16:
     # mixed_precision.set_global_policy(policy)
     # TF 2.3
     from tensorflow.keras.mixed_precision import experimental as mixed_precision
-    print("Training with mixed precision")
+    print_fn("Training with mixed precision")
     policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
     mixed_precision.set_policy(policy)
-    print("Compute dtype: %s" % policy.compute_dtype)
-    print("Variable dtype: %s" % policy.variable_dtype)
+    print_fn("Compute dtype: %s" % policy.compute_dtype)
+    print_fn("Variable dtype: %s" % policy.variable_dtype)
 
 
 # import ipdb; ipdb.set_trace()
@@ -550,36 +552,55 @@ else:
 # ytr_label = ydata_label[tr_id]
 # yvl_label = ydata_label[vl_id]
 # yte_label = ydata_label[te_id]
-ytr_label = tr_meta[args.target[0]].values
-yvl_label = vl_meta[args.target[0]].values
-yte_label = te_meta[args.target[0]].values    
+# ytr_label = tr_meta[args.target[0]].values
+# yvl_label = vl_meta[args.target[0]].values
+# yte_label = te_meta[args.target[0]].values    
 
 
-# -------------
-# Train model
-# -------------
+# ----------------------
+# Define model
+# ----------------------
 
 # import ipdb; ipdb.set_trace()
 
+# Calc output bias
+neg, pos = np.bincount(tr_meta[args.target[0]].values)
+total = neg + pos
+print("Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
+output_bias = np.log([pos/neg])
+print("Output bias:", output_bias)
+# output_bias = None
+
 if args.target[0] == "Response":
     if params.use_tile is True:
-        model = build_model_rsp(use_ge=params.use_ge,
-                                use_dd1=params.use_dd1,
-                                use_dd2=params.use_dd2,
-                                use_tile=params.use_tile,
-                                ge_shape=ge_shape,
-                                dd_shape=dd_shape,
-                                model_type=params.model_type,
-                                output_bias=None,
-                                loss=loss)
+        build_model_kwargs = {"use_ge": params.use_ge,
+                              "use_dd1": params.use_dd1,
+                              "use_dd2": params.use_dd2,
+                              "use_tile": params.use_tile,
+                              "ge_shape": ge_shape,
+                              "dd_shape": dd_shape,
+                              "model_type": params.model_type,
+                              "output_bias": output_bias,
+                              "loss": loss,
+        }
+        model = build_model_rsp(**build_model_kwargs)
+                                
+        # model = build_model_rsp(use_ge=params.use_ge,
+        #                         use_dd1=params.use_dd1,
+        #                         use_dd2=params.use_dd2,
+        #                         use_tile=params.use_tile,
+        #                         ge_shape=ge_shape,
+        #                         dd_shape=dd_shape,
+        #                         model_type=params.model_type,
+        #                         output_bias=None,  # TODO: add this!
+        #                         loss=loss)
     else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
                                          use_dd1=params.use_dd1,
                                          use_dd2=params.use_dd2,
                                          ge_shape=ge_shape,
                                          dd_shape=dd_shape,
-                                         model_type=params.model_type,
-                                         NUM_CLASSES=NUM_CLASSES)
+                                         model_type=params.model_type)
         x = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
         y = {"Response": ytr}
         validation_data = ({"ge_data": vl_ge.values,
@@ -589,12 +610,19 @@ else:
     raise NotImplementedError("Need to check this method")
     model = build_model_rna()
 
-print()
-print(model.summary())
+print_fn("")
+print_fn(model.summary())
 
-# model.compile(loss=losses.BinaryCrossentropy(),
-#               optimizer=Adam(learning_rate=params.learning_rate),
-#               metrics=metrics)
+# import ipdb; ipdb.set_trace()
+steps = 100
+results = model.evaluate(train_data,
+                         steps=params.batch_size*steps//params.batch_size,
+                         verbose=1)
+print("Loss: {:0.4f}".format(results[0]))
+
+# -------------
+# Train model
+# -------------
 
 final_model_fpath = outdir/f"final_model_for_split_id_{split_id}"
 # train = True
@@ -604,8 +632,22 @@ train = True if args.trn_phase == "train" else False
 # import ipdb; ipdb.set_trace()
 
 if train:
+
+    # Base model
+    base_model_path = base_outdir/"base_model"
+    if base_model_path.exists():
+        # load model
+        model = tf.keras.models.load_model(base_model_path, compile=True)
+    else:
+        # save model
+        model.save(base_model_path)
+
+    # Dump/log performance measures of the base model
+    # TODO 
+
     t = time()
-    print("Start training ...")
+    print_fn("\nStart training ...")
+
     if params.use_tile is True:
         timer = Timer()
         history = model.fit(x=train_data,
@@ -628,7 +670,8 @@ if train:
                             verbose=1,
                             validation_data=validation_data,
                             callbacks=callbacks)
-    timer.display_timer()
+
+    timer.display_timer(print_fn)
 
 
     # --------------------------
@@ -732,12 +775,13 @@ def agg_per_smp_preds(prd, id_name, outdir):
     # print(agg_preds.equals(xx))
     return agg_preds
 
+print_fn("\nPredictions ...")
 
 # Predictions per tile
 timer = Timer()
 # test_tile_preds = calc_per_tile_preds(test_data_with_smp_names, model=model, outdir=outdir)
 test_tile_preds = calc_per_tile_preds(test_data, model=model, outdir=outdir)
-timer.display_timer()
+timer.display_timer(print_fn)
 
 # Aggregate predictions per sample
 # import ipdb; ipdb.set_trace()
@@ -773,4 +817,4 @@ save_confusion_matrix(true_labels=test_tile_preds["y_true"].values,
                       outpath=outdir/"tile_confusion.png")
 pprint(tile_cnf_mtrx)
 
-print("\nDone.")
+print_fn("\nDone.")

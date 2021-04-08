@@ -24,14 +24,30 @@ from config import cfg
 
 def keras_callbacks(outdir, monitor="val_loss"):
     """ ... """
-    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"), monitor=monitor,
-                                   verbose=0, save_weights_only=False, save_best_only=True,
+    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
+                                   monitor=monitor,
+                                   verbose=0,
+                                   save_weights_only=False,
+                                   save_best_only=True,
                                    save_freq="epoch")
+
     csv_logger = CSVLogger(outdir/"training.log")
-    reduce_lr = ReduceLROnPlateau(monitor=monitor, factor=0.5, patience=10,
-                                  verbose=1, mode="auto", min_delta=0.0001,
-                                  cooldown=0, min_lr=0)
-    early_stop = EarlyStopping(monitor=monitor, patience=20, verbose=1, mode="auto")
+
+    reduce_lr = ReduceLROnPlateau(monitor=monitor,
+                                  factor=0.5,
+                                  patience=10,
+                                  verbose=1,
+                                  mode="auto",
+                                  min_delta=0.0001,
+                                  cooldown=0,
+                                  min_lr=0)
+
+    early_stop = EarlyStopping(monitor=monitor,
+                               patience=20,
+                               mode="auto",
+                               restore_best_weights=True,
+                               verbose=1,)
+
     return [checkpointer, csv_logger, early_stop, reduce_lr]
 
 
@@ -132,7 +148,8 @@ def keras_callbacks(outdir, monitor="val_loss"):
 
 def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
                              ge_shape=None, dd_shape=None, model_type="categorical",
-                             NUM_CLASSES=None, output_bias=None):
+                             # NUM_CLASSES=None,
+                             output_bias=None):
     """ Doesn't use image data. """
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
