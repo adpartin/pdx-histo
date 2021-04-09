@@ -28,7 +28,7 @@ assert tf.__version__ >= "2.0"
 from tensorflow import keras
 from tensorflow.keras import backend as K
 from tensorflow.keras import losses
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import optimizers
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping
 
 fdir = Path(__file__).resolve().parent
@@ -335,9 +335,9 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 tile_cnts = pd.read_csv(cfg.SF_TFR_DIR_RSP_DRUG_PAIR/label/"tile_counts_per_slide.csv")
 # tr_tile_cnts = tile_cnts.merge(tr_meta[["smp", "Group", "grp_name", "Response"]], on="smp", how="inner")
 
-total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_tiles"].sum()
-total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_tiles"].sum()
 total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["max_tiles"].sum()
+total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_tiles"].sum()
+total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_tiles"].sum()
 
 # import ipdb; ipdb.set_trace()
 # print(len(outcomes))
@@ -462,26 +462,28 @@ for i, item in enumerate(bb):
 for i, rec in enumerate(train_data.take(4)):
     tf.print(rec[1])
 
+val_batch_size = 8*params.batch_size
 val_data = create_tf_data(
     tfrecords=val_tfr_files,
     shuffle_files=False,
     interleave=False,
     shuffle_size=None,
     repeat=False,
-    batch_size=8*params.batch_size, # 2048
+    batch_size=val_batch_size, # 2048
     seed=None,
     prefetch=2,
     parse_fn=parse_fn,
     include_meta=False,
     **parse_fn_kwargs_non_train)
 
+test_batch_size = 8*params.batch_size
 test_data = create_tf_data(
     tfrecords=test_tfr_files,
     shuffle_files=False,
     interleave=False,
     shuffle_size=None,
     repeat=False,
-    batch_size=8*params.batch_size, # 2048
+    batch_size=test_batch_size, # 2048
     seed=None,
     prefetch=2,
     parse_fn=parse_fn,
@@ -564,12 +566,19 @@ else:
 # import ipdb; ipdb.set_trace()
 
 # Calc output bias
-neg, pos = np.bincount(tr_meta[args.target[0]].values)
+# neg, pos = np.bincount(tr_meta[args.target[0]].values)
+
+from sf_utils import get_categories_from_manifest
+categories = get_categories_from_manifest(train_tfr_files, manifest, outcomes)
+neg = categories[0]["num_tiles"]
+pos = categories[1]["num_tiles"]
+
 total = neg + pos
 print("Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
 output_bias = np.log([pos/neg])
 print("Output bias:", output_bias)
 # output_bias = None
+
 
 if args.target[0] == "Response":
     if params.use_tile is True:
@@ -582,6 +591,7 @@ if args.target[0] == "Response":
                               "model_type": params.model_type,
                               "output_bias": output_bias,
                               "loss": loss,
+                              "optimizer": optimizers.Adam(learning_rate=params.learning_rate)
         }
         model = build_model_rsp(**build_model_kwargs)
                                 
@@ -624,14 +634,10 @@ print("Loss: {:0.4f}".format(results[0]))
 # Train model
 # -------------
 
-final_model_fpath = outdir/f"final_model_for_split_id_{split_id}"
-# train = True
-# train = False
-train = True if args.trn_phase == "train" else False
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
-if train:
+if args.trn_phase == "train":
 
     # Base model
     base_model_path = base_outdir/"base_model"
@@ -655,7 +661,7 @@ if train:
                             steps_per_epoch=total_train_tiles//params.batch_size,
                             # steps_per_epoch=640//params.batch_size,
                             validation_data=val_data,
-                            validation_steps=total_val_tiles//params.batch_size,
+                            validation_steps=total_val_tiles//val_batch_size,
                             # validation_steps=640//params.batch_size,
                             class_weight=class_weight,
                             epochs=params.epochs,
@@ -684,13 +690,12 @@ if train:
     # models and custom layers without requiring the original code.
 
     # Save the entire model as a SavedModel.
+    final_model_fpath = outdir/f"final_model_for_split_id_{split_id}"
     model.save(final_model_fpath)
 
-# --------------------------
-# Save model
-# --------------------------
-if not train:
+else:
     model = tf.keras.models.load_model(final_model_fpath, compile=True)
+
 
 # --------------------------
 # Evaluate

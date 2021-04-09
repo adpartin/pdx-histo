@@ -584,13 +584,8 @@ def create_tf_data(tfrecords,
 
 
 
-def calc_class_weights(tfrecords,
-                       class_weights_method="BY_TILE",
-                       manifest=None,
-                       outcomes=None,
-                       MODEL_TYPE=None):
+def get_categories_from_manifest(tfrecords, manifest, outcomes, MODEL_TYPE="categorical"):
     """ ... """
-    num_tiles = []
     categories = {}
 
     for filename in tfrecords:
@@ -608,7 +603,38 @@ def calc_class_weights(tfrecords,
         else:
             categories[category]["num_samples"] += 1
             categories[category]["num_tiles"] += tiles
-        num_tiles += [tiles]
+        # num_tiles += [tiles]
+
+    return categories
+
+
+def calc_class_weights(tfrecords,
+                       class_weights_method="BY_TILE",
+                       manifest=None,
+                       outcomes=None,
+                       MODEL_TYPE=None):
+    """ ... """
+    categories = get_categories_from_manifest(tfrecords, manifest, outcomes)
+
+    # num_tiles = []
+    # categories = {}
+
+    # for filename in tfrecords:
+    #     smp = filename.split("/")[-1][:-10]
+
+    #     # Determine total number of tiles available in TFRecord
+    #     tiles = manifest[filename]["total"]
+
+    #     # Get the category of the current sample
+    #     category = outcomes[smp]["outcome"] if MODEL_TYPE == "categorical" else 1
+
+    #     if category not in categories.keys():
+    #         categories.update({category: {"num_samples": 1,
+    #                                       "num_tiles": tiles}})
+    #     else:
+    #         categories[category]["num_samples"] += 1
+    #         categories[category]["num_tiles"] += tiles
+    #     num_tiles += [tiles]
 
     if class_weights_method == "NONE":
         class_weight = None
@@ -621,7 +647,8 @@ def calc_class_weights(tfrecords,
         class_weight = {c: value for c, value in zip(categories.keys(), weights)}
 
     elif class_weights_method == "BY_TILE":
-        n_samples = np.array(num_tiles).sum()
+        n_samples = sum([categories[c]["num_tiles"] for c in categories])
+        # n_samples = np.array(num_tiles).sum()
         n_classes = len(categories)
         bins = np.array([categories[c]["num_tiles"] for c in categories.keys()])
         weights = n_samples / (n_classes * bins)

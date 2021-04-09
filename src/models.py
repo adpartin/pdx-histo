@@ -24,31 +24,37 @@ from config import cfg
 
 def keras_callbacks(outdir, monitor="val_loss"):
     """ ... """
-    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
-                                   monitor=monitor,
-                                   verbose=0,
-                                   save_weights_only=False,
-                                   save_best_only=True,
-                                   save_freq="epoch")
+    callbacks = []
+
+    # checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
+    #                                monitor=monitor,
+    #                                verbose=0,
+    #                                save_weights_only=False,
+    #                                save_best_only=True,
+    #                                save_freq="epoch")
+    # callbacks.append(checkpointer)
 
     csv_logger = CSVLogger(outdir/"training.log")
+    callbacks.append(csv_logger)
 
-    reduce_lr = ReduceLROnPlateau(monitor=monitor,
-                                  factor=0.5,
-                                  patience=10,
-                                  verbose=1,
-                                  mode="auto",
-                                  min_delta=0.0001,
-                                  cooldown=0,
-                                  min_lr=0)
+    # reduce_lr = ReduceLROnPlateau(monitor=monitor,
+    #                               factor=0.5,
+    #                               patience=10,
+    #                               verbose=1,
+    #                               mode="auto",
+    #                               min_delta=0.0001,
+    #                               cooldown=0,
+    #                               min_lr=0)
+    # callbacks.append(reduce_lr)
 
-    early_stop = EarlyStopping(monitor=monitor,
-                               patience=20,
-                               mode="auto",
-                               restore_best_weights=True,
-                               verbose=1,)
+    # early_stop = EarlyStopping(monitor=monitor,
+    #                            patience=20,
+    #                            mode="auto",
+    #                            restore_best_weights=True,
+    #                            verbose=1,)
+    # callbacks.append(early_stop)
 
-    return [checkpointer, csv_logger, early_stop, reduce_lr]
+    return callbacks
 
 
 # def build_model_rsp_baseline(use_ge=True, use_dd=True,
@@ -273,7 +279,8 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
     # softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
 
-    softmax_output = tf.keras.layers.Dense(1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
+    softmax_output = tf.keras.layers.Dense(
+        1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
@@ -283,9 +290,9 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     metrics = [
           # keras.metrics.TrueNegatives(name="tn"),
           keras.metrics.FalsePositives(name="fp"),
-          keras.metrics.FalseNegatives(name="fn"),
+          # keras.metrics.FalseNegatives(name="fn"),
           keras.metrics.TruePositives(name="tp"),
-          # keras.metrics.AUC(name="auc"),
+          keras.metrics.AUC(name="auc"),
     ]
 
     model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
