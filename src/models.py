@@ -26,6 +26,9 @@ def keras_callbacks(outdir, monitor="val_loss"):
     """ ... """
     callbacks = []
 
+    csv_logger = CSVLogger(outdir/"training.log")
+    callbacks.append(csv_logger)
+
     # checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
     #                                monitor=monitor,
     #                                verbose=0,
@@ -33,9 +36,6 @@ def keras_callbacks(outdir, monitor="val_loss"):
     #                                save_best_only=True,
     #                                save_freq="epoch")
     # callbacks.append(checkpointer)
-
-    csv_logger = CSVLogger(outdir/"training.log")
-    callbacks.append(csv_logger)
 
     # reduce_lr = ReduceLROnPlateau(monitor=monitor,
     #                               factor=0.5,
