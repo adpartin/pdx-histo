@@ -27,6 +27,7 @@ DEVICE=$1
 echo "CUDA device: $DEVICE"
 
 trn_phase=$2
+nn_arch=$3
 
 # CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_multimodal2.py \
 CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal2.py \
@@ -36,4 +37,5 @@ CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal2.py \
     --prjname $prjname \
     --trn_phase $trn_phase \
     --dataname $dataname \
+    --nn_arch $nn_arch \
     --n_samples $n_samples

@@ -88,13 +88,18 @@ parser.add_argument("--n_samples",
                     type=int,
                     default=-1,
                     help="Total samples from tr_id to process.")
+parser.add_argument("--nn_arch",
+                    type=str,
+                    default="multimodal",
+                    choices=["baseline", "multimodal"],
+                    help="NN architecture (default: multimodal).")
 
 args, other_args = parser.parse_known_args()
 pprint(args)
 
 
 # Create outdir
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 split_on = "none" if args.split_on is (None or "none") else args.split_on
 # version 1
@@ -104,10 +109,13 @@ split_on = "none" if args.split_on is (None or "none") else args.split_on
 # base_outdir = prjdir/f"multimodal"
 # outdir = create_outdir(base_outdir)
 # version 3
+# prm_file_path = prjdir/"params.json"
+# if prm_file_path.exists() is False:
+#     shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
 os.makedirs(prjdir, exist_ok=True)
-prm_file_path = prjdir/"params.json"
+prm_file_path = prjdir/f"params_{args.nn_arch}.json"
 if prm_file_path.exists() is False:
-    shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
+    shutil.copy(fdir/f"../default_params/default_params_{args.nn_arch}.json", prm_file_path)
 params = Params(prm_file_path)
 outdir = create_outdir_2(prjdir, params)
 
