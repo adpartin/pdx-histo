@@ -13,7 +13,7 @@ class Logger():
         lg = classlogger.Logger(logfilename=logfilename)
         lg.logger.info(f'File path: {file_path}')
     """
-    def __init__(self, logfilename="logfile.log"):
+    def __init__(self, logfilename="logfile.log", terminator="\n", verbose=True):
         """ Create logger. Output to file and console.
         TODO: example for class logging --> https://airbrake.io/blog/python-exception-handling/attributeerror
         """
@@ -31,6 +31,7 @@ class Logger():
         # consoleFormatter = logging.Formatter("%(name)-12s : %(levelname)-8s : %(message)s")
         consoleFormatter = logging.Formatter("%(message)s")
         consoleHandler = logging.StreamHandler()
+        consoleHandler.terminator = terminator
         consoleHandler.setFormatter(consoleFormatter)
         consoleHandler.setLevel(logging.INFO)
         self.consoleHandler = consoleHandler
@@ -49,15 +50,18 @@ class Logger():
         #     log.addHandler(fh)
         #     log.addHandler(sh)
 
-        self.logger.info("{}".format("-" * 70))
-        self.logger.info(datetime.now())
-        self.logger.info(f"Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)")
+        if verbose:
+            self.logger.info("{}".format("-" * 70))
+            self.logger.info(datetime.now())
+            self.logger.info(f"Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)")
         #return logger
 
 
-    def close_logger(self):
-        n_seps = 70
-        self.logger.info("\nClose logger.")
-        self.logger.info("{}\n".format("-" * n_seps))
+    def close_logger(self, verbose=False):
+        if verbose:
+            n_seps = 70
+            self.logger.info("\nClose logger.")
+            self.logger.info("{}\n".format("-" * n_seps))
+
         self.logger.removeHandler(self.fileHandler)
         self.logger.removeHandler(self.consoleHandler)

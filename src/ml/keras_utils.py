@@ -149,4 +149,3 @@ def plot_prfrm_metrics(history=None, logfile_path=None, title=None, name=None, s
         plt.close()
         
     return history
-

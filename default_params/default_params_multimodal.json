@@ -1,11 +1,13 @@
 {
     "augment": true,
-    "base_img_model": "Xception",
+    "base_image_model": "EfficientNetB1",
     "batch_size": 64,
-    "early_stop_method": "loss",
-    "early_stop": true,
+    "batch_patience": 50,
+    "dense1_ge": 512,
+    "dense1_dd1": 256,
+    "dense1_dd2": 256,
+    "dense1_top": 1024,
     "epochs": 1,
-    "image_size": 299,
     "learning_rate": 0.0001,
     "model_type": "categorical",
     "pooling": "max",
@@ -13,9 +15,11 @@
     "single_drug": false,
     "tile_px": 299,
     "tile_um": 302,
+    "top_hidden_dropout1": 0.0,
     "use_dd1": true,
     "use_dd2": true,
     "use_fp16": true,
     "use_ge": true,
-    "use_tile": true
+    "use_tile": true,
+    "validate_on_batch": 100
 }

@@ -25,8 +25,7 @@ from src import load_data
 from src.load_data import PDX_SAMPLE_COLS
 
 # Seed
-seed = 42
-np.random.seed(seed)
+np.random.seed(cfg.seed)
 
 DATASET_NAME = "tidy_drug_pairs_all_samples"
 outdir = cfg.DATA_PROCESSED_DIR/DATASET_NAME

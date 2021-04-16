@@ -23,11 +23,35 @@ venv:
 	: # Activate venv and install packges inside
 	. venv/bin/activate && pip install -r requirements.txt
 
+# Production
+venv_tf23:
+	: # virtualenv venv
+	: # Create venv (dir) if it doesn't exist
+	test -d venv_tf23 || virtualenv venv_tf23
+	: # ./venv/bin/python -m pip install -r requirements.txt
+	: # Activate venv and install packges inside
+	. venv_tf23/bin/activate && pip install -r requirements_tf23.txt
+
+# Production
+venv_tf24:
+	: # virtualenv venv
+	: # Create venv (dir) if it doesn't exist
+	test -d venv_tf24 || virtualenv venv_tf24
+	: # ./venv/bin/python -m pip install -r requirements.txt
+	: # Activate venv and install packges inside
+	. venv_tf24/bin/activate && pip install -r requirements_tf24.txt
+
 # Development
-dev-venv: venv
+dev-venv_tf23: venv_tf23
 	: # ./venv/bin/python -m pip install -r requirements-dev.txt
 	: # Activate venv and install packges inside
-	. venv/bin/activate && pip install -r requirements-dev.txt
+	. venv_tf23/bin/activate && pip install -r requirements-dev_tf23.txt
+
+# Development
+dev-venv_tf24: venv_tf24
+	: # ./venv/bin/python -m pip install -r requirements-dev.txt
+	: # Activate venv and install packges inside
+	. venv_tf24/bin/activate && pip install -r requirements-dev_tf24.txt
 
 clean:
 	# rm -rf venv

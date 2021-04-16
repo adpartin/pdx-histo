@@ -72,6 +72,39 @@ def create_outdir(outdir, args=None):
     return outdir    
 
 
+def create_outdir_2(outdir, params=None):
+    from datetime import datetime
+    t = datetime.now()
+    t = [t.year, "-", str(t.month).zfill(2), "-", str(t.day).zfill(2),
+         "_", "h", str(t.hour).zfill(2), "-", "m", str(t.minute).zfill(2)]
+    t = "".join([str(i) for i in t])
+
+    inputs = []
+    # keys = ["ge", "tile"]
+
+    if params.use_tile is True:
+        inputs.append("tile")
+
+    if params.use_ge is True:
+        inputs.append("ge")
+
+    if params.use_dd1 is True:
+        inputs.append("dd1")
+
+    if params.use_dd2 is True:
+        inputs.append("dd2")
+
+    inputs = "_".join([str(i) for i in inputs])
+
+    name = inputs + "_" + t
+
+    outdir = Path(outdir)
+    outdir = outdir/name
+    
+    os.makedirs(outdir)
+    return outdir    
+
+
 def read_lines(file_path):
     with open(file_path, 'r') as file:
         lines = file.read().splitlines()

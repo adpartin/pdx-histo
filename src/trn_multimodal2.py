@@ -6,11 +6,11 @@ import sys
 assert sys.version_info >= (3, 5)
 
 import argparse
+from collections import OrderedDict
 import glob
-import shutil
-import tempfile
 from pathlib import Path
 from pprint import pprint, pformat
+import shutil
 from time import time
 
 import numpy as np
@@ -39,14 +39,16 @@ from src.config import cfg
 from src.models import build_model_rsp, build_model_rsp_baseline, keras_callbacks
 from src.ml.scale import get_scaler
 from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
+from src.ml.keras_utils import plot_prfrm_metrics
 from src.utils.classlogger import Logger
-from src.utils.utils import (cast_list, create_outdir, dump_dict, get_print_func,
+from src.utils.utils import (cast_list, create_outdir, create_outdir_2, dump_dict, get_print_func,
                              read_lines, Params, Timer)
 from src.datasets.tidy import split_data_and_extract_fea, extract_fea
 from src.tf_utils import get_tfr_files, calc_records_in_tfr_files, count_data_items
 from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_class_weights,
                           parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
                           create_manifest)
+from src.sf_utils import bold, green, blue, yellow, cyan, red
 
 # Seed
 np.random.seed(cfg.seed)
@@ -82,18 +84,32 @@ parser.add_argument("--trn_phase",
                     default="train",
                     choices=["train", "evaluate"],
                     help="Project name (folder that contains the annotations.csv dataframe).")
+parser.add_argument("--n_samples",
+                    type=int,
+                    default=-1,
+                    help="Total samples from tr_id to process.")
 
 args, other_args = parser.parse_known_args()
 pprint(args)
 
 
 # Create outdir
+# import ipdb; ipdb.set_trace()
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 split_on = "none" if args.split_on is (None or "none") else args.split_on
+# version 1
 # outdir = prjdir/f"multimodal/split_on_{split_on}"
 # os.makedirs(outdir, exist_ok=True)
-base_outdir = prjdir/f"multimodal"
-outdir = create_outdir(base_outdir)
+# version 2
+# base_outdir = prjdir/f"multimodal"
+# outdir = create_outdir(base_outdir)
+# version 3
+os.makedirs(prjdir, exist_ok=True)
+prm_file_path = prjdir/"params.json"
+if prm_file_path.exists() is False:
+    shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
+params = Params(prm_file_path)
+outdir = create_outdir_2(prjdir, params)
 
 
 # Logger
@@ -107,15 +123,15 @@ print_fn(f"\n{pformat(vars(args))}")
 annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
 data = pd.read_csv(annotations_file)
 data = data.astype({"image_id": str, "slide": str})
-print(data.shape)
+print_fn(data.shape)
 
 
 # Import hyper-parameters
 # import ipdb; ipdb.set_trace()
-prm_file_path = prjdir/"multimodal/params.json"
-if prm_file_path.exists() is False:
-    shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
-params = Params(prm_file_path)
+# prm_file_path = prjdir/"multimodal/params.json"
+# if prm_file_path.exists() is False:
+#     shutil.copy(fdir/"../default_params/default_params_multimodal.json", prm_file_path)
+# params = Params(prm_file_path)
 params.save(outdir/"params.json")
 
 
@@ -147,15 +163,12 @@ if params.use_dd2 and len(dd2_cols) > 0:
 
 # Determine tfr_dir and the data parsing funcs
 if args.target[0] == "Response":
-    # parse_fn = parse_tfrec_fn_rsp
-
     if params.single_drug:
         tfr_dir = cfg.SF_TFR_DIR_RSP
     else:
         tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
 
 elif args.target[0] == "ctype":
-    # parse_fn = parse_tfrec_fn_rna
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
 
 label = f"{params.tile_px}px_{params.tile_um}um"
@@ -219,6 +232,23 @@ te_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TestList.txt")), int
 tr_id = sorted(set(data[index_col_name]).intersection(set(tr_id)))
 vl_id = sorted(set(data[index_col_name]).intersection(set(vl_id)))
 te_id = sorted(set(data[index_col_name]).intersection(set(te_id)))
+
+if (args.n_samples > 0) and (args.n_samples < len(tr_id)):
+    tr_id = tr_id[:args.n_samples]
+
+# import ipdb; ipdb.set_trace()
+# vl_id = vl_id[:20]
+vl = data[data[index_col_name].isin(vl_id)]
+te = data[data[index_col_name].isin(te_id)]
+r0 = vl[vl[args.target[0]] == 0]  # non-responders
+r1 = vl[vl[args.target[0]] == 1]  # responders
+
+r0 = r0[ r0["ctype"].isin( te["ctype"].unique() ) ]
+r0 = r0.sample(n=r1.shape[0])
+vl = pd.concat([r0, r1], axis=0)
+vl_id = vl["index"].values.tolist()
+
+
 # ------------------------------------------------------------
 
 # kwargs = {"ge_cols": ge_cols,
@@ -306,8 +336,8 @@ vl_smp_names = list(vl_meta[args.id_name].values)
 te_smp_names = list(te_meta[args.id_name].values)
 
 # TFRecords filenames
-train_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)  # training_tfrecords
-val_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)  # validation_tfrecords
+train_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)
+val_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)
 test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
 print("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
 
@@ -338,6 +368,11 @@ tile_cnts = pd.read_csv(cfg.SF_TFR_DIR_RSP_DRUG_PAIR/label/"tile_counts_per_slid
 total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["max_tiles"].sum()
 total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["max_tiles"].sum()
 total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_tiles"].sum()
+
+eval_batch_size = 8 * params.batch_size
+train_steps = total_train_tiles // params.batch_size
+validation_steps = total_val_tiles // eval_batch_size
+test_steps = total_test_tiles // eval_batch_size
 
 # import ipdb; ipdb.set_trace()
 # print(len(outcomes))
@@ -375,7 +410,7 @@ total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["max_ti
 if args.target[0] == "Response":
     # Response
     parse_fn = parse_tfrec_fn_rsp
-    parse_fn_kwargs_train = {
+    parse_fn_train_kwargs = {
         "use_tile": params.use_tile,
         "use_ge": params.use_ge,
         "use_dd1": params.use_dd1,
@@ -390,7 +425,7 @@ if args.target[0] == "Response":
 else:
     # Ctype
     parse_fn = parse_tfrec_fn_rna
-    parse_fn_kwargs_train = {
+    parse_fn_train_kwargs = {
         'use_tile': params.use_tile,
         'use_ge': params.use_ge,
         'ge_scaler': ge_scaler,
@@ -399,8 +434,8 @@ else:
         'AUGMENT': params.augment,
     }
 
-parse_fn_kwargs_non_train = parse_fn_kwargs_train.copy()
-parse_fn_kwargs_non_train["augment"] = False
+parse_fn_non_train_kwargs = parse_fn_train_kwargs.copy()
+parse_fn_non_train_kwargs["augment"] = False
 
 
 # -------------------------------
@@ -422,26 +457,29 @@ class_weight = calc_class_weights(train_tfr_files,
 # -------------------------------
 # Create TF datasets
 # -------------------------------
-print("\nCreate TF dataset ...")
+print("\nCreate TF datasets ...")
 
+# Training
 # import ipdb; ipdb.set_trace()
 train_data = create_tf_data(
-    tfrecords=train_tfr_files,
-    n_concurrent_shards=32,
-    shuffle_files=True,
-    interleave=True,
-    shuffle_size=8192,
-    repeat=True,
     batch_size=params.batch_size,
-    seed=cfg.seed,
-    prefetch=2,
-    parse_fn=parse_fn,
     include_meta=False,
-    **parse_fn_kwargs_train)
+    interleave=True,
+    # n_concurrent_shards=32,
+    n_concurrent_shards=64,
+    parse_fn=parse_fn,
+    prefetch=2,
+    repeat=True,
+    seed=None,  # cfg.seed,
+    shuffle_files=True,
+    shuffle_size=8192,
+    tfrecords=train_tfr_files,
+    **parse_fn_train_kwargs)
 
 # Determine feature shapes from data
 bb = next(train_data.__iter__())
 
+# Infer dims of features from the data
 # import ipdb; ipdb.set_trace()
 if params.use_ge:
     ge_shape = bb[0]["ge_data"].numpy().shape[1:]
@@ -459,36 +497,219 @@ for i, item in enumerate(bb):
         for k in item.keys():
             print(f"\t{k}: {item[k].numpy().shape}")
 
-for i, rec in enumerate(train_data.take(4)):
+for i, rec in enumerate(train_data.take(2)):
     tf.print(rec[1])
 
-val_batch_size = 8*params.batch_size
-val_data = create_tf_data(
-    tfrecords=val_tfr_files,
-    shuffle_files=False,
-    interleave=False,
-    shuffle_size=None,
-    repeat=False,
-    batch_size=val_batch_size, # 2048
-    seed=None,
-    prefetch=2,
-    parse_fn=parse_fn,
-    include_meta=False,
-    **parse_fn_kwargs_non_train)
+# Evaluation (val, test, train)
+# eval_batch_size = 8 * params.batch_size
+# eval_batch_size = 16 * params.batch_size
+create_tf_data_eval_kwargs = {
+    "batch_size": eval_batch_size,
+    "include_meta": False,
+    "interleave": False,
+    "parse_fn": parse_fn,
+    "prefetch": 2,
+    "repeat": False,
+    "seed": None,
+    "shuffle_files": False,
+    "shuffle_size": None,
+}
 
-test_batch_size = 8*params.batch_size
+# import ipdb; ipdb.set_trace()
+create_tf_data_eval_kwargs.update({"tfrecords": val_tfr_files, "include_meta": False})
+val_data = create_tf_data(
+    **create_tf_data_eval_kwargs,
+    **parse_fn_non_train_kwargs
+)
+
+create_tf_data_eval_kwargs.update({"tfrecords": test_tfr_files, "include_meta": True})
 test_data = create_tf_data(
-    tfrecords=test_tfr_files,
-    shuffle_files=False,
-    interleave=False,
-    shuffle_size=None,
-    repeat=False,
-    batch_size=test_batch_size, # 2048
-    seed=None,
-    prefetch=2,
-    parse_fn=parse_fn,
-    include_meta=True,
-    **parse_fn_kwargs_non_train)
+    **create_tf_data_eval_kwargs,
+    **parse_fn_non_train_kwargs
+)
+
+create_tf_data_eval_kwargs.update({"tfrecords": val_tfr_files, "include_meta": True})
+eval_val_data = create_tf_data(
+    **create_tf_data_eval_kwargs,
+    **parse_fn_non_train_kwargs
+)
+
+create_tf_data_eval_kwargs.update({"tfrecords": train_tfr_files, "include_meta": True, "prefetch": 1})
+eval_train_data = create_tf_data(
+    **create_tf_data_eval_kwargs,
+    **parse_fn_non_train_kwargs
+)
+
+# val_data = create_tf_data(
+#     tfrecords=val_tfr_files,
+#     shuffle_files=False,
+#     interleave=False,
+#     shuffle_size=None,
+#     repeat=False,
+#     batch_size=eval_batch_size,
+#     seed=None,
+#     prefetch=2,
+#     parse_fn=parse_fn,
+#     include_meta=False,
+#     **parse_fn_non_train_kwargs)
+
+# test_batch_size = 8 * params.batch_size
+# test_data = create_tf_data(
+#     tfrecords=test_tfr_files,
+#     shuffle_files=False,
+#     interleave=False,
+#     shuffle_size=None,
+#     repeat=False,
+#     batch_size=test_batch_size,
+#     seed=None,
+#     prefetch=2,
+#     parse_fn=parse_fn,
+#     include_meta=True,
+#     **parse_fn_non_train_kwargs)
+
+
+# ----------------------
+# Callbacks
+# ----------------------
+# import ipdb; ipdb.set_trace()
+
+
+class EarlyStopOnBatch(tf.keras.callbacks.Callback):
+    """
+    EarlyStopOnBatch(monitor="loss", batch_patience=20, validate_on_batch=10)
+    """
+    def __init__(self,
+                 validation_data,
+                 validation_steps=None,
+                 validate_on_batch=100,
+                 monitor="loss",
+                 batch_patience=0,
+                 print_fn=print):
+        """ 
+        Args:
+            validate_on_batch : 
+        """
+        super(EarlyStopOnBatch, self).__init__()
+        self.batch_patience = batch_patience
+        self.best_weights = None
+        # self.monitor = monitor  # ap
+        self.validate_on_batch = validate_on_batch  # ap
+        self.validation_data = validation_data
+        self.validation_steps = validation_steps
+        self.print_fn = print_fn
+
+    def on_train_begin(self, logs=None):
+        # self.wait = 0           # number of batches it has waited when loss is no longer minimum
+        self.stopped_epoch = 0  # epoch the training stops at
+        self.stopped_batch = 0  # epoch the training stops at
+        self.best = np.Inf      # init the best as infinity
+        self.epoch = None
+        self.val_loss = np.Inf
+        self.step_id = 0  # global batch
+        # self.print_fn("\n{}.".format(yellow("Start training")))
+
+    def on_epoch_begin(self, epoch, logs=None):
+        keys = list(logs.keys())
+        self.epoch = epoch + 1
+        if self.epoch == 1:
+            self.wait = 0  # number of batches it has waited when loss is no longer minimum
+        # self.print_fn("\n{} {}.\n".format( yellow("Start epoch"), yellow(epoch)) )
+
+    def on_epoch_end(self, epoch, logs=None):
+        keys = list(logs.keys())
+        # outpath = str(outdir/f"model_at_epoch_{self.epoch}")
+        # self.model.save(outpath)
+        self.print_fn("")
+
+        # In case there are remaining batches at the of epoch that were not evaluated in self.validate_on_batch
+        evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
+        current = evals[0]
+
+        if np.less(current, self.best):
+            self.best = current
+            self.wait = 0
+            self.best_weights = self.model.get_weights()
+        else:
+            self.wait += 1
+
+    def on_train_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())  # metrics/logs names
+        batch = batch + 1
+
+        self.step_id += 1
+        res = OrderedDict({"step_id": self.step_id, "epoch": self.epoch, "batch": batch})
+        res.update(logs)
+
+        color = yellow if self.epoch == 1 else red
+
+        if batch % self.validate_on_batch == 0:
+            # Log metrics before evaluation
+            self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
+                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+            # self.print_fn("\repoch: {}, batch: {}, loss {:.4f}, val_loss {:.4f}, best_val_loss {:.4f} (wait: {}); {}".format(
+            #     self.epoch, batch, logs["loss"], self.val_loss, self.best, color(self.wait)))
+
+            evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
+            val_logs = {"val_"+str(k): v for k, v in zip(keys, evals)}
+            res.update(val_logs)
+
+            self.val_loss = evals[0]
+            # current = logs.get("loss")
+            # current = logs.get(self.monitor)
+            current = self.val_loss
+
+            if np.less(current, self.best):
+                self.best = current
+                self.wait = 0
+                self.best_weights = self.model.get_weights()
+            else:
+                self.wait += 1
+
+            # Log metrics after evaluation
+            self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
+                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+            # self.print_fn("\repoch: {}, batch: {}, loss {:.4f}, val_loss {:.4f}, best_val_loss {:.4f} (wait: {})".format(
+            #     self.epoch, batch, logs["loss"], self.val_loss, self.best, color(self.wait)))
+
+            # Don't terminate of the first epoch
+            if (self.wait >= self.batch_patience) and (self.epoch > 1):
+                self.stopped_epoch = self.epoch
+                self.stopped_batch = batch
+                self.model.stop_training = True
+                self.print_fn("\n{}".format(red("Terminate training")))
+                self.print_fn("Restores model weights from the best epoch-batch set.")
+                self.model.set_weights(self.best_weights)
+
+        else:
+            self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
+                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+            # self.print_fn("\repoch: {}, batch: {}, loss {:.4f}, val_loss {:.4f}, best_val_loss {:.4f} (wait: {})".format(
+            #     self.epoch, batch, logs["loss"], self.val_loss, self.best, color(self.wait)))
+            val_logs = {"val_"+str(k): np.nan for k in keys}
+            res.update(val_logs)
+
+        # Get the current learning rate from model's optimizer.
+        lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+        res.update({"lr": lr})
+        results.append(res)
+
+    def on_train_end(self, logs=None):
+        if self.stopped_batch > 0:
+            self.print_fn("Early stop on epoch {} and batch {}.".format(self.stopped_epoch, self.stopped_batch))
+
+
+# lg_r = Logger(outdir/"logger.log", verbose=False)
+mycallback_kwargs = {"validation_data": val_data,
+                     "validate_on_batch": params.validate_on_batch,
+                     "batch_patience": params.batch_patience,
+                     "print_fn": print
+                     }
+# callbacks = keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs)
+callbacks = keras_callbacks(outdir)
+
+results = []
+mycallback = EarlyStopOnBatch(monitor="loss", **mycallback_kwargs)
+callbacks.append(mycallback)
 
 
 # ----------------------
@@ -496,28 +717,22 @@ test_data = create_tf_data(
 # ----------------------
 # import ipdb; ipdb.set_trace()
 
-# #callbacks = [history_callback, PredictionAndEvaluationCallback(), cp_callback, tensorboard_callback]
-# callbacks = [history_callback, cp_callback]
-
-callbacks = keras_callbacks(outdir, monitor="val_loss")
-
-
-# https://www.tensorflow.org/guide/mixed_precision
+# Mixed precision
 if params.use_fp16:
-    # TF 2.4
-    # from tensorflow.keras import mixed_precision
-    # policy = tf.keras.mixed_precision.Policy('mixed_float16')
-    # mixed_precision.set_global_policy(policy)
-    # TF 2.3
-    from tensorflow.keras.mixed_precision import experimental as mixed_precision
-    print_fn("Training with mixed precision")
-    policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-    mixed_precision.set_policy(policy)
+    print_fn("Train with mixed precision")
+    if int(tf.keras.__version__.split(".")[1]) == 4:  # TF 2.4
+        from tensorflow.keras import mixed_precision
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+    elif int(tf.keras.__version__.split(".")[1]) == 3:  # TF 2.3
+        from tensorflow.keras.mixed_precision import experimental as mixed_precision
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_policy(policy)
     print_fn("Compute dtype: %s" % policy.compute_dtype)
     print_fn("Variable dtype: %s" % policy.variable_dtype)
 
 
-# import ipdb; ipdb.set_trace()
+# Prep the target
 # y_encoding = "onehot"
 y_encoding = "label"  # to be used binary cross-entropy
 
@@ -567,7 +782,6 @@ else:
 
 # Calc output bias
 # neg, pos = np.bincount(tr_meta[args.target[0]].values)
-
 from sf_utils import get_categories_from_manifest
 categories = get_categories_from_manifest(train_tfr_files, manifest, outcomes)
 neg = categories[0]["num_tiles"]
@@ -582,28 +796,25 @@ print("Output bias:", output_bias)
 
 if args.target[0] == "Response":
     if params.use_tile is True:
-        build_model_kwargs = {"use_ge": params.use_ge,
+        build_model_kwargs = {"base_image_model": params.base_image_model,
+                              "use_ge": params.use_ge,
                               "use_dd1": params.use_dd1,
                               "use_dd2": params.use_dd2,
                               "use_tile": params.use_tile,
                               "ge_shape": ge_shape,
                               "dd_shape": dd_shape,
-                              "model_type": params.model_type,
+                              "dense1_ge": params.dense1_ge,
+                              "dense1_dd1": params.dense1_dd1,
+                              "dense1_dd2": params.dense1_dd2,
+                              "dense1_top": params.dense1_top,
+                              "top_hidden_dropout1": params.top_hidden_dropout1,
+                              # "model_type": params.model_type,
                               "output_bias": output_bias,
                               "loss": loss,
                               "optimizer": optimizers.Adam(learning_rate=params.learning_rate)
         }
         model = build_model_rsp(**build_model_kwargs)
                                 
-        # model = build_model_rsp(use_ge=params.use_ge,
-        #                         use_dd1=params.use_dd1,
-        #                         use_dd2=params.use_dd2,
-        #                         use_tile=params.use_tile,
-        #                         ge_shape=ge_shape,
-        #                         dd_shape=dd_shape,
-        #                         model_type=params.model_type,
-        #                         output_bias=None,  # TODO: add this!
-        #                         loss=loss)
     else:
         model = build_model_rsp_baseline(use_ge=params.use_ge,
                                          use_dd1=params.use_dd1,
@@ -621,52 +832,57 @@ else:
     model = build_model_rna()
 
 print_fn("")
-print_fn(model.summary())
+# print_fn(model.summary())
+model.summary(print_fn=print_fn)
 
 # import ipdb; ipdb.set_trace()
-steps = 100
-results = model.evaluate(train_data,
-                         steps=params.batch_size*steps//params.batch_size,
-                         verbose=1)
-print("Loss: {:0.4f}".format(results[0]))
+# steps = 40
+# res = model.evaluate(train_data,
+#                      steps=params.batch_size * steps // params.batch_size,
+#                      verbose=1)
+# print("Loss: {:0.4f}".format(res[0]))
 
 # -------------
 # Train model
 # -------------
 
+# import ipdb; ipdb.set_trace()
 
-import ipdb; ipdb.set_trace()
+print_fn(f"Train steps:      {train_steps}")
+print_fn(f"Validation steps: {validation_steps}")
 
 if args.trn_phase == "train":
 
-    # Base model
-    base_model_path = base_outdir/"base_model"
-    if base_model_path.exists():
-        # load model
-        model = tf.keras.models.load_model(base_model_path, compile=True)
-    else:
-        # save model
-        model.save(base_model_path)
+    # # Base model
+    # base_model_path = prjdir/"base_multimodal_model"
+    # if base_model_path.exists():
+    #     # load model
+    #     model = tf.keras.models.load_model(base_model_path, compile=True)
+    # else:
+    #     # save model
+    #     model.save(base_model_path)
 
-    # Dump/log performance measures of the base model
-    # TODO 
+    # # Dump/log performance measures of the base model
+    # aa = model.evaluate(val_data, steps=validation_steps, verbose=1)
+    # print_fn("Base model val_loss: {}".format(aa[0]))
 
     t = time()
-    print_fn("\nStart training ...")
 
     if params.use_tile is True:
         timer = Timer()
         history = model.fit(x=train_data,
                             # batch_size=params.batch_size,
-                            steps_per_epoch=total_train_tiles//params.batch_size,
+                            # steps_per_epoch=total_train_tiles//params.batch_size,
+                            steps_per_epoch=train_steps,
                             # steps_per_epoch=640//params.batch_size,
                             validation_data=val_data,
-                            validation_steps=total_val_tiles//val_batch_size,
+                            # validation_steps=total_val_tiles//eval_batch_size,
+                            validation_steps=validation_steps,
                             # validation_steps=640//params.batch_size,
                             class_weight=class_weight,
                             epochs=params.epochs,
                             shuffle=False,
-                            verbose=1,
+                            verbose=0,
                             callbacks=callbacks)
 
     elif params.use_tile is False:
@@ -677,8 +893,11 @@ if args.trn_phase == "train":
                             validation_data=validation_data,
                             callbacks=callbacks)
 
+    print_fn("")
     timer.display_timer(print_fn)
-
+    import ipdb; ipdb.set_trace()
+    res = pd.DataFrame(results)
+    res.to_csv(outdir/"results.csv", index=False)
 
     # --------------------------
     # Save model
@@ -696,13 +915,15 @@ if args.trn_phase == "train":
 else:
     model = tf.keras.models.load_model(final_model_fpath, compile=True)
 
+del train_data, val_data
+
 
 # --------------------------
 # Evaluate
 # --------------------------
 # import ipdb; ipdb.set_trace()
 
-def calc_per_tile_preds(data_with_meta, model, outdir):
+def calc_per_tile_preds(data_with_meta, model, outdir, verbose=True):
     """ ... """
     # meta_keys = ["smp", "Group", "grp_name", "Response"]
     meta_keys = ["smp", "image_id", "tile_id"]
@@ -710,7 +931,12 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
     meta_agg = {k: None for k in meta_keys}
     y_true, y_pred_prob, y_pred_label = [], [], []
 
+    # import ipdb; ipdb.set_trace()
     for i, batch in enumerate(data_with_meta):
+        # print(i)
+        if (i+1) % 50 == 0:
+            print(f"\rbatch {i+1}", end="")
+
         fea = batch[0]
         label = batch[1]
         # smp = batch[2]
@@ -738,8 +964,11 @@ def calc_per_tile_preds(data_with_meta, model, outdir):
             else:
                 meta_agg[k].extend(vv)
 
+        del batch, fea, label, meta
+
     # Meta
     df_meta = pd.DataFrame(meta_agg)
+    # print("\ndf memory {:.2f} GB".format( df_meta.memory_usage().sum()/1e9 ))
 
     # Predictions
     y_pred_prob = np.vstack(y_pred_prob)
@@ -780,46 +1009,65 @@ def agg_per_smp_preds(prd, id_name, outdir):
     # print(agg_preds.equals(xx))
     return agg_preds
 
-print_fn("\nPredictions ...")
 
-# Predictions per tile
-timer = Timer()
-# test_tile_preds = calc_per_tile_preds(test_data_with_smp_names, model=model, outdir=outdir)
-test_tile_preds = calc_per_tile_preds(test_data, model=model, outdir=outdir)
-timer.display_timer(print_fn)
+def get_preds(tf_data, meta, model, outdir, args, name):
+    """ ... """
+    # Predictions per tile
+    timer = Timer()
+    tile_preds = calc_per_tile_preds(tf_data, model=model, outdir=outdir)
+    timer.display_timer(print_fn)
 
-# Aggregate predictions per sample
-# import ipdb; ipdb.set_trace()
-test_smp_preds = agg_per_smp_preds(test_tile_preds, id_name=args.id_name, outdir=outdir)
-test_smp_preds = test_smp_preds.merge(te_meta, on="smp", how="inner")
+    # Aggregate predictions per sample
+    smp_preds = agg_per_smp_preds(tile_preds, id_name=args.id_name, outdir=outdir)
+    smp_preds = smp_preds.merge(meta, on="smp", how="inner")
 
-test_tile_preds.to_csv(outdir/"test_preds_per_tile.csv", index=False)
-test_smp_preds.to_csv(outdir/"test_preds_per_smp.csv", index=False)
-# dump_preds(yte_label, yte_prd[:, 1], te_meta, outpath=outdir/"test_preds_per_smp.csv")
+    # Save predictions
+    tile_preds.to_csv(outdir/f"{name}_preds_per_tile.csv", index=False)
+    smp_preds.to_csv(outdir/f"{name}_preds_per_smp.csv", index=False)
 
-# Scores
-# tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob_1"].values, mltype="cls")
-tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob"].values, mltype="cls")
-smp_scores = calc_scores(test_smp_preds["y_true"].values, test_smp_preds["y_pred_label"].values, mltype="cls")
+    # Scores
+    # tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob_1"].values, mltype="cls")
+    tile_scores = calc_scores(tile_preds["y_true"].values, tile_preds["prob"].values, mltype="cls")
+    smp_scores = calc_scores(smp_preds["y_true"].values, smp_preds["y_pred_label"].values, mltype="cls")
 
-dump_dict(tile_scores, outdir/"test_tile_scores.txt")
-dump_dict(smp_scores, outdir/"test_smp_scores.txt")
+    dump_dict(tile_scores, outdir/f"{name}_tile_scores.txt")
+    dump_dict(smp_scores, outdir/f"{name}_smp_scores.txt")
+
+    import ipdb; ipdb.set_trace()
+
+    # Confusion
+    print_fn("\nPer-sample confusion:")
+    smp_cnf_mtrx = confusion_matrix(smp_preds["y_true"], smp_preds["y_pred_label"])
+    save_confusion_matrix(true_labels=smp_preds["y_true"].values,
+                          predictions=smp_preds["y_pred_label"].values,
+                          labels=["Non-response", "Response"],
+                          outpath=outdir/f"{name}_smp_confusion.png")
+    print_fn(smp_cnf_mtrx)
+
+    print_fn("Per-tile confusion:")
+    tile_cnf_mtrx = confusion_matrix(tile_preds["y_true"], tile_preds["y_pred_label"])
+    save_confusion_matrix(true_labels=tile_preds["y_true"].values,
+                          predictions=tile_preds["prob"].values,
+                          labels=["Non-response", "Response"],
+                          outpath=outdir/f"{name}_tile_confusion.png")
+    print_fn(tile_cnf_mtrx)
+
 
 import ipdb; ipdb.set_trace()
+timer = Timer()
+print_fn("\n{}".format(green("Calculating predictions.")))
 
-# Confusion
-smp_cnf_mtrx = confusion_matrix(test_smp_preds["y_true"], test_smp_preds["y_pred_label"])
-save_confusion_matrix(true_labels=test_smp_preds["y_true"].values,
-                      predictions=test_smp_preds["y_pred_label"].values,
-                      labels=["Non-response", "Response"],
-                      outpath=outdir/"smp_confusion.png")
-pprint(smp_cnf_mtrx)
+print_fn("\n{}".format(bold("Test set predictions.")))
+get_preds(test_data, te_meta, model, outdir, args, name="test")
+del test_data
 
-tile_cnf_mtrx = confusion_matrix(test_tile_preds["y_true"], test_tile_preds["y_pred_label"])
-save_confusion_matrix(true_labels=test_tile_preds["y_true"].values,
-                      predictions=test_tile_preds["prob"].values,
-                      labels=["Non-response", "Response"],
-                      outpath=outdir/"tile_confusion.png")
-pprint(tile_cnf_mtrx)
+print_fn("\n{}".format(bold("Validation set predictions.")))
+get_preds(eval_val_data, vl_meta, model, outdir, args, name="test")
+del eval_val_data
 
+print_fn("\n{}".format(bold("Train set predictions.")))
+get_preds(eval_train_data, tr_meta, model, outdir, args, name="train")
+del eval_train_data
+
+timer.display_timer(print_fn)
 print_fn("\nDone.")

@@ -15,10 +15,47 @@ assert tf.__version__ >= "2.0"
 from src.config import cfg
 from src.tfrecords import FEA_SPEC_RSP, FEA_SPEC_RNA, FEA_SPEC_RNA_NEW, FEA_SPEC_RSP_DRUG_PAIR
 
+BLUE = '\033[94m'
 GREEN = '\033[92m'
+PURPLE = '\033[38;5;5m'
+BOLD = '\033[1m'
 ENDC = '\033[0m'
+
+Default      = "\033[39m"
+Black        = "\033[30m"
+Red          = "\033[31m"
+Green        = "\033[32m"
+Yellow       = "\033[33m"
+Blue         = "\033[34m"
+Magenta      = "\033[35m"
+Cyan         = "\033[36m"
+LightGray    = "\033[37m"
+DarkGray     = "\033[90m"
+LightRed     = "\033[91m"
+LightGreen   = "\033[92m"
+LightYellow  = "\033[93m"
+LightBlue    = "\033[94m"
+LightMagenta = "\033[95m"
+LightCyan    = "\033[96m"
+White        = "\033[97m"
+
+def bold(text):
+    return BOLD + str(text) + ENDC
+
+def blue(text):
+    return LightBlue + str(text) + ENDC
+
+def cyan(text):
+    return LightCyan + str(text) + ENDC
+
 def green(text):
-    return GREEN + str(text) + ENDC
+    return LightGreen + str(text) + ENDC
+
+def red(text):
+    return LightRed + str(text) + ENDC
+
+def yellow(text):
+    return LightYellow + str(text) + ENDC
 
 BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
 BALANCE_BY_PATIENT = 'BALANCE_BY_PATIENT'

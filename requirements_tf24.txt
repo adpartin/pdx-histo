@@ -1,6 +1,5 @@
-histolab==0.2.1
 matplotlib==3.0.3
-numpy==1.18.5
+numpy==1.19.2
 opencv-python==4.4.0.46
 openpyxl==3.0.5
 pandas==1.1.5

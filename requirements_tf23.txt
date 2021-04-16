@@ -1,4 +1,3 @@
-histolab==0.2.1
 matplotlib==3.0.3
 numpy==1.18.5
 opencv-python==4.4.0.46
@@ -10,4 +9,4 @@ psutil==5.8.0
 scikit-image==0.17.1
 scikit-learn==0.24.0
 seaborn==0.11.1
-tensorflow-gpu==2.4.1
+tensorflow-gpu==2.3.1

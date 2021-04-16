@@ -18,6 +18,11 @@ target=Response
 # split_on=slide
 split_on=Group
 
+# n_samples=60
+# n_samples=80
+# n_samples=100
+n_samples=-1
+
 DEVICE=$1
 echo "CUDA device: $DEVICE"
 
@@ -30,4 +35,5 @@ CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal2.py \
     --id_name $id_name \
     --prjname $prjname \
     --trn_phase $trn_phase \
-    --dataname $dataname
+    --dataname $dataname \
+    --n_samples $n_samples
