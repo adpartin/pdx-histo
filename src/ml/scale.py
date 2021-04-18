@@ -31,12 +31,24 @@ def scale_fea(xdata, scaler_name='stnd', dtype=np.float32, verbose=False):
     return pd.DataFrame(scaler.fit_transform(xdata), columns=cols, dtype=dtype)
 
 
-def get_scaler(fea_df):
+def get_scaler(fea_df, scaler_name: str="standard", print_fn=print):
+    """ Returns a sklearn scaler object. """
     fea_df = fea_df.drop_duplicates().reset_index(drop=True)
     if fea_df.shape[0] == 0:
         # TODO: add warning!
         return None
-    scaler = StandardScaler()
+
+    if scaler_name == "standard":
+        scaler = sklearn.preprocessing.StandardScaler()
+    elif scaler_name == "minmax":
+        scaler = sklearn.preprocessing.MinMaxScaler()
+    elif scaler_name == "robust":
+        scaler = sklearn.preprocessing.RobustScaler()
+    else:
+        print_fn(f"The specified scaler {scaler_name} is not supported (not scaling).")
+        return None
+
+    # scaler = StandardScaler()
     scaler.fit(fea_df)
     return scaler
 

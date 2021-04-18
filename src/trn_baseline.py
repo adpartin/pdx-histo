@@ -237,6 +237,9 @@ print(f"Unique {split_on} in tr: {len(tr_grp_unq)}")
 print(f"Unique {split_on} in vl: {len(vl_grp_unq)}")
 print(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
+tr_meta.to_csv(outdir/"tr_meta.csv", index=False)
+vl_meta.to_csv(outdir/"vl_meta.csv", index=False)
+te_meta.to_csv(outdir/"te_meta.csv", index=False)
 
 # Onehot encoding
 # ydata = data[args.target[0]].values

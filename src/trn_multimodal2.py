@@ -43,7 +43,7 @@ from src.ml.keras_utils import plot_prfrm_metrics
 from src.utils.classlogger import Logger
 from src.utils.utils import (cast_list, create_outdir, create_outdir_2, dump_dict, get_print_func,
                              read_lines, Params, Timer)
-from src.datasets.tidy import split_data_and_extract_fea, extract_fea
+from src.datasets.tidy import split_data_and_extract_fea, extract_fea, TidyData
 from src.tf_utils import get_tfr_files, calc_records_in_tfr_files, count_data_items
 from src.sf_utils import (green, interleave_tfrecords, create_tf_data, calc_class_weights,
                           parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
@@ -99,7 +99,7 @@ pprint(args)
 
 
 # Create outdir
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 split_on = "none" if args.split_on is (None or "none") else args.split_on
 # version 1
@@ -244,8 +244,15 @@ te_id = sorted(set(data[index_col_name]).intersection(set(te_id)))
 if (args.n_samples > 0) and (args.n_samples < len(tr_id)):
     tr_id = tr_id[:args.n_samples]
 
+# TODO: finish and test this class
+tdata = TidyData(data, ge_prfx="ge_", dd1_prfx="dd1_", dd2_prfx="dd2_",
+                 index_col_name="index",
+                 split_ids={"tr_id": tr_id, "vl_id": vl_id, "te_id": te_id}
+)
+
 # import ipdb; ipdb.set_trace()
 # vl_id = vl_id[:20]
+
 vl = data[data[index_col_name].isin(vl_id)]
 te = data[data[index_col_name].isin(te_id)]
 r0 = vl[vl[args.target[0]] == 0]  # non-responders
@@ -258,30 +265,6 @@ vl_id = vl["index"].values.tolist()
 
 
 # ------------------------------------------------------------
-
-# kwargs = {"ge_cols": ge_cols,
-#           "dd_cols": dd_cols,
-#           "ge_scaler": ge_scaler,
-#           "dd_scaler": dd_scaler,
-#           "ge_dtype": cfg.GE_DTYPE,
-#           "dd_dtype": cfg.DD_DTYPE
-# }
-# tr_ge, tr_dd = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
-# vl_ge, vl_dd = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
-# te_ge, te_dd = split_data_and_extract_fea(data, ids=te_id, **kwargs)
-
-# ge_shape = (te_ge.shape[1],)
-# dd_shape = (tr_dd.shape[1],)
-
-# # Variables (dict/dataframes/arrays) that are passed as features to the NN
-# xtr = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
-# xvl = {"ge_data": vl_ge.values, "dd_data": vl_dd.values}
-# xte = {"ge_data": te_ge.values, "dd_data": te_dd.values}
-
-# # Extarct meta for T/V/E
-# tr_meta = data.iloc[tr_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-# vl_meta = data.iloc[vl_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
-# te_meta = data.iloc[te_id, :].drop(columns=ge_cols + dd_cols).reset_index(drop=True)
 
 kwargs = {"ge_cols": ge_cols,
           "dd1_cols": dd1_cols,
@@ -449,8 +432,10 @@ parse_fn_non_train_kwargs["augment"] = False
 # -------------------------------
 # Class weight
 # -------------------------------
-# class_weights_method = "BY_SAMPLE"
-class_weights_method = "BY_TILE"
+if args.nn_arch == "baseline":
+    class_weights_method = "BY_SAMPLE"
+elif args.nn_arch == "multimodal":
+    class_weights_method = "BY_TILE"
 # class_weights_method = "NONE"
 
 # import ipdb; ipdb.set_trace()
@@ -458,7 +443,8 @@ class_weight = calc_class_weights(train_tfr_files,
                                   class_weights_method=class_weights_method,
                                   manifest=manifest,
                                   outcomes=outcomes,
-                                  MODEL_TYPE=params.model_type)
+                                  # MODEL_TYPE=params.model_type
+                                  )
 # class_weight = {"Response": class_weight}
 
 
@@ -548,39 +534,67 @@ eval_train_data = create_tf_data(
     **parse_fn_non_train_kwargs
 )
 
-# val_data = create_tf_data(
-#     tfrecords=val_tfr_files,
-#     shuffle_files=False,
-#     interleave=False,
-#     shuffle_size=None,
-#     repeat=False,
-#     batch_size=eval_batch_size,
-#     seed=None,
-#     prefetch=2,
-#     parse_fn=parse_fn,
-#     include_meta=False,
-#     **parse_fn_non_train_kwargs)
-
-# test_batch_size = 8 * params.batch_size
-# test_data = create_tf_data(
-#     tfrecords=test_tfr_files,
-#     shuffle_files=False,
-#     interleave=False,
-#     shuffle_size=None,
-#     repeat=False,
-#     batch_size=test_batch_size,
-#     seed=None,
-#     prefetch=2,
-#     parse_fn=parse_fn,
-#     include_meta=True,
-#     **parse_fn_non_train_kwargs)
-
 
 # ----------------------
 # Callbacks
 # ----------------------
 # import ipdb; ipdb.set_trace()
 
+import csv
+
+class BatchCSVLogger(tf.keras.callbacks.Callback):
+    """ Write training logs on every batch. """
+    def __init__(self, filename, validate_on_batch, validation_data, validation_steps=None):
+        self.filename = filename
+        self.validate_on_batch = validate_on_batch
+        self.validation_data = validation_data
+        self.validation_steps = validation_steps
+
+    def on_train_begin(self, logs=None):
+        self.epoch = 0
+        self.step = 0  # global batch
+        self.results = []
+        
+    def on_epoch_begin(self, epoch, logs=None):
+        keys = list(logs.keys())
+        self.epoch = epoch + 1
+
+    def on_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())
+        batch = batch + 1
+        self.step += 1
+        res = OrderedDict({"step": self.step, "epoch": self.epoch, "batch": batch})
+        res.update(logs)  # logs contains the metrics for the training set
+
+        if batch % self.validate_on_batch == 0:
+            evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
+            val_logs = {"val_"+str(k): v for k, v in zip(keys, evals)}
+            res.update(val_logs)
+        else:
+            val_logs = {"val_"+str(k): np.nan for k in keys}
+            res.update(val_logs)
+
+        if self.step == 1:
+            # keys = list(logs.keys())
+            val_keys = ["val_"+str(k) for k in keys]
+            fieldnames = ["step", "epoch", "batch"] + keys + val_keys + ["lr"]
+            self.fieldnames = fieldnames
+
+            self.csv_file = open(self.filename, "w")
+            # self.writer = csv.writer(self.csv_file)
+            self.writer = csv.DictWriter(self.csv_file, fieldnames=self.fieldnames)
+            self.writer.writeheader()
+            self.csv_file.flush()
+
+        # Get the current learning rate from model's optimizer
+        lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+        res.update({"lr": lr})
+        # results.append(res)
+        self.writer.writerow(res)
+        self.csv_file.flush()
+
+    def on_train_end(self):
+        self.csv_file.close()
 
 class EarlyStopOnBatch(tf.keras.callbacks.Callback):
     """
@@ -601,7 +615,7 @@ class EarlyStopOnBatch(tf.keras.callbacks.Callback):
         self.batch_patience = batch_patience
         self.best_weights = None
         # self.monitor = monitor  # ap
-        self.validate_on_batch = validate_on_batch  # ap
+        self.validate_on_batch = validate_on_batch
         self.validation_data = validation_data
         self.validation_steps = validation_steps
         self.print_fn = print_fn
@@ -611,8 +625,8 @@ class EarlyStopOnBatch(tf.keras.callbacks.Callback):
         self.stopped_epoch = 0  # epoch the training stops at
         self.stopped_batch = 0  # epoch the training stops at
         self.best = np.Inf      # init the best as infinity
-        self.epoch = None
         self.val_loss = np.Inf
+        self.epoch = 0
         self.step_id = 0  # global batch
         # self.print_fn("\n{}.".format(yellow("Start training")))
 
@@ -706,19 +720,22 @@ class EarlyStopOnBatch(tf.keras.callbacks.Callback):
             self.print_fn("Early stop on epoch {} and batch {}.".format(self.stopped_epoch, self.stopped_batch))
 
 
-# lg_r = Logger(outdir/"logger.log", verbose=False)
-mycallback_kwargs = {"validation_data": val_data,
-                     "validate_on_batch": params.validate_on_batch,
-                     "batch_patience": params.batch_patience,
-                     "print_fn": print
-                     }
-# callbacks = keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs)
-callbacks = keras_callbacks(outdir)
-
-results = []
-mycallback = EarlyStopOnBatch(monitor="loss", **mycallback_kwargs)
-callbacks.append(mycallback)
-
+if args.nn_arch == "baseline":
+    callbacks = keras_callbacks(outdir)
+elif args.nn_arch == "multimodal":
+    EarlyStopOnBatch_kwargs = {"validation_data": val_data,
+                         "validate_on_batch": params.validate_on_batch,
+                         "batch_patience": params.batch_patience,
+                         "print_fn": print
+                         }
+    callbacks = []
+    results = []
+    # mycallback = EarlyStopOnBatch(monitor="loss", **mycallback_kwargs)
+    callbacks.append(EarlyStopOnBatch(monitor="loss", **EarlyStopOnBatch_kwargs))
+    callbacks.append(BatchCSVLogger(filename=outdir/"batch_training.log", 
+                                    validate_on_batch=params.validate_on_batch,
+                                    validation_data=val_data))
+    
 
 # ----------------------
 # Prep for training
@@ -789,11 +806,13 @@ else:
 # import ipdb; ipdb.set_trace()
 
 # Calc output bias
-# neg, pos = np.bincount(tr_meta[args.target[0]].values)
-from sf_utils import get_categories_from_manifest
-categories = get_categories_from_manifest(train_tfr_files, manifest, outcomes)
-neg = categories[0]["num_tiles"]
-pos = categories[1]["num_tiles"]
+if params.use_tile:
+    from sf_utils import get_categories_from_manifest
+    categories = get_categories_from_manifest(train_tfr_files, manifest, outcomes)
+    neg = categories[0]["num_tiles"]
+    pos = categories[1]["num_tiles"]
+else:
+    neg, pos = np.bincount(tr_meta[args.target[0]].values)
 
 total = neg + pos
 print("Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
@@ -803,38 +822,47 @@ print("Output bias:", output_bias)
 
 
 if args.target[0] == "Response":
-    if params.use_tile is True:
-        build_model_kwargs = {"base_image_model": params.base_image_model,
-                              "use_ge": params.use_ge,
-                              "use_dd1": params.use_dd1,
-                              "use_dd2": params.use_dd2,
-                              "use_tile": params.use_tile,
-                              "ge_shape": ge_shape,
-                              "dd_shape": dd_shape,
-                              "dense1_ge": params.dense1_ge,
-                              "dense1_dd1": params.dense1_dd1,
-                              "dense1_dd2": params.dense1_dd2,
-                              "dense1_top": params.dense1_top,
-                              "top_hidden_dropout1": params.top_hidden_dropout1,
-                              # "model_type": params.model_type,
-                              "output_bias": output_bias,
-                              "loss": loss,
-                              "optimizer": optimizers.Adam(learning_rate=params.learning_rate)
-        }
-        model = build_model_rsp(**build_model_kwargs)
-                                
-    else:
-        model = build_model_rsp_baseline(use_ge=params.use_ge,
-                                         use_dd1=params.use_dd1,
-                                         use_dd2=params.use_dd2,
-                                         ge_shape=ge_shape,
-                                         dd_shape=dd_shape,
-                                         model_type=params.model_type)
-        x = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
+    if params.use_tile is False:
+        x = {"ge_data": tr_ge.values, "dd1_data": tr_dd1.values, "dd2_data": tr_dd2.values}
         y = {"Response": ytr}
         validation_data = ({"ge_data": vl_ge.values,
-                            "dd_data": vl_dd.values},
-                           {"Response": yvl})
+                            "dd2_data": vl_dd1.values,
+                            "dd1_data": vl_dd2.values,
+                            },
+                           {"Response": yvl}
+        )
+
+    build_model_kwargs = {"base_image_model": params.base_image_model,
+                          "use_ge": params.use_ge,
+                          "use_dd1": params.use_dd1,
+                          "use_dd2": params.use_dd2,
+                          "use_tile": params.use_tile,
+                          "ge_shape": ge_shape,
+                          "dd_shape": dd_shape,
+                          "dense1_ge": params.dense1_ge,
+                          "dense1_dd1": params.dense1_dd1,
+                          "dense1_dd2": params.dense1_dd2,
+                          "dense1_top": params.dense1_top,
+                          "top_hidden_dropout1": params.top_hidden_dropout1,
+                          # "model_type": params.model_type,
+                          "output_bias": output_bias,
+                          "loss": loss,
+                          "optimizer": optimizers.Adam(learning_rate=params.learning_rate)
+    }
+    model = build_model_rsp(**build_model_kwargs)
+                            
+    # else:
+    #     model = build_model_rsp_baseline(use_ge=params.use_ge,
+    #                                      use_dd1=params.use_dd1,
+    #                                      use_dd2=params.use_dd2,
+    #                                      ge_shape=ge_shape,
+    #                                      dd_shape=dd_shape,
+    #                                      model_type=params.model_type)
+    #     x = {"ge_data": tr_ge.values, "dd_data": tr_dd.values}
+    #     y = {"Response": ytr}
+    #     validation_data = ({"ge_data": vl_ge.values,
+    #                         "dd_data": vl_dd.values},
+    #                        {"Response": yvl})
 else:
     raise NotImplementedError("Need to check this method")
     model = build_model_rna()
@@ -874,17 +902,14 @@ if args.trn_phase == "train":
     # aa = model.evaluate(val_data, steps=validation_steps, verbose=1)
     # print_fn("Base model val_loss: {}".format(aa[0]))
 
-    t = time()
+    timer = Timer()
 
     if params.use_tile is True:
-        timer = Timer()
         history = model.fit(x=train_data,
                             # batch_size=params.batch_size,
-                            # steps_per_epoch=total_train_tiles//params.batch_size,
                             steps_per_epoch=train_steps,
                             # steps_per_epoch=640//params.batch_size,
                             validation_data=val_data,
-                            # validation_steps=total_val_tiles//eval_batch_size,
                             validation_steps=validation_steps,
                             # validation_steps=640//params.batch_size,
                             class_weight=class_weight,
@@ -893,19 +918,23 @@ if args.trn_phase == "train":
                             verbose=0,
                             callbacks=callbacks)
 
+        import ipdb; ipdb.set_trace()
+        res = pd.DataFrame(results)
+        res.to_csv(outdir/"results.csv", index=False)
+
     elif params.use_tile is False:
         history = model.fit(x=x,
                             y=y,
-                            epochs=total_epochs,
-                            verbose=1,
+                            epochs=params.epochs,
+                            shuffle=True,
                             validation_data=validation_data,
+                            verbose=1,
                             callbacks=callbacks)
+
 
     print_fn("")
     timer.display_timer(print_fn)
     import ipdb; ipdb.set_trace()
-    res = pd.DataFrame(results)
-    res.to_csv(outdir/"results.csv", index=False)
 
     # --------------------------
     # Save model

@@ -5,7 +5,7 @@
     "batch_size": 32,
     "early_stop_method": "loss",
     "early_stop": true,
-    "epochs": 10,
+    "epochs": 20,
     "image_size": 299,
     "learning_rate": 0.0001,
     "model_type": "categorical",

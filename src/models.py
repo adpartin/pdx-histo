@@ -41,205 +41,35 @@ def keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs):
     csv_logger = CSVLogger(outdir/"training.log")
     callbacks.append(csv_logger)
 
-    # checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
-    #                                monitor=monitor,
-    #                                verbose=0,
-    #                                save_weights_only=False,
-    #                                save_best_only=True,
-    #                                save_freq="epoch")
-    # callbacks.append(checkpointer)
+    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
+                                   monitor=monitor,
+                                   verbose=0,
+                                   save_weights_only=False,
+                                   save_best_only=True,
+                                   save_freq="epoch")
+    callbacks.append(checkpointer)
 
-    # reduce_lr = ReduceLROnPlateau(monitor=monitor,
-    #                               factor=0.5,
-    #                               patience=5,
-    #                               verbose=1,
-    #                               mode="auto",
-    #                               min_delta=0.0001,
-    #                               cooldown=0,
-    #                               min_lr=0)
-    # callbacks.append(reduce_lr)
+    reduce_lr = ReduceLROnPlateau(monitor=monitor,
+                                  factor=0.5,
+                                  patience=5,
+                                  verbose=1,
+                                  mode="auto",
+                                  min_delta=0.0001,
+                                  cooldown=0,
+                                  min_lr=0)
+    callbacks.append(reduce_lr)
 
-    # early_stop = EarlyStopping(monitor=monitor,
-    #                            patience=20,
-    #                            mode="auto",
-    #                            restore_best_weights=True,
-    #                            verbose=1)
-    # callbacks.append(early_stop)
+    early_stop = EarlyStopping(monitor=monitor,
+                               patience=20,
+                               mode="auto",
+                               restore_best_weights=True,
+                               verbose=1)
+    callbacks.append(early_stop)
 
     # mycallback = EarlyStopOnBatch(monitor="loss", **mycallback_kwargs)
     # callbacks.append(mycallback)
 
     return callbacks
-
-
-class EarlyStopOnBatch(tf.keras.callbacks.Callback):
-    """
-    EarlyStopOnBatch(monitor="loss", batch_patience=20, validate_on_batch=10)
-    """
-    def __init__(self,
-                 validation_data,
-                 validation_steps=None,
-                 validate_on_batch=100,
-                 monitor="loss",
-                 batch_patience=0,
-                 print_fn=print):
-        """ 
-        Args:
-            validate_on_batch : 
-        """
-        super(EarlyStopOnBatch, self).__init__()
-        self.batch_patience = batch_patience
-        self.best_weights = None
-        # self.monitor = monitor  # ap
-        self.validate_on_batch = validate_on_batch  # ap
-        self.validation_data = validation_data
-        self.validation_steps = validation_steps
-        self.print_fn = print_fn
-
-    def on_train_begin(self, logs=None):
-        # self.wait = 0           # number of batches it has waited when loss is no longer minimum
-        self.stopped_epoch = 0  # epoch the training stops at
-        self.stopped_batch = 0  # epoch the training stops at
-        self.best = np.Inf      # init the best as infinity
-        self.track_values = []  # ap
-        self.epoch = None
-        self.val_loss = np.Inf
-        self.step_id = 0
-        # self.print_fn("\n{}.".format(yellow("Start training")))
-
-    def on_epoch_begin(self, epoch, logs=None):
-        keys = list(logs.keys())
-        self.epoch = epoch + 1
-        self.wait = 0  # number of batches it has waited when loss is no longer minimum
-        # self.print_fn("\n{} {}.\n".format( yellow("Start epoch"), yellow(epoch)) )
-
-    def on_epoch_end(self, epoch, logs=None):
-        keys = list(logs.keys())
-        # outpath = str(outdir/f"model_at_epoch_{self.epoch}")
-        # self.model.save(outpath)
-        # self.print_fn("")
-
-    def on_train_batch_end(self, batch, logs=None):
-        keys = list(logs.keys())  # metrics/logs names
-        batch = batch + 1
-
-        self.step_id += 1
-        results["step_id"] = self.step_id
-        results["step_id"] = {"epoch": self.epoch, "batch": batch}
-        # train_logs = {l: logs[l] for l in logs}
-        results["step_id"].update(logs)
-
-        if batch % self.validate_on_batch == 0:
-            evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
-            # self.track_values.append(self.val_loss)
-            val_logs = {"val"+str(k): v for k, v in zip(keys, evals)}
-            results["step_id"].update(val_logs)
-
-            self.val_loss = evals[0]
-            # current = logs.get("loss")
-            # current = logs.get(self.monitor)
-            current = self.val_loss
-
-            if np.less(current, self.best):
-                self.best = current
-                self.wait = 0
-                # Record the best weights if current results is better (less).
-                self.best_weights = self.model.get_weights()
-
-            else:
-                self.wait += 1
-                # if self.wait >= self.batch_patience:
-                #     self.stopped_epoch = self.epoch
-                #     self.stopped_batch = batch
-                #     self.model.stop_training = True
-                #     self.print_fn("\n{}".format(bold("Terminate training")))
-                #     self.print_fn("Restores model weights from the best (epoch, batch).")
-                #     self.model.set_weights(self.best_weights)
-
-            if self.epoch == 1:
-                self.print_fn("\repoch: {}, batch: {}, loss {:.4f}, val_loss {:.4f}, best_val_loss {:.4f} (wait: {})".format(
-                    self.epoch, batch, logs["loss"], self.val_loss, self.best, yellow(self.wait)), end="")
-            else:
-                self.print_fn("\repoch: {}, batch: {}, loss {:.4f}, val_loss {:.4f}, best_val_loss {:.4f} (wait: {})".format(
-                    self.epoch, batch, logs["loss"], self.val_loss, self.best, red(self.wait)), end="")
-
-            # Don't terminate of the first epoch
-            if (self.wait >= self.batch_patience) and (self.epoch > 1):
-                self.stopped_epoch = self.epoch
-                self.stopped_batch = batch
-                self.model.stop_training = True
-                self.print_fn("\n{}".format(red("Terminate training")))
-                self.print_fn("Restores model weights from the best (epoch, batch).")
-                self.model.set_weights(self.best_weights)
-
-        else:
-            val_logs = {"val"+str(k): np.nan for k in keys}
-            results["step_id"].update(val_logs)
-
-    def on_train_end(self, logs=None):
-        if self.stopped_batch > 0:
-            self.print_fn("Early stopping. Epoch: {}. Batch: {}.".format(self.stopped_epoch, self.stopped_batch))
-
-
-class LossAndErrorPrintingCallback(keras.callbacks.Callback):
-
-    def on_train_batch_end(self, batch, logs=None):
-        """ During training; when calling model.fit(). """
-        print("For batch {}, loss is {:7.2f}.".format(batch, logs["loss"]))
-
-    def on_test_batch_end(self, batch, logs=None):
-        """ During evaluating; when calling model.evaluate(). """
-        print("For batch {}, loss is {:7.2f}.".format(batch, logs["loss"]))
-
-    def on_epoch_end(self, epoch, logs=None):
-        print(
-            "The average loss for epoch {} is {:7.2f} "
-            "and mean absolute error is {:7.2f}.".format(
-                epoch, logs["loss"], logs["mean_absolute_error"]
-            )
-        )
-
-
-class EarlyStoppingAtMinLoss(keras.callbacks.Callback):
-    """Stop training when the loss is at its min, i.e. the loss stops decreasing.
-
-  Arguments:
-      patience: Number of epochs to wait after min has been hit. After this
-      number of no improvement, training stops.
-  """
-
-    def __init__(self, patience=0):
-        super(EarlyStoppingAtMinLoss, self).__init__()
-        self.patience = patience
-        # best_weights to store the weights at which the minimum loss occurs.
-        self.best_weights = None
-
-    def on_train_begin(self, logs=None):
-        # The number of epoch it has waited when loss is no longer minimum.
-        self.wait = 0
-        # The epoch the training stops at.
-        self.stopped_epoch = 0
-        # Initialize the best as infinity.
-        self.best = np.Inf
-
-    def on_epoch_end(self, epoch, logs=None):
-        current = logs.get("loss")
-        if np.less(current, self.best):
-            self.best = current
-            self.wait = 0
-            # Record the best weights if current results is better (less).
-            self.best_weights = self.model.get_weights()
-        else:
-            self.wait += 1
-            if self.wait >= self.patience:
-                self.stopped_epoch = epoch
-                self.model.stop_training = True
-                print("Restoring model weights from the end of the best epoch.")
-                self.model.set_weights(self.best_weights)
-
-    def on_train_end(self, logs=None):
-        if self.stopped_epoch > 0:
-            print("Epoch %05d: early stopping" % (self.stopped_epoch + 1))
 
 
 # def build_model_rsp_baseline(use_ge=True, use_dd=True,
