@@ -5,6 +5,10 @@ import os
 import sys
 assert sys.version_info >= (3, 5)
 
+# https://www.codegrepper.com/code-examples/python/suppres+tensorflow+warnings
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import argparse
 from collections import OrderedDict
 import glob
@@ -499,8 +503,6 @@ if args.nn_arch == "multimodal":
         tf.print(rec[1])
 
     # Evaluation (val, test, train)
-    # eval_batch_size = 8 * params.batch_size
-    # eval_batch_size = 16 * params.batch_size
     create_tf_data_eval_kwargs = {
         "batch_size": eval_batch_size,
         "include_meta": False,
