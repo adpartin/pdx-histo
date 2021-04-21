@@ -32,14 +32,17 @@ from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPla
 # from tensorflow.keras.models import Sequential, Model, load_model
 # from tensorflow.keras.utils import plot_model
 
-from models import build_model_rsp_baseline, keras_callbacks
-from ml.scale import get_scaler
-from ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
-from utils.utils import Params, dump_dict, read_lines, cast_list
-from datasets.tidy import split_data_and_extract_fea, extract_fea
-
 fdir = Path(__file__).resolve().parent
-from config import cfg
+# from config import cfg
+sys.path.append(str(fdir/".."))
+import src
+from src.config import cfg
+from src.models import build_model_rsp_baseline, keras_callbacks
+from src.ml.scale import get_scaler
+from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
+from src.utils.utils import cast_list, dump_dict, read_lines, Params
+from src.datasets.tidy import split_data_and_extract_fea, extract_fea
+
 
 # Seed
 seed = 42
@@ -75,7 +78,7 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
@@ -249,21 +252,25 @@ te_meta.to_csv(outdir/"te_meta.csv", index=False)
 
 callbacks = keras_callbacks(outdir, monitor="val_loss")
 
-# https://www.tensorflow.org/guide/mixed_precision
 # Mixed precision
-# if DTYPE == 'float16':
-#     # TF 2.3
-#     from tensorflow.keras.mixed_precision import experimental as mixed_precision
-#     print("Training with mixed precision")
-#     policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
-#     mixed_precision.set_policy(policy)
-#     print('Compute dtype: %s' % policy.compute_dtype)
-#     print('Variable dtype: %s' % policy.variable_dtype)
+if params.use_fp16:
+    print("Train with mixed precision")
+    if int(tf.keras.__version__.split(".")[1]) == 4:  # TF 2.4
+        from tensorflow.keras import mixed_precision
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+    elif int(tf.keras.__version__.split(".")[1]) == 3:  # TF 2.3
+        from tensorflow.keras.mixed_precision import experimental as mixed_precision
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_policy(policy)
+    print("Compute dtype: %s" % policy.compute_dtype)
+    print("Variable dtype: %s" % policy.variable_dtype)
+
 
 # y_encoding = "onehot"
-y_encoding = "label"  # to be used binary cross-entropy
+# y_encoding = "label"  # to be used binary cross-entropy
 
-if y_encoding == "onehot":
+if params.y_encoding == "onehot":
     if index_col_name in data.columns:
         # Using Yitan's T/V/E splits
         # print(te_meta[["index", "Group", "grp_name", "Response"]])
@@ -277,7 +284,7 @@ if y_encoding == "onehot":
 
     loss = losses.CategoricalCrossentropy()
 
-elif y_encoding == "label":
+elif params.y_encoding == "label":
     if index_col_name in data.columns:
         # Using Yitan's T/V/E splits
         ytr = tr_meta[args.target[0]].values

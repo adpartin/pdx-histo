@@ -160,9 +160,9 @@ def calc_records_in_tfr_folder(tfr_dir):
     input folder.
     """
     count = 0
-    for tfr_path in sorted(tfr_dir.glob('*.tfrec*')):
+    for tfr_path in sorted(tfr_dir.glob("*.tfrec*")):
         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-    print('Number of examples in all tfrecords in the folder:', count)
+    print("Number of examples in all tfrecords in the folder:", count)
 
     
 def calc_records_in_tfr_files(tfr_files):
@@ -173,7 +173,7 @@ def calc_records_in_tfr_files(tfr_files):
     count = 0
     for tfr_path in sorted(tfr_files):
         count += sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-    print('Number of examples in all tfrecords in the folder:', count)
+    print("Number of examples in all tfrecords in the folder:", count)
     return count
     
     
@@ -183,13 +183,16 @@ def count_data_items(filenames):
     return np.sum(n)
     
     
-def calc_examples_in_tfrecord(tfr_path):
+def calc_examples_in_tfrecord(tfr_path, verbose=False):
     """
     Calc and print the number of examples (tiles) in the input tfrecord
     file provided by the path to the file.
     """
     count = sum(1 for _ in tf.data.TFRecordDataset(str(tfr_path)))
-    print('Number of examples in the tfrecord:', count)
+    # count = sum(1 for _ in tfrecord)
+    if verbose:
+        print("Number of examples in the tfrecord:", count)
+    return count
 
 
 def get_tfr_files(tfr_dir, tfr_names) -> List[str]:

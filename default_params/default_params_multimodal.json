@@ -7,12 +7,14 @@
     "dense1_dd1": 256,
     "dense1_dd2": 256,
     "dense1_top": 1024,
-    "epochs": 1,
+    "epochs": 50,
     "learning_rate": 0.0001,
     "model_type": "categorical",
+    "n_concurrent_shards": 32,
     "pooling": "max",
     "pretrain": "imagenet",
     "single_drug": false,
+    "shuffle_size": 8192,
     "tile_px": 299,
     "tile_um": 302,
     "top_hidden_dropout1": 0.0,
@@ -21,5 +23,6 @@
     "use_fp16": true,
     "use_ge": true,
     "use_tile": true,
-    "validate_on_batch": 100
+    "validate_on_batch": null,
+    "y_encoding": "label"
 }

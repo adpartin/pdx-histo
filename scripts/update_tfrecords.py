@@ -33,12 +33,12 @@ import src
 from src.config import cfg
 from src import load_data
 from src.load_data import PDX_SAMPLE_COLS
+from src.sf_utils import green
 from src.tfrecords import FEA_SPEC, FEA_SPEC_RSP, FEA_SPEC_RSP_DRUG_PAIR, FEA_SPEC_RNA_NEW, original_tfr_names
-from src.tf_utils import _float_feature, _bytes_feature, _int64_feature
+from src.tf_utils import _float_feature, _bytes_feature, _int64_feature, calc_examples_in_tfrecord
 from src.utils.utils import Timer
 
 # Seed
-# seed = 42
 np.random.seed(cfg.seed)
 tf.random.set_seed(cfg.seed)
 
@@ -46,21 +46,20 @@ tf.random.set_seed(cfg.seed)
 LABEL = '299px_302um'
 directory = cfg.SF_TFR_DIR/LABEL
 
-GREEN = '\033[92m'
-ENDC = '\033[0m'
-
-def green(text):
-    return GREEN + str(text) + ENDC
-
-
 n_samples = None
 # n_samples = 3
-single_drug = False
+# single_drug = True
+single_drug = False  # drug pairs
+# frac_tiles = 1.0  # all tiles
+# frac_tiles = 0.2  # fraction of tiles
+frac_tiles = 0.1  # fraction of tiles
 
 timer = Timer()
 
 
-def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: bool=False) -> None:
+def update_tfrecords_for_drug_rsp(n_samples: Optional[int]=None,
+                                  single_drug: bool=False,
+                                  frac_tiles: float=1.0) -> None:
     """
     Takes original tfrecords that we got from A. Pearson and updates them
     by addting more data including metadata of PDX samples, RNA-Seq, drug
@@ -71,10 +70,18 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
             (primarily used for debugging)
     """
     # Create path for the updated tfrecords
+    # import ipdb; ipdb.set_trace()
+    # if single_drug:
+    #     outpath = cfg.SF_TFR_DIR_RSP/LABEL
+    # else:
+    #     outpath = cfg.SF_TFR_DIR_RSP_DRUG_PAIR/LABEL
     if single_drug:
-        outpath = cfg.SF_TFR_DIR_RSP/LABEL
+        base_outdir = cfg.SF_TFR_DIR_RSP
     else:
-        outpath = cfg.SF_TFR_DIR_RSP_DRUG_PAIR/LABEL
+        base_outdir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
+    if frac_tiles < 1.0:
+        base_outdir = str(base_outdir) + "_" + str(frac_tiles) + "_of_tiles"
+    outpath = Path(base_outdir)/LABEL
     os.makedirs(outpath, exist_ok=True)
 
     # Load data
@@ -227,7 +234,10 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
         # histo slide
         rel_tfr = str(slide_name) + ".tfrecords"
         tfr = str(directory/rel_tfr)
-        
+
+        max_tiles = calc_examples_in_tfrecord(tfr)
+        n_tiles = int(frac_tiles * max_tiles)  # num to use from the current tfrecord (slide)
+
         print(f"\r\033[K Creating drug response tfrecords using {green(rel_tfr)} (slide {i+1} out of {len(c_slides)} slides) ...", end="") 
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
@@ -242,6 +252,10 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
 
             # Iter over tiles of the current slide
             for tile_id, rec in enumerate(raw_dataset):
+
+                if tile_id + 1 > n_tiles:
+                    break
+
                 # Features of the current rec from old tfrecord
                 features = tf.io.parse_single_example(rec, features=FEA_SPEC)
                 # tf.print(features.keys())
@@ -301,7 +315,8 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int] = None, single_drug: 
                 writer.write(ex.SerializeToString())
 
             # print(f"Total tiles in the sample {tile_id+1}")
-            tile_counter.append( {"smp": smp, "slide": slide_name, "max_tiles": tile_id+1} )
+            # tile_counter.append( {"smp": smp, "slide": slide_name, "max_tiles": tile_id+1} )
+            tile_counter.append( {"tfr_fname": tfr_fname, "smp": smp, "slide": slide_name, "max_tiles": max_tiles, "n_tiles": n_tiles} )
             writer.close()
         print()
         
@@ -498,5 +513,5 @@ def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
 
 
 # update_tfrecords_with_rna(n_samples)
-update_tfrecords_for_drug_rsp(n_samples, single_drug)
+update_tfrecords_for_drug_rsp(n_samples, single_drug, frac_tiles)
 timer.display_timer()

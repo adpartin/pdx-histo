@@ -524,8 +524,6 @@ def parse_tfrec_fn_rsp(record,
         image_dict.update({"dd2_data": dd_data})
         del dd_data
 
-    # if include_smp_names:
-    #     return image_dict, label, smp
     if include_meta:
         return image_dict, label, meta
     else:
@@ -647,31 +645,12 @@ def get_categories_from_manifest(tfrecords, manifest, outcomes, MODEL_TYPE="cate
 
 def calc_class_weights(tfrecords,
                        class_weights_method="BY_TILE",
-                       manifest=None,
-                       outcomes=None,
+                       # manifest=None,
+                       # outcomes=None,
+                       categories=None,
                        MODEL_TYPE=None):
     """ ... """
-    categories = get_categories_from_manifest(tfrecords, manifest, outcomes)
-
-    # num_tiles = []
-    # categories = {}
-
-    # for filename in tfrecords:
-    #     smp = filename.split("/")[-1][:-10]
-
-    #     # Determine total number of tiles available in TFRecord
-    #     tiles = manifest[filename]["total"]
-
-    #     # Get the category of the current sample
-    #     category = outcomes[smp]["outcome"] if MODEL_TYPE == "categorical" else 1
-
-    #     if category not in categories.keys():
-    #         categories.update({category: {"num_samples": 1,
-    #                                       "num_tiles": tiles}})
-    #     else:
-    #         categories[category]["num_samples"] += 1
-    #         categories[category]["num_tiles"] += tiles
-    #     num_tiles += [tiles]
+    # categories = get_categories_from_manifest(tfrecords, manifest, outcomes)
 
     if class_weights_method == "NONE":
         class_weight = None
@@ -740,7 +719,10 @@ def create_manifest(directory, n_files: Optional[int]=None):
                 for raw_record in raw_dataset:
                     example = tf.train.Example()
                     example.ParseFromString(raw_record.numpy())
+
                     slide = example.features.feature['slide'].bytes_list.value[0].decode('utf-8')  # get the slide name
+                    # smp = example.features.feature['smp'].bytes_list.value[0].decode('utf-8')  # TODO: maybe this should be "smp" instead of "slide'
+
                     if slide not in manifest[rel_tfr]:
                         manifest[rel_tfr][slide] = 1
                     else:

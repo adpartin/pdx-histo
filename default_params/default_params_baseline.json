@@ -18,5 +18,7 @@
     "use_dd2": true,
     "use_fp16": true,
     "use_ge": true,
-    "use_tile": true
+    "use_tile": true,
+    "validate_on_batch": 100,
+    "y_encoding": "label"
 }

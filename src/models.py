@@ -34,7 +34,7 @@ _ModelDict = {
 }
 
 
-def keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs):
+def keras_callbacks(outdir, monitor="val_loss", patience=5):
     """ ... """
     callbacks = []
 
@@ -51,7 +51,7 @@ def keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs):
 
     reduce_lr = ReduceLROnPlateau(monitor=monitor,
                                   factor=0.5,
-                                  patience=5,
+                                  patience=patience,
                                   verbose=1,
                                   mode="auto",
                                   min_delta=0.0001,
@@ -65,9 +65,6 @@ def keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs):
                                restore_best_weights=True,
                                verbose=1)
     callbacks.append(early_stop)
-
-    # mycallback = EarlyStopOnBatch(monitor="loss", **mycallback_kwargs)
-    # callbacks.append(mycallback)
 
     return callbacks
 
@@ -169,6 +166,8 @@ def keras_callbacks(outdir, monitor="val_loss", **mycallback_kwargs):
 
 def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
                              ge_shape=None, dd_shape=None, model_type="categorical",
+                             dense1_ge=512, dense1_dd1=256, dense1_dd2=256, dense1_top=500,
+                             top_hidden_dropout1=0.1,
                              # NUM_CLASSES=None,
                              output_bias=None):
     """ Doesn't use image data. """
@@ -180,8 +179,8 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
 
     if use_ge:
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-        x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
-        x_ge = BatchNormalization()(x_ge)
+        x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
+        x_ge = BatchNormalization(name="ge_batchnorm")(x_ge)
         # x_ge = Dropout(0.4)(x_ge)
         model_inputs.append(ge_input_tensor)
         merge_inputs.append(x_ge)
@@ -189,8 +188,8 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
 
     if use_dd1:
         dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
-        x_dd1 = Dense(256, activation=tf.nn.relu, name="dense_dd1_1")(dd1_input_tensor)
-        x_dd1 = BatchNormalization()(x_dd1)
+        x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
+        x_dd1 = BatchNormalization(name="dd1_batchnorm")(x_dd1)
         # x_dd1 = Dropout(0.4)(x_dd1)
         model_inputs.append(dd1_input_tensor)
         merge_inputs.append(x_dd1)
@@ -198,8 +197,8 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
 
     if use_dd2:
         dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
-        x_dd2 = Dense(256, activation=tf.nn.relu, name="dense_dd2_1")(dd2_input_tensor)
-        x_dd2 = BatchNormalization()(x_dd2)
+        x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
+        x_dd2 = BatchNormalization(name="dd2_batchnorm")(x_dd2)
         # x_dd2 = Dropout(0.4)(x_dd2)
         model_inputs.append(dd2_input_tensor)
         merge_inputs.append(x_dd2)
@@ -208,19 +207,19 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
     # Merge towers
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
-    # hidden_layer_width = 1000
-    hidden_layer_width = 500
-    merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-                                         name="top_hidden_1", kernel_regularizer=None)(merged_model)
+    merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
+                                         name="dense1_top", kernel_regularizer=None)(merged_model)
     merged_model = BatchNormalization()(merged_model)
-    merged_model = Dropout(0.5)(merged_model)
+    if top_hidden_dropout1 > 0:
+        merged_model = Dropout(top_hidden_dropout1)(merged_model)
 
     # Add the softmax prediction layer
     # activation = "linear" if model_type == "linear" else "softmax"
     # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
     # softmax_output = tf.keras.layers.Activation(activation, dtype="float32", name="Response")(final_dense_layer)
 
-    softmax_output = tf.keras.layers.Dense(1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
+    softmax_output = tf.keras.layers.Dense(
+        1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
@@ -268,7 +267,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         del tile_input_tensor, x_im
 
     if use_ge:
-        # dense1_ge = 512
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
         x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
         x_ge = BatchNormalization(name="ge_batchnorm")(x_ge)
@@ -278,7 +276,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         del ge_input_tensor, x_ge
 
     if use_dd1:
-        # dense1_dd1 = 256
         dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
         x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
         x_dd1 = BatchNormalization(name="dd1_batchnorm")(x_dd1)
@@ -288,7 +285,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         del dd1_input_tensor, x_dd1
 
     if use_dd2:
-        # dense1_dd2 = 256
         dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
         x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
         x_dd2 = BatchNormalization(name="dd2_batchnorm")(x_dd2)
@@ -300,11 +296,9 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # Merge towers
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
-    # dense1_top = 1024
     merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
                                          name="dense1_top", kernel_regularizer=None)(merged_model)
     merged_model = BatchNormalization(name="top_batchnorm")(merged_model)
-    # top_hidden_dropout1 = 0.1
     if top_hidden_dropout1 > 0:
         merged_model = Dropout(top_hidden_dropout1)(merged_model)
 
@@ -319,17 +313,17 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
 
-    # Compile
-    # Note! When I put metrics in model.py, it immediately occupies a lot of the GPU memory!
-    metrics = [
-          # keras.metrics.TrueNegatives(name="tn"),
-          keras.metrics.FalsePositives(name="fp"),
-          # keras.metrics.FalseNegatives(name="fn"),
-          keras.metrics.TruePositives(name="tp"),
-          # keras.metrics.AUC(name="auc"),
-    ]
+    # # Compile
+    # # Note! When I put metrics in model.py, it immediately occupies a lot of the GPU memory!
+    # metrics = [
+    #       # keras.metrics.TrueNegatives(name="tn"),
+    #       keras.metrics.FalsePositives(name="fp"),
+    #       # keras.metrics.FalseNegatives(name="fn"),
+    #       keras.metrics.TruePositives(name="tp"),
+    #       # keras.metrics.AUC(name="auc"),
+    # ]
 
-    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+    # model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
 
     return model
 
