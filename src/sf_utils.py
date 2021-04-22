@@ -531,6 +531,7 @@ def parse_tfrec_fn_rsp(record,
 
 
 def create_tf_data(tfrecords,
+                   deterministic: Optional[bool]=False,
                    n_concurrent_shards: Optional[int]=16,
                    shuffle_files: bool=False,
                    interleave: bool=False,
@@ -541,17 +542,19 @@ def create_tf_data(tfrecords,
                    drop_remainder=False,
                    seed=None,
                    prefetch=1,
-                   # ANNOTATIONS_TABLES=None, # global var of SlideFlowModel
                    parse_fn=None,
                    include_meta=False,
-                   **parse_fn_kwargs): # global var of SlideFlowModel
+                   **parse_fn_kwargs):
     """ ...
 
     Args:
-        ...
+        deterministic : True for determinstic flow of batches (TODO: this doesn't work)
+
+    https://cs230.stanford.edu/blog/datapipeline/
+    https://docs.google.com/presentation/d/16kHNtQslt-yuJ3w8GIx-eEH6t_AvFeQOchqGRFpAD7U/edit
     """
-    # TODO: optimizing with data api
-    # https://www.tensorflow.org/guide/data_performance
+    if deterministic is True:
+        tf.random.set_seed(seed)
 
     # Notes:
     # Apply batch() before map():
@@ -565,6 +568,7 @@ def create_tf_data(tfrecords,
     # i. Randomly shuffle the list of shard filenames, using Dataset.list_files(...).shuffle(num_shards).
     if shuffle_files:
         # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
+        seed = tf.constant(seed, dtype=tf.int64)
         shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
         # shards = shards.repeat()
 
@@ -577,32 +581,38 @@ def create_tf_data(tfrecords,
             cycle_length=n_concurrent_shards,
             block_length=None,  # defaults to 1
             num_parallel_calls=None,
-            deterministic=None
-        )
+            deterministic=deterministic)
     else:
         dataset = tf.data.TFRecordDataset(
             shards,
             buffer_size=None,
             num_parallel_reads=None)  # If None, files will be read sequentially.
 
-
-    # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
-    #      but you will probably want to set it to some value larger than the number of records in a single shard.
-    if shuffle_size is not None:
-        # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
-        dataset = dataset.shuffle(buffer_size=shuffle_size)  # (ap) shuffles the examples in the relevant filenames
+    # # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
+    # #      but you will probably want to set it to some value larger than the number of records in a single shard.
+    # if shuffle_size is not None:
+    #     # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
+    #     dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
 
     # (ap) recommended to use batch before map
     # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
     # num_parallel_calls = tf.data.experimental.AUTOTUNE
     # num_parallel_calls = 64
+    # num_parallel_calls = 16
     num_parallel_calls = 8
+    # num_parallel_calls = 1
     dataset = dataset.map(
         map_func=partial(parse_fn, include_meta=include_meta, **parse_fn_kwargs),
         num_parallel_calls=num_parallel_calls,
-        deterministic=None
+        deterministic=deterministic
     )
+
+    # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
+    #      but you will probably want to set it to some value larger than the number of records in a single shard.
+    if shuffle_size is not None:
+        # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
+        dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
 
     # Apply batch after repeat (https://www.tensorflow.org/guide/data)
     if repeat:

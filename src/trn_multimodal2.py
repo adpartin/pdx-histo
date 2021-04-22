@@ -24,8 +24,6 @@ from sklearn.metrics import confusion_matrix
 import warnings
 warnings.filterwarnings('ignore')
 
-# import ipdb; ipdb.set_trace()
-
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
 
@@ -72,7 +70,7 @@ parser.add_argument("--id_name",
                     help="Column name of the ID.")
 parser.add_argument("--split_on",
                     type=str,
-                    default=None,
+                    default="Group",
                     choices=["Sample", "slide", "Group"],
                     help="Specify the hard split variable/column (default: None).")
 parser.add_argument("--prjname",
@@ -117,6 +115,10 @@ params = Params(prm_file_path)
 outdir = create_outdir_2(prjdir, params)
 
 
+# Save hyper-parameters
+params.save(outdir/"params.json")
+
+
 # Logger
 lg = Logger(outdir/"logger.log")
 print_fn = get_print_func(lg.logger)
@@ -129,10 +131,6 @@ annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILEN
 data = pd.read_csv(annotations_file)
 data = data.astype({"image_id": str, "slide": str})
 print_fn(data.shape)
-
-
-# Save hyper-parameters
-params.save(outdir/"params.json")
 
 
 print("\nFull dataset:")
@@ -195,31 +193,10 @@ if params.use_dd2 and len(dd2_cols) > 0:
 # -----------------------------------------------
 
 # --------------
-# ap splits
-# --------------
-# splitdir = cfg.DATA_PROCESSED_DIR/args.dataname/f'annotations.splits/split_on_{split_on}'
-# split_id = 0
-
-# split_pattern = f'1fold_s{split_id}_*_id.txt'
-# single_split_files = glob.glob(str(splitdir/split_pattern))
-
-# assert len(single_split_files) >= 2, f'Split {split_id} contains only one file.'
-# for id_file in single_split_files:
-#     if 'tr_id' in id_file:
-#         tr_id = cast_list(read_lines(id_file), int)
-#     elif 'vl_id' in id_file:
-#         vl_id = cast_list(read_lines(id_file), int)
-#     elif 'te_id' in id_file:
-#         te_id = cast_list(read_lines(id_file), int)
-# --------------
-
-# --------------
 # Yitan's splits
 # --------------
 # import ipdb; ipdb.set_trace()
 splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
-# split_id = 0
-# split_id = 2
 split_id = 81
 
 tr_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TrainList.txt")), int)
@@ -314,11 +291,6 @@ te_meta.to_csv(outdir/"te_meta.csv", index=False)
 ge_shape = (tr_ge.shape[1],)
 dd_shape = (tr_dd1.shape[1],)
 
-# Variables (dict/dataframes/arrays) that are passed as features to the NN
-xtr = {"ge_data": tr_ge.values, "dd1_data": tr_dd1.values, "dd2_data": tr_dd2.values}
-xvl = {"ge_data": vl_ge.values, "dd1_data": vl_dd1.values, "dd2_data": vl_dd2.values}
-xte = {"ge_data": te_ge.values, "dd1_data": te_dd1.values, "dd2_data": te_dd2.values}
-
 # import ipdb; ipdb.set_trace()
 print_fn("\nTrain:")
 print_fn(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
@@ -373,12 +345,6 @@ assert sorted(tr_smp_names) == sorted(tr_meta[args.id_name].values.tolist()), "S
 assert sorted(vl_smp_names) == sorted(vl_meta[args.id_name].values.tolist()), "Sample names in the vl_smp_names and vl_meta don't match."
 assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "Sample names in the te_smp_names and te_meta don't match."
 
-# import ipdb; ipdb.set_trace()
-# print(len(outcomes))
-# print(len(manifest))
-# print(outcomes[list(outcomes.keys())[3]])
-# print(manifest[list(manifest.keys())[3]])
-
 
 # -------------------------------
 # Class weight
@@ -425,7 +391,6 @@ if args.nn_arch == "multimodal":
             "dd2_scaler": dd2_scaler,
             "id_name": args.id_name,
             "augment": params.augment,
-            # "MODEL_TYPE": params.model_type,
         }
     else:
         # Ctype
@@ -447,14 +412,14 @@ if args.nn_arch == "multimodal":
     # Number of tiles/examples in each dataset
     # ----------------------------------------
     # import ipdb; ipdb.set_trace()
-    total_train_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["n_tiles"].sum()
-    total_val_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["n_tiles"].sum()
-    total_test_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["n_tiles"].sum()
+    tr_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["n_tiles"].sum()
+    vl_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["n_tiles"].sum()
+    te_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["n_tiles"].sum()
 
     eval_batch_size = 8 * params.batch_size
-    train_steps = total_train_tiles // params.batch_size
-    validation_steps = total_val_tiles // eval_batch_size
-    test_steps = total_test_tiles // eval_batch_size
+    tr_steps = tr_tiles // params.batch_size
+    vl_steps = vl_tiles // eval_batch_size
+    te_steps = te_tiles // eval_batch_size
 
 
     # -------------------------------
@@ -466,13 +431,14 @@ if args.nn_arch == "multimodal":
     # import ipdb; ipdb.set_trace()
     train_data = create_tf_data(
         batch_size=params.batch_size,
+        deterministic=False,
         include_meta=False,
         interleave=True,
         n_concurrent_shards=params.n_concurrent_shards,  # 32, 64
         parse_fn=parse_fn,
         prefetch=2,
         repeat=True,
-        seed=None,  # cfg.seed
+        seed=cfg.seed,
         shuffle_files=True,
         shuffle_size=params.shuffle_size,  # 8192
         tfrecords=train_tfr_files,
@@ -493,6 +459,7 @@ if args.nn_arch == "multimodal":
     else:
         dd_shape = None
 
+    # Print keys and dims
     for i, item in enumerate(bb):
         print(f"\nItem {i}")
         if isinstance(item, dict):
@@ -676,7 +643,7 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
         if batch % self.validate_on_batch == 0:
             # Log metrics before evaluation
             self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
-                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+                self.epoch, batch, tr_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
 
             evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
             val_logs = {"val_"+str(k): v for k, v in zip(keys, evals)}
@@ -696,7 +663,7 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
 
             # Log metrics after evaluation
             self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
-                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+                self.epoch, batch, tr_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
 
             # Don't terminate on the first epoch
             if (self.wait >= self.batch_patience) and (self.epoch > 1):
@@ -709,7 +676,7 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
 
         else:
             self.print_fn("\repoch: {}, batch: {}/{}, loss: {:.4f}, val_loss: {:.4f}, best_val_loss: {:.4f} (wait: {})".format(
-                self.epoch, batch, train_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
+                self.epoch, batch, tr_steps, logs["loss"], self.val_loss, self.best, color(self.wait)), end="\r")
             val_logs = {"val_"+str(k): np.nan for k in keys}
             res.update(val_logs)
 
@@ -725,6 +692,7 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
 
 # Callbacks list
 callbacks = keras_callbacks(outdir, monitor="val_loss", patience=params.patience)
+# callbacks = keras_callbacks(outdir, monitor="auc", patience=params.patience)
 
 if args.nn_arch == "baseline":
     # callbacks = keras_callbacks(outdir, monitor="val_loss")
@@ -768,10 +736,6 @@ if params.use_fp16:
 
 # Target
 if args.nn_arch == "baseline":
-    # Prep the target
-    # y_encoding = "onehot"
-    # y_encoding = "label"  # to be used binary cross-entropy
-
     if params.y_encoding == "onehot":
         if index_col_name in data.columns:
             # Using Yitan's T/V/E splits
@@ -798,7 +762,6 @@ if args.nn_arch == "baseline":
             yvl = ydata_label[vl_id]
             yte = ydata_label[te_id]
             loss = losses.SparseCategoricalCrossentropy()
-
     else:
         raise ValueError(f"Unknown value for y_encoding ({params.y_encoding}).")
 
@@ -827,22 +790,25 @@ print("Output bias:", output_bias)
 
 if args.target[0] == "Response":
 
-    # if params.use_tile is True:
-    loss = losses.BinaryCrossentropy()
-    build_model_kwargs = {"base_image_model": params.base_image_model,
-                          "use_ge": params.use_ge,
+    loss = losses.BinaryCrossentropy()  # TODO: remove this line
+    build_model_kwargs = {"dense1_dd1": params.dense1_dd1,
+                          "dense1_dd2": params.dense1_dd2,
+                          "dense1_ge": params.dense1_ge,
+                          "dense1_img": params.dense1_img,
+                          "dense1_top": params.dense1_top,
+                          "dd_shape": dd_shape,
+                          "ge_shape": ge_shape,
+                          "learning_rate": params.learning_rate,
+                          "loss": loss,
+                          "optimizer": params.optimizer,
+                          "output_bias": output_bias,
+                          "dropout1_top": params.dropout1_top,
                           "use_dd1": params.use_dd1,
                           "use_dd2": params.use_dd2,
+                          "use_ge": params.use_ge,
                           "use_tile": params.use_tile,
-                          "ge_shape": ge_shape,
-                          "dd_shape": dd_shape,
-                          "dense1_ge": params.dense1_ge,
-                          "dense1_dd1": params.dense1_dd1,
-                          "dense1_dd2": params.dense1_dd2,
-                          "dense1_top": params.dense1_top,
-                          "top_hidden_dropout1": params.top_hidden_dropout1,
                           # "model_type": params.model_type,
-                          "output_bias": output_bias,
+        "base_image_model": params.base_image_model,
     }
     model = build_model_rsp(**build_model_kwargs)
     # else:
@@ -853,18 +819,11 @@ if args.target[0] == "Response":
     #                                      dd_shape=dd_shape,
     #                                      # model_type=params.model_type
     #                                      )
-    # Note! When I put metrics in model.py, it immediately occupies a lot of the GPU memory!
-    metrics = [
-          keras.metrics.FalsePositives(name="fp"),
-          keras.metrics.TruePositives(name="tp"),
-    ]
-    model.compile(loss=loss,
-                  optimizer=optimizers.Adam(learning_rate=params.learning_rate),
-                  metrics=metrics)
 else:
     raise NotImplementedError("Need to check this method")
     model = build_model_rna()
 
+# import ipdb; ipdb.set_trace()
 print_fn("")
 model.summary(print_fn=print_fn)
 
@@ -893,8 +852,8 @@ if args.trn_phase == "train":
     # base_model_path = prjdir/"base_multimodal_model"
     # model.save(base_model_path)
     # model1 = tf.keras.models.load_model(base_model_path)
-    # res = model.evaluate(val_data, steps=validation_steps, verbose=1)
-    # res1 = model.evaluate(val_data, steps=validation_steps, verbose=1)
+    # res = model.evaluate(val_data, steps=vl_steps, verbose=1)
+    # res1 = model.evaluate(val_data, steps=vl_steps, verbose=1)
 
     # # Base model weights
     # weights_path = prjdir/"base_multimodal_weights"
@@ -905,22 +864,21 @@ if args.trn_phase == "train":
     #     model.save_weights(initial_weights)
 
     # # Dump/log performance measures of the base model
-    # aa = model.evaluate(val_data, steps=validation_steps, verbose=1)
+    # aa = model.evaluate(val_data, steps=vl_steps, verbose=1)
     # print_fn("Base model val_loss: {}".format(aa[0]))
 
     timer = Timer()
 
     if params.use_tile is True:
-        print_fn(f"Train steps:      {train_steps}")
-        print_fn(f"Validation steps: {validation_steps}")
+        print_fn(f"Train steps:      {tr_steps}")
+        print_fn(f"Validation steps: {vl_steps}")
 
         history = model.fit(x=train_data,
                             validation_data=val_data,
-                            steps_per_epoch=train_steps,
-                            validation_steps=validation_steps,
+                            steps_per_epoch=tr_steps,
+                            validation_steps=vl_steps,
                             class_weight=class_weight,
                             epochs=params.epochs,
-                            shuffle=False,
                             verbose=fit_verbose,
                             callbacks=callbacks)
         del train_data, val_data
@@ -1056,6 +1014,7 @@ def get_preds(tf_data, meta, model, outdir, args, name):
     # Predictions per tile
     timer = Timer()
     tile_preds = calc_per_tile_preds(tf_data, model=model, outdir=outdir)
+    print_fn("")
     timer.display_timer(print_fn)
 
     # Aggregate predictions per sample
@@ -1151,15 +1110,15 @@ if args.nn_arch == "baseline":
 elif args.nn_arch == "multimodal":
     timer = Timer()
 
-    print_fn("{}".format(bold("Test set predictions.")))
+    print_fn("\n{}".format(bold("Test set predictions.")))
     get_preds(test_data, te_meta, model, outdir, args, name="test")
     del test_data
 
-    print_fn("{}".format(bold("Validation set predictions.")))
+    print_fn("\n{}".format(bold("Validation set predictions.")))
     get_preds(eval_val_data, vl_meta, model, outdir, args, name="test")
     del eval_val_data
 
-    print_fn("{}".format(bold("Train set predictions.")))
+    print_fn("\n{}".format(bold("Train set predictions.")))
     get_preds(eval_train_data, tr_meta, model, outdir, args, name="train")
     del eval_train_data
 

@@ -24,7 +24,6 @@ fdir = Path(__file__).resolve().parent
 from config import cfg
 from src.sf_utils import bold, green, blue, yellow, cyan, red
 
-
 _ModelDict = {
     "Xception": tf.keras.applications.Xception,
     "EfficientNetB1": tf.keras.applications.EfficientNetB1,
@@ -69,105 +68,10 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     return callbacks
 
 
-# def build_model_rsp_baseline(use_ge=True, use_dd=True,
-#                              ge_shape=None, dd_shape=None, model_type="categorical",
-#                              NUM_CLASSES=None, output_bias=None):
-#     """ Doesn't use image data. """
-#     if output_bias is not None:
-#         output_bias = tf.keras.initializers.Constant(output_bias)
-
-#     model_inputs = []
-#     merge_inputs = []
-
-#     if use_ge:
-#         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-#         x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
-#         # x_ge = BatchNormalization(0.2)(x_ge)
-#         # x_ge = Dropout(0.4)(x_ge)
-#         model_inputs.append(ge_input_tensor)
-#         merge_inputs.append(x_ge)
-
-#     if use_dd:
-#         dd_input_tensor = tf.keras.Input(shape=dd_shape, name="dd_data")
-#         x_dd = Dense(512, activation=tf.nn.relu, name="dense_dd_1")(dd_input_tensor)
-#         # x_dd = BatchNormalization(0.2)(x_dd)
-#         # x_dd = Dropout(0.4)(x_dd)
-#         model_inputs.append(dd_input_tensor)
-#         merge_inputs.append(x_dd)
-
-#     # Merge towers
-#     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
-
-#     # hidden_layer_width = 1000
-#     hidden_layer_width = 500
-#     merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-#                                          name="hidden_1", kernel_regularizer=None)(merged_model)
-#     merged_model = Dropout(0.4)(merged_model)
-
-#     # Add the softmax prediction layer
-#     # activation = "linear" if model_type == "linear" else "softmax"
-#     # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-#     # softmax_output = tf.keras.layers.Activation(activation, dtype="float32", name="Response")(final_dense_layer)
-
-#     softmax_output = tf.keras.layers.Dense(1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
-
-#     # Assemble final model
-#     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-#     return model
-
-
-# def build_model_rsp(pooling='max', pretrain='imagenet',
-#                     use_ge=True, use_dd=True, use_tile=True,
-#                     ge_shape=None, dd_shape=None, model_type='categorical',
-#                     NUM_CLASSES=None):
-#     """ ... """
-#     model_inputs = []
-#     merge_inputs = []
-
-#     if use_tile:
-#         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
-#         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-#         base_img_model = tf.keras.applications.Xception(
-#             weights=pretrain, pooling=pooling, include_top=False,
-#             input_shape=None, input_tensor=None)
-
-#         x_im = base_img_model(tile_input_tensor)
-#         model_inputs.append(tile_input_tensor)
-#         merge_inputs.append(x_im)
-
-#     if use_ge:
-#         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-#         x_ge = Dense(512, activation=tf.nn.relu, name="dense_ge_1")(ge_input_tensor)
-#         model_inputs.append(ge_input_tensor)
-#         merge_inputs.append(x_ge)
-
-#     if use_dd:
-#         dd_input_tensor = tf.keras.Input(shape=dd_shape, name="dd_data")
-#         x_dd = Dense(512, activation=tf.nn.relu, name="dense_dd_1")(dd_input_tensor)
-#         model_inputs.append(dd_input_tensor)
-#         merge_inputs.append(x_dd)
-
-#     # Merge towers
-#     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
-
-#     hidden_layer_width = 1000
-#     merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-#                                          name="hidden_1", kernel_regularizer=None)(merged_model)
-
-#     # Add the softmax prediction layer
-#     activation = 'linear' if model_type == 'linear' else 'softmax'
-#     final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-#     softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
-
-#     # Assemble final model
-#     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-#     return model
-
-
 def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
                              ge_shape=None, dd_shape=None, model_type="categorical",
                              dense1_ge=512, dense1_dd1=256, dense1_dd2=256, dense1_top=500,
-                             top_hidden_dropout1=0.1,
+                             dropout1_top=0.1,
                              # NUM_CLASSES=None,
                              output_bias=None):
     """ Doesn't use image data. """
@@ -210,8 +114,8 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
     merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
                                          name="dense1_top", kernel_regularizer=None)(merged_model)
     merged_model = BatchNormalization()(merged_model)
-    if top_hidden_dropout1 > 0:
-        merged_model = Dropout(top_hidden_dropout1)(merged_model)
+    if dropout1_top > 0:
+        merged_model = Dropout(dropout1_top)(merged_model)
 
     # Add the softmax prediction layer
     # activation = "linear" if model_type == "linear" else "softmax"
@@ -228,15 +132,18 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
 
 def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     ge_shape=None, dd_shape=None,
-                    dense1_ge=512, dense1_dd1=256, dense1_dd2=256, dense1_top=1024,
-                    top_hidden_dropout1=0.1,
+                    dense1_img=500, dense1_ge=500,
+                    dense1_dd1=250, dense1_dd2=250,
+                    dense1_top=1000,
+                    dropout1_top=0.1,
                     output_bias=None,
                     # model_type="categorical",
                     base_image_model="Xception",
                     pooling="max",
                     pretrain="imagenet",
                     loss=losses.BinaryCrossentropy(),
-                    optimizer=optimizers.Adam(learning_rate=0.0001)):
+                    optimizer="SGD",
+                    learning_rate=0.0001):
     """ ...
     refs:
         https://github.com/jkjung-avt/keras_imagenet/blob/master/utils/dataset.py
@@ -250,21 +157,20 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     if use_tile:
         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-        # base_img_model = tf.keras.applications.Xception(
-        #     weights=pretrain, pooling=pooling, include_top=False,
-        #     input_shape=None, input_tensor=None)
         base_img_model = _ModelDict[base_image_model](
             include_top=False,
             weights=pretrain,
             input_shape=None,
             input_tensor=None,
-            pooling=pooling, 
-        )
-
-        x_im = base_img_model(tile_input_tensor)
+            pooling=pooling)
+        x_tile = base_img_model(tile_input_tensor)
         model_inputs.append(tile_input_tensor)
-        merge_inputs.append(x_im)
-        del tile_input_tensor, x_im
+
+        if dense1_img > 0:
+            x_tile = Dense(dense1_img, activation=tf.nn.relu, name="dense1_img")(x_tile)
+            x_tile = BatchNormalization(name="im_batchnorm")(x_tile)
+        merge_inputs.append(x_tile)
+        del tile_input_tensor, x_tile
 
     if use_ge:
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
@@ -299,8 +205,8 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
                                          name="dense1_top", kernel_regularizer=None)(merged_model)
     merged_model = BatchNormalization(name="top_batchnorm")(merged_model)
-    if top_hidden_dropout1 > 0:
-        merged_model = Dropout(top_hidden_dropout1)(merged_model)
+    if dropout1_top > 0:
+        merged_model = Dropout(dropout1_top)(merged_model)
 
     # Add the softmax prediction layer
     # activation = 'linear' if model_type == 'linear' else 'softmax'
@@ -313,18 +219,18 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # Assemble final model
     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
 
-    # # Compile
-    # # Note! When I put metrics in model.py, it immediately occupies a lot of the GPU memory!
-    # metrics = [
-    #       # keras.metrics.TrueNegatives(name="tn"),
-    #       keras.metrics.FalsePositives(name="fp"),
-    #       # keras.metrics.FalseNegatives(name="fn"),
-    #       keras.metrics.TruePositives(name="tp"),
-    #       # keras.metrics.AUC(name="auc"),
-    # ]
+    metrics = [
+          # keras.metrics.FalsePositives(name="fp"),
+          # keras.metrics.TruePositives(name="tp"),
+          keras.metrics.AUC(name="roc-auc", curve="ROC"),
+          keras.metrics.AUC(name="pr-auc", curve="PR"),
+    ]
+    if optimizer == "SGD":
+        optimizer = optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
+    elif optimizer == "Adam":
+        optimizer = optimizers.Adam(learning_rate=learning_rate)
 
-    # model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
-
+    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
     return model
 
 
@@ -335,7 +241,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
 #     base_img_model = tf.keras.applications.Xception(
 #         weights=pretrain, pooling=pooling, include_top=False,
 #         input_shape=None, input_tensor=None)
-#     x_im = base_img_model(tile_input_tensor)
+#     x_tile = base_img_model(tile_input_tensor)
 
 #     # RNA layers
 #     ge_input_tensor = tf.keras.Input(shape=(976,), name="ge_data")
@@ -344,7 +250,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
 #     model_inputs = [tile_input_tensor, ge_input_tensor]
 
 #     # Merge towers
-#     merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_im])
+#     merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_tile])
 
 #     hidden_layer_width = 1000
 #     merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,

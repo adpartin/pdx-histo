@@ -36,6 +36,7 @@ cfg.SF_TFR_DIR = (cfg.DATADIR/"PDX_FIXED").resolve()
 cfg.SF_TFR_DIR_RSP_DRUG_PAIR = (cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR").resolve()
 cfg.SF_TFR_DIR_RSP_DRUG_PAIR_10percent = (cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles").resolve()
 cfg.SF_TFR_DIR_RSP_DRUG_PAIR_20percent = (cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles").resolve()
+cfg.SF_TFR_DIR_RSP_DRUG_PAIR_10tiles = (cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR_10_tiles").resolve()
 
 # Meta file names
 cfg.CROSSREF_FNAME = "_ImageID_PDMRID_CrossRef.xlsx"
