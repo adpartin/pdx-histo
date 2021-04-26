@@ -40,7 +40,7 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     csv_logger = CSVLogger(outdir/"training.log")
     callbacks.append(csv_logger)
 
-    checkpointer = ModelCheckpoint(str(outdir/"model_best_at_{epoch}.ckpt"),
+    checkpointer = ModelCheckpoint(str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt"),
                                    monitor=monitor,
                                    verbose=0,
                                    save_weights_only=False,
@@ -50,7 +50,7 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
 
     reduce_lr = ReduceLROnPlateau(monitor=monitor,
                                   factor=0.5,
-                                  patience=patience,
+                                  patience=4,
                                   verbose=1,
                                   mode="auto",
                                   min_delta=0.0001,
@@ -59,7 +59,7 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     callbacks.append(reduce_lr)
 
     early_stop = EarlyStopping(monitor=monitor,
-                               patience=20,
+                               patience=patience,
                                mode="auto",
                                restore_best_weights=True,
                                verbose=1)

@@ -55,30 +55,33 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
     """
     scores = {}
 
-    if mltype == 'cls':    
+    if mltype == "cls":    
         # Metric that accept probabilities
-        scores['brier'] = sklearn.metrics.brier_score_loss(y_true, y_pred, sample_weight=None, pos_label=1)
-        scores['auc_roc'] = sklearn.metrics.roc_auc_score(y_true, y_pred)
+        scores["brier"] = sklearn.metrics.brier_score_loss(y_true, y_pred, sample_weight=None, pos_label=1)
+        scores["roc_auc"] = sklearn.metrics.roc_auc_score(y_true, y_pred)
+        # scores["pr_auc"] = sklearn.metrics.precision_recall_curve(y_true, y_pred)
 
         # Metric that don't accept probabilities
-        y_pred_ = [1 if v>0.5 else 0 for v in y_pred]
-        scores['mcc'] = sklearn.metrics.matthews_corrcoef(y_true, y_pred_, sample_weight=None)
-        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_pred_, average='micro')
-        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_pred_)
+        y_pred_ = [0 if v < 0.5 else 1 for v in y_pred]
+        scores["mcc"] = sklearn.metrics.matthews_corrcoef(y_true, y_pred_, sample_weight=None)
+        scores["f1_score"] = sklearn.metrics.f1_score(y_true, y_pred_, average="binary")
+        scores["acc_blnc"] = sklearn.metrics.balanced_accuracy_score(y_true, y_pred_)
+        scores["recall"] = sklearn.metrics.recall_score(y_true, y_pred_)
+        scores["precision"] = sklearn.metrics.precision_score(y_true, y_pred_)
 
-    elif mltype == 'reg':
-        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_pred)
-        scores['mean_absolute_error']   = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
-        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_pred)
-        scores['mse']  = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
-        scores['rmse'] = scores['mse'] ** 0.5
+    elif mltype == "reg":
+        scores["r2"] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_pred)
+        scores["mean_absolute_error"]   = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores["median_absolute_error"] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores["mse"]  = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
+        scores["rmse"] = scores["mse"] ** 0.5
         # scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_pred)
-        scores['spearmanr'] = spearmanr(y_true, y_pred)[0]
-        scores['pearsonr'] = pearsonr(y_true, y_pred)[0]
+        scores["spearmanr"] = spearmanr(y_true, y_pred)[0]
+        scores["pearsonr"] = pearsonr(y_true, y_pred)[0]
         
-    scores['y_avg_true'] = np.mean(y_true)
-    scores['y_avg_pred'] = np.mean(y_pred)
-    
+        scores["y_mean_true"] = np.mean(y_true)
+        scores["y_mean_pred"] = np.mean(y_pred)
+        
     # # https://scikit-learn.org/stable/modules/model_evaluation.html
     # for metric_name, metric in metrics.items():
     #     if isinstance(metric, str):

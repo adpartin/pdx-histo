@@ -43,8 +43,8 @@ from src.ml.scale import get_scaler
 from src.ml.evals import calc_scores, save_confusion_matrix
 from src.ml.keras_utils import plot_prfrm_metrics
 from src.utils.classlogger import Logger
-from src.utils.utils import (cast_list, create_outdir, create_outdir_2, dump_dict, get_print_func,
-                             read_lines, Params, Timer)
+from src.utils.utils import (cast_list, create_outdir, create_outdir_2, dump_dict, fea_types_to_str_name,
+                             get_print_func, read_lines, Params, Timer)
 from src.datasets.tidy import split_data_and_extract_fea, extract_fea, TidyData
 from src.tf_utils import get_tfr_files
 from src.sf_utils import (create_manifest, create_tf_data, calc_class_weights,
@@ -349,13 +349,6 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # -------------------------------
 # Class weight
 # -------------------------------
-if args.nn_arch == "baseline":
-    class_weights_method = "BY_SAMPLE"
-elif args.nn_arch == "multimodal":
-    class_weights_method = "BY_TILE"
-else:
-    class_weights_method = "NONE"
-
 # import ipdb; ipdb.set_trace()
 tile_cnts = pd.read_csv(tfr_dir/"tile_counts_per_slide.csv")
 cat = tile_cnts[tile_cnts["tfr_fname"].isin(train_tfr_files)]
@@ -366,7 +359,7 @@ for i, row_data in cat.iterrows():
     categories[row_data[args.target[0]]] = dct
 
 class_weight = calc_class_weights(train_tfr_files,
-                                  class_weights_method=class_weights_method,
+                                  class_weights_method=params.class_weights_method,
                                   categories=categories)
 # class_weight = {"Response": class_weight}
 
@@ -519,17 +512,21 @@ class BatchCSVLogger(tf.keras.callbacks.Callback):
     """ Write training logs on every batch. """
     def __init__(self,
                  filename,
+                 # val_filename=None,
                  validate_on_batch=None,
                  validation_data=None,
                  validation_steps=None):
         """ ... """
         super(BatchCSVLogger, self).__init__()
         self.filename = filename
+        # self.val_filename = val_filename
         self.validate_on_batch = validate_on_batch
         self.validation_data = validation_data
         self.validation_steps = validation_steps
 
     def on_train_begin(self, logs=None):
+        self.csv_file = open(self.filename, "w")
+        # self.val_csv_file = open(self.val_filename, "w")
         self.epoch = 0
         self.step = 0  # global batch
         self.results = []
@@ -538,10 +535,71 @@ class BatchCSVLogger(tf.keras.callbacks.Callback):
         keys = list(logs.keys())
         self.epoch = epoch + 1
 
-    def on_batch_end(self, batch, logs=None):
+    def on_train_batch_begin(self, batch, logs=None):
+        keys = list(logs.keys())
+        self.step += 1
+
+    # def on_test_batch_end(self, batch, logs=None):
+    #     keys = list(logs.keys())
+    #     batch = batch + 1
+    #     res = OrderedDict({"step": self.step, "epoch": self.epoch, "batch": batch})
+    #     res.update(logs)  # logs contains the metrics
+
+    #     if self.step == 1:
+    #         # keys = list(logs.keys())
+    #         # val_keys = ["val_"+str(k) for k in keys]
+    #         # fieldnames = ["step", "epoch", "batch"] + keys + val_keys + ["lr"]
+    #         fieldnames = ["step", "epoch", "batch"] + val_keys + ["lr"]
+    #         self.fieldnames = fieldnames
+
+    #         # self.csv_file = open(self.filename, "w")
+    #         self.val_writer = csv.DictWriter(self.val_csv_file, fieldnames=self.fieldnames)
+    #         self.val_writer.writeheader()
+    #         self.val_csv_file.flush()
+
+    #     # Get the current learning rate from model's optimizer
+    #     lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+    #     res.update({"lr": lr})
+    #     self.val_writer.writerow(res)
+    #     self.val_csv_file.flush()
+
+    # def on_train_batch_end(self, batch, logs=None):
+    #     keys = list(logs.keys())
+    #     batch = batch + 1
+    #     # self.step += 1
+    #     res = OrderedDict({"step": self.step, "epoch": self.epoch, "batch": batch})
+    #     res.update(logs)  # logs contains the metrics for the training set
+
+    #     # if (self.validate_on_batch is not None) and (batch % self.validate_on_batch == 0):
+    #     #     evals = self.model.evaluate(self.validation_data, verbose=0, steps=self.validation_steps)
+    #     #     val_logs = {"val_"+str(k): v for k, v in zip(keys, evals)}
+    #     #     res.update(val_logs)
+    #     # else:
+    #     #     val_logs = {"val_"+str(k): np.nan for k in keys}
+    #     #     res.update(val_logs)
+
+    #     if self.step == 1:
+    #         # keys = list(logs.keys())
+    #         # val_keys = ["val_"+str(k) for k in keys]
+    #         # fieldnames = ["step", "epoch", "batch"] + keys + val_keys + ["lr"]
+    #         fieldnames = ["step", "epoch", "batch"] + keys + ["lr"]
+    #         self.fieldnames = fieldnames
+
+    #         # self.csv_file = open(self.filename, "w")
+    #         self.writer = csv.DictWriter(self.csv_file, fieldnames=self.fieldnames)
+    #         self.writer.writeheader()
+    #         self.csv_file.flush()
+
+    #     # Get the current learning rate from model's optimizer
+    #     lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+    #     res.update({"lr": lr})
+    #     self.writer.writerow(res)
+    #     self.csv_file.flush()
+
+    def on_train_batch_end(self, batch, logs={}):
         keys = list(logs.keys())
         batch = batch + 1
-        self.step += 1
+        # self.step += 1
         res = OrderedDict({"step": self.step, "epoch": self.epoch, "batch": batch})
         res.update(logs)  # logs contains the metrics for the training set
 
@@ -572,6 +630,7 @@ class BatchCSVLogger(tf.keras.callbacks.Callback):
 
     def on_train_end(self, logs=None):
         self.csv_file.close()
+        # self.val_csv_file.close()
 
 class BatchEarlyStopping(tf.keras.callbacks.Callback):
     """
@@ -711,6 +770,7 @@ elif args.nn_arch == "multimodal":
     fit_verbose = 1
 
     # callbacks.append(BatchCSVLogger(filename=outdir/"batch_training.log", 
+    #                                 # val_filename=outdir/"val_batch_training.log", 
     #                                 validate_on_batch=params.validate_on_batch,
     #                                 validation_data=val_data))
 
@@ -764,12 +824,13 @@ if args.nn_arch == "baseline":
             loss = losses.SparseCategoricalCrossentropy()
     else:
         raise ValueError(f"Unknown value for y_encoding ({params.y_encoding}).")
+else:
+    loss = losses.BinaryCrossentropy()
 
 
 # ----------------------
 # Define model
 # ----------------------
-
 # import ipdb; ipdb.set_trace()
 
 # Calc output bias
@@ -789,9 +850,8 @@ print("Output bias:", output_bias)
 
 
 if args.target[0] == "Response":
-
-    loss = losses.BinaryCrossentropy()  # TODO: remove this line
-    build_model_kwargs = {"dense1_dd1": params.dense1_dd1,
+    build_model_kwargs = {"base_image_model": params.base_image_model,
+                          "dense1_dd1": params.dense1_dd1,
                           "dense1_dd2": params.dense1_dd2,
                           "dense1_ge": params.dense1_ge,
                           "dense1_img": params.dense1_img,
@@ -808,17 +868,8 @@ if args.target[0] == "Response":
                           "use_ge": params.use_ge,
                           "use_tile": params.use_tile,
                           # "model_type": params.model_type,
-        "base_image_model": params.base_image_model,
     }
     model = build_model_rsp(**build_model_kwargs)
-    # else:
-    #     model = build_model_rsp_baseline(use_ge=params.use_ge,
-    #                                      use_dd1=params.use_dd1,
-    #                                      use_dd2=params.use_dd2,
-    #                                      ge_shape=ge_shape,
-    #                                      dd_shape=dd_shape,
-    #                                      # model_type=params.model_type
-    #                                      )
 else:
     raise NotImplementedError("Need to check this method")
     model = build_model_rna()
@@ -842,16 +893,22 @@ model.summary(print_fn=print_fn)
 
 if args.trn_phase == "train":
 
-    # Base model
-    base_model_path = prjdir/f"base_{args.nn_arch}_model"
-    if base_model_path.exists():
-        model = tf.keras.models.load_model(base_model_path)
+    # Initial model
+    # initial_model_path = prjdir/f"base_{args.nn_arch}_model"
+    fea_types_str = fea_types_to_str_name(params)
+    initial_model_path = prjdir/f"initial_model_{fea_types_str}"
+    if initial_model_path.exists():
+        model = tf.keras.models.load_model(initial_model_path)
     else:
-        model.save(base_model_path)
+        model.save(initial_model_path)
+
+    # Save initial model to the outdir for reference
+    model.save(outdir/initial_model_path.name)
+
     # # Test: confirm that the loaded model has the same performance
-    # base_model_path = prjdir/"base_multimodal_model"
-    # model.save(base_model_path)
-    # model1 = tf.keras.models.load_model(base_model_path)
+    # initial_model_path = prjdir/"base_multimodal_model"
+    # model.save(initial_model_path)
+    # model1 = tf.keras.models.load_model(initial_model_path)
     # res = model.evaluate(val_data, steps=vl_steps, verbose=1)
     # res1 = model.evaluate(val_data, steps=vl_steps, verbose=1)
 
@@ -908,7 +965,6 @@ if args.trn_phase == "train":
     # Save final model
     final_model_fpath = outdir/f"final_model_for_split_id_{split_id}"
     model.save(final_model_fpath)
-
 else:
     model = tf.keras.models.load_model(final_model_fpath, compile=True)
 
@@ -1115,7 +1171,7 @@ elif args.nn_arch == "multimodal":
     del test_data
 
     print_fn("\n{}".format(bold("Validation set predictions.")))
-    get_preds(eval_val_data, vl_meta, model, outdir, args, name="test")
+    get_preds(eval_val_data, vl_meta, model, outdir, args, name="val")
     del eval_val_data
 
     print_fn("\n{}".format(bold("Train set predictions.")))
