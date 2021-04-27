@@ -59,12 +59,12 @@ clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
 
-build:
-	# build datasets
-	python src/get_meta_from_slides.py
-	python src/merge_meta_files.py
-	python src/build_df.py
+# build:
+# 	# build datasets
+# 	python src/get_meta_from_slides.py
+# 	python src/merge_meta_files.py
+# 	python src/build_df.py
 
-tile:
-	# generate tiles from wsi slides
-	python src/tiling.py
+# tile:
+# 	# generate tiles from wsi slides
+# 	python src/tiling.py

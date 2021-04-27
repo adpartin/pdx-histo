@@ -31,5 +31,7 @@ conda install -c conda-forge openslide=3.4.1 --yes
 # conda install -c bioconda openslide-python=1.1.1 --yes
 # pip install openslide-python
 
-# Step 6: (manually) activate create venv and install packages with Makefile
+# Step 6: (manually) create venv and install packages with Makefile with one of the following:
 # make dev-venv
+# make dev-venv_tf23
+# make dev-venv_tf24
