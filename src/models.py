@@ -68,6 +68,20 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     return callbacks
 
 
+
+def load_best_model(models_dir):
+    """ Load the best checkpointed model where best is defined as a model with
+    the lowest val_loss. The names of checkpointed models follow the same naming
+    convention that contains the val_loss: model_{epoch:02d}-{val_loss:.3f}.ckpt
+    """
+    model_paths = sorted(models_dir.glob("model*.ckpt"))
+    values = np.array([float(p.name.split(".ckpt")[0].split("-")[1]) for p in model_paths])
+    # best_value = min(values)
+    model_path = model_paths[np.argmin(values)]
+    model = tf.keras.models.load_model(model_path)
+    return model
+
+
 def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
                              ge_shape=None, dd_shape=None, model_type="categorical",
                              dense1_ge=512, dense1_dd1=256, dense1_dd2=256, dense1_top=500,
