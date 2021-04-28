@@ -8,14 +8,21 @@ update_tfrecords_with_rna()
 update_tfrecords_for_drug_rsp()
     creates tfrecord for drug response sample that contains histo
     slide, RNA-seq, drug descriptors, and drug response
+
+Examples:
+$ python scripts/update_tfrecords.py --frac_tiles 0.1
+$ python scripts/update_tfrecords.py --n_samples 3 --frac_tiles 0.1
+$ python scripts/update_tfrecords.py --n_samples 3 --frac_tiles 0.1 --single_drug
 """
 import os
 import sys
 assert sys.version_info >= (3, 5)
 
+import argparse
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from pprint import pprint
 from typing import Optional
 
 import tensorflow as tf
@@ -43,21 +50,32 @@ np.random.seed(cfg.seed)
 tf.random.set_seed(cfg.seed)
 
 
-LABEL = '299px_302um'
+parser = argparse.ArgumentParser("Create TFRecords.")
+parser.add_argument("--n_samples",
+                    type=int,
+                    default=-1,
+                    help="Total samples to process.")
+parser.add_argument("--frac_tiles",
+                    type=float,
+                    default=1.0,
+                    help="Fraction of tiles to use from each slide for creating TFRecords.")
+parser.add_argument("--single_drug",
+                    action="store_true",
+                    help="Use only single-drug drug responses.")
+args, other_args = parser.parse_known_args()
+pprint(args)
+
+
+LABEL = "299px_302um"
 directory = cfg.SF_TFR_DIR/LABEL
 
-n_samples = None
-# n_samples = 3
 # single_drug = True
 single_drug = False  # drug pairs
-# frac_tiles = 1.0  # all tiles
-# frac_tiles = 0.2  # fraction of tiles
-frac_tiles = 0.1  # fraction of tiles
 
 timer = Timer()
 
 
-def update_tfrecords_for_drug_rsp(n_samples: Optional[int]=None,
+def update_tfrecords_for_drug_rsp(n_samples: int=-1,
                                   single_drug: bool=False,
                                   frac_tiles: float=1.0) -> None:
     """
@@ -166,7 +184,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int]=None,
     # print(miss_r[miss_r.Response==1])
     # -------------------
 
-    if n_samples is not None:
+    if n_samples > 0:
         data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
 
     # Re-org cols
@@ -354,7 +372,7 @@ def update_tfrecords_for_drug_rsp(n_samples: Optional[int]=None,
     print("\nDone.")
 
 
-def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
+def update_tfrecords_with_rna(n_samples: int=-1) -> None:
     """
     Takes original tfrecords that we got from A. Pearson and updates them
     by addting more data including PDX samples metadata and RNA-Seq data.
@@ -389,7 +407,7 @@ def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
     data = pdx.merge(cref_rna, on=['patient_id', 'specimen_id'], how='inner').reset_index(drop=True)
     print(data.shape)
 
-    if n_samples is not None:
+    if n_samples > 0:
         data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
 
     # Re-org cols
@@ -512,6 +530,6 @@ def update_tfrecords_with_rna(n_samples: Optional[int] = None) -> None:
     print('\nDone.')
 
 
-# update_tfrecords_with_rna(n_samples)
-update_tfrecords_for_drug_rsp(n_samples, single_drug, frac_tiles)
+# update_tfrecords_with_rna(args.n_samples)
+update_tfrecords_for_drug_rsp(args.n_samples, args.single_drug, args.frac_tiles)
 timer.display_timer()
