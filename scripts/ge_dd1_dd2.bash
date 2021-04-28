@@ -29,8 +29,7 @@ echo "CUDA device: $DEVICE"
 trn_phase=$2
 # nn_arch=$3
 
-# CUDA_VISIBLE_DEVICES=$DEVICE python /vol/ml/apartin/projects/pdx-histo/src/trn_multimodal2.py \
-CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal2.py \
+CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
     --target $target \
     --split_on $split_on \
     --id_name $id_name \

@@ -50,7 +50,7 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
 
     reduce_lr = ReduceLROnPlateau(monitor=monitor,
                                   factor=0.5,
-                                  patience=4,
+                                  patience=10,
                                   verbose=1,
                                   mode="auto",
                                   min_delta=0.0001,
@@ -66,7 +66,6 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     callbacks.append(early_stop)
 
     return callbacks
-
 
 
 def load_best_model(models_dir):
