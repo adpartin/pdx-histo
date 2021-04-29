@@ -22,7 +22,7 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 import tensorflow as tf
 assert tf.__version__ >= "2.0"
@@ -54,6 +54,11 @@ from src.sf_utils import bold, green, blue, yellow, cyan, red
 # Seed
 np.random.seed(cfg.seed)
 tf.random.set_seed(cfg.seed)
+
+
+def print_groupby_stat(df, print_fn=print):
+    print_fn(df.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
+        columns={split_on: f"{split_on}_unq", "smp": "smp_unq"}))
 
 
 parser = argparse.ArgumentParser("Train NN.")
@@ -150,10 +155,9 @@ data = data.astype({"image_id": str, "slide": str})
 print_fn(data.shape)
 
 
-print("\nFull dataset:")
+print_fn("\nFull dataset:")
 if args.target[0] == "Response":
-    print_fn(data.groupby(["ctype", "Response"]).agg({split_on: "nunique", "smp": "nunique"}).reset_index().rename(
-        columns={split_on: f"{split_on}_unq", "smp": "smp_unq"}))
+    print_groupby_stat(data, print_fn=print_fn)
 else:
     print_fn(data[args.target[0]].value_counts())
 
@@ -315,12 +319,13 @@ ge_shape = (tr_ge.shape[1],)
 dd_shape = (tr_dd1.shape[1],)
 
 # import ipdb; ipdb.set_trace()
+
 print_fn("\nTrain:")
-print_fn(tr_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_groupby_stat(tr_meta, print_fn=print_fn)
 print_fn("\nValidation:")
-print_fn(vl_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_groupby_stat(vl_meta, print_fn=print_fn)
 print_fn("\nTest:")
-print_fn(te_meta.groupby(["ctype", "Response"]).agg({"grp_name": "nunique", "smp": "nunique"}).reset_index())
+print_groupby_stat(te_meta, print_fn=print_fn)
 
 # Make sure indices do not overlap
 assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
@@ -1075,6 +1080,7 @@ def agg_per_smp_preds(prd, id_name, outdir):
         dd["y_true"] = df["y_true"].unique()[0]
         dd["y_pred_label"] = np.argmax(np.bincount(df.y_pred_label))
         dd["smp_acc"] = sum(df.y_true == df.y_pred_label)/df.shape[0]
+        dd["mean_prob"] = np.mean(df.prob)  # mean probability of predictions across all tiles
         aa.append(dd)
 
     agg_preds = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
