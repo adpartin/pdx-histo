@@ -4,6 +4,6 @@
 /__pycache__
 /apps
 /projects
-/data
+/data*
 /nbs/histolab
 
