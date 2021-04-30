@@ -94,11 +94,15 @@ parser.add_argument("--n_samples",
                     type=int,
                     default=-1,
                     help="Total samples from tr_id to process.")
-parser.add_argument("--nn_arch",
+# parser.add_argument("--nn_arch",
+#                     type=str,
+#                     default="multimodal",
+#                     choices=["baseline", "multimodal", "lgbm"],
+#                     help="NN architecture (default: multimodal).")
+parser.add_argument("--tfr_dir_name",
                     type=str,
-                    default="multimodal",
-                    choices=["baseline", "multimodal", "lgbm"],
-                    help="NN architecture (default: multimodal).")
+                    default="PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles",
+                    help="Dir name that contains TFRecords.")
 parser.add_argument("--use_tile",
                     action="store_true",
                     help="Use tiles.")
@@ -169,7 +173,8 @@ if args.target[0] == "Response":
     else:
         # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
         # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR_20percent  # TODO: required to change
-        tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR_10percent  # TODO: required to change
+        # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR_10percent  # TODO: required to change
+        tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
 elif args.target[0] == "ctype":
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
 
@@ -808,7 +813,7 @@ else:
 
 # Mixed precision
 if params.use_fp16:
-    print_fn("Train with mixed precision")
+    print_fn("\nTrain with mixed precision")
     if int(tf.keras.__version__.split(".")[1]) == 4:  # TF 2.4
         from tensorflow.keras import mixed_precision
         policy = mixed_precision.Policy("mixed_float16")
@@ -859,6 +864,7 @@ else:
 # Define model
 # ----------------------
 # import ipdb; ipdb.set_trace()
+print_fn("\nCompute the bias of the NN output.")
 
 # Calc output bias
 if params.use_tile:
@@ -870,9 +876,9 @@ else:
     neg, pos = np.bincount(tr_meta[args.target[0]].values)
 
 total = neg + pos
-print("Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
+print_fn("Samples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
 output_bias = np.log([pos/neg])
-print("Output bias:", output_bias)
+print_fn("Output bias:", output_bias)
 # output_bias = None
 
 
