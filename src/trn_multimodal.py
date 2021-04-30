@@ -138,7 +138,7 @@ if prm_file_path.exists() is False:
     # shutil.copy(fdir/f"../default_params/default_params_{args.nn_arch}.json", prm_file_path)
     shutil.copy(fdir/f"../default_params/default_params_{fea_names}.json", prm_file_path)
 params = Params(prm_file_path)
-outdir = create_outdir_2(prjdir, params)
+outdir = create_outdir_2(prjdir, args)
 
 
 # Save hyper-parameters
@@ -197,13 +197,16 @@ ge_cols  = [c for c in data.columns if c.startswith("ge_")]
 dd1_cols = [c for c in data.columns if c.startswith("dd1_")]
 dd2_cols = [c for c in data.columns if c.startswith("dd2_")]
 
-if params.use_ge and len(ge_cols) > 0:
+# if params.use_ge and len(ge_cols) > 0:
+if args.use_ge and len(ge_cols) > 0:
     ge_scaler = get_scaler(data[ge_cols])
 
-if params.use_dd1 and len(dd1_cols) > 0:
+# if params.use_dd1 and len(dd1_cols) > 0:
+if args.use_dd1 and len(dd1_cols) > 0:
     dd1_scaler = get_scaler(data[dd1_cols])
 
-if params.use_dd2 and len(dd2_cols) > 0:
+# if params.use_dd2 and len(dd2_cols) > 0:
+if args.use_dd2 and len(dd2_cols) > 0:
     dd2_scaler = get_scaler(data[dd2_cols])
 
 
@@ -397,7 +400,7 @@ class_weight = calc_class_weights(train_tfr_files,
 # class_weight = {"Response": class_weight}
 
 
-if params.use_tile:
+if args.use_tile:
     # -------------------------------
     # Parsing funcs
     # -------------------------------
@@ -408,10 +411,10 @@ if params.use_tile:
         # Response
         parse_fn = parse_tfrec_fn_rsp
         parse_fn_train_kwargs = {
-            "use_tile": params.use_tile,
-            "use_ge": params.use_ge,
-            "use_dd1": params.use_dd1,
-            "use_dd2": params.use_dd2,
+            "use_tile": args.use_tile,
+            "use_ge": args.use_ge,
+            "use_dd1": args.use_dd1,
+            "use_dd2": args.use_dd2,
             "ge_scaler": ge_scaler,
             "dd1_scaler": dd1_scaler,
             "dd2_scaler": dd2_scaler,
@@ -422,8 +425,8 @@ if params.use_tile:
         # Ctype
         parse_fn = parse_tfrec_fn_rna
         parse_fn_train_kwargs = {
-            'use_tile': params.use_tile,
-            'use_ge': params.use_ge,
+            'use_tile': args.use_tile,
+            'use_ge': args.use_ge,
             'ge_scaler': ge_scaler,
             'id_name': args.id_name,
             'MODEL_TYPE': params.model_type,
@@ -475,12 +478,12 @@ if params.use_tile:
 
     # Infer dims of features from the data
     # import ipdb; ipdb.set_trace()
-    if params.use_ge:
+    if args.use_ge:
         ge_shape = bb[0]["ge_data"].numpy().shape[1:]
     else:
         ge_shape = None
 
-    if params.use_dd1:
+    if args.use_dd1:
         dd_shape = bb[0]["dd1_data"].numpy().shape[1:]
     else:
         dd_shape = None
@@ -786,7 +789,7 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
 callbacks = keras_callbacks(outdir, monitor="val_loss", patience=params.patience)
 # callbacks = keras_callbacks(outdir, monitor="auc", patience=params.patience)
 
-if params.use_tile:
+if args.use_tile:
     # callbacks = []
     results = []
 
@@ -863,11 +866,11 @@ else:
 # ----------------------
 # Define model
 # ----------------------
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 print_fn("\nCompute the bias of the NN output.")
 
 # Calc output bias
-if params.use_tile:
+if args.use_tile:
     # from sf_utils import get_categories_from_manifest
     # categories = get_categories_from_manifest(train_tfr_files, manifest, outcomes)
     neg = categories[0]["num_tiles"]
@@ -878,7 +881,7 @@ else:
 total = neg + pos
 print_fn("Samples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n".format(total, pos, 100 * pos / total))
 output_bias = np.log([pos/neg])
-print_fn("Output bias:", output_bias)
+print_fn(f"Output bias: {output_bias}")
 # output_bias = None
 
 
@@ -896,10 +899,10 @@ if args.target[0] == "Response":
                           "optimizer": params.optimizer,
                           "output_bias": output_bias,
                           "dropout1_top": params.dropout1_top,
-                          "use_dd1": params.use_dd1,
-                          "use_dd2": params.use_dd2,
-                          "use_ge": params.use_ge,
-                          "use_tile": params.use_tile,
+                          "use_dd1": args.use_dd1,
+                          "use_dd2": args.use_dd2,
+                          "use_ge": args.use_ge,
+                          "use_tile": args.use_tile,
                           # "model_type": params.model_type,
     }
     model = build_model_rsp(**build_model_kwargs)
@@ -928,7 +931,7 @@ if args.trn_phase == "train":
 
     # Initial model
     # initial_model_path = prjdir/f"base_{args.nn_arch}_model"
-    fea_types_str = fea_types_to_str_name(params)
+    fea_types_str = fea_types_to_str_name(args)
     initial_model_path = prjdir/f"initial_model_{fea_types_str}"
     if initial_model_path.exists():
         model = tf.keras.models.load_model(initial_model_path)
@@ -959,7 +962,7 @@ if args.trn_phase == "train":
 
     timer = Timer()
 
-    if params.use_tile is True:
+    if args.use_tile is True:
         print_fn(f"Train steps:      {tr_steps}")
         print_fn(f"Validation steps: {vl_steps}")
 

@@ -45,6 +45,6 @@ CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
     --dataname $dataname \
     --n_samples $n_samples \
     --tfr_dir_name $tfr_dir_name \
-    --use_tile --use_ge --use_dd1 --use_dd2
+    --use_tile --use_dd1 --use_dd2
 
     # --nn_arch $nn_arch \

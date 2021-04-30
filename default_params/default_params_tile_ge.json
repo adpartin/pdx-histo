@@ -23,11 +23,7 @@
     "single_drug": false,
     "tile_px": 299,
     "tile_um": 302,
-    "use_dd1": false,
-    "use_dd2": false,
     "use_fp16": true,
-    "use_ge": true,
-    "use_tile": true,
     "validate_on_batch": null,
     "y_encoding": "label"
 }

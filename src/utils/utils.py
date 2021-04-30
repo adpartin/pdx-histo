@@ -72,52 +72,36 @@ def create_outdir(outdir, args=None):
     return outdir    
 
 
-def fea_types_to_str_name(params, sep="_"):
+def fea_types_to_str_name(args, sep="_"):
     """ Extract the specified feature types from params and create a str that
     specifies which features are used. """
     fea_types_str = []
     # keys = ["ge", "tile"]
 
-    if params.use_tile is True:
+    if args.use_tile is True:
         fea_types_str.append("tile")
 
-    if params.use_ge is True:
+    if args.use_ge is True:
         fea_types_str.append("ge")
 
-    if params.use_dd1 is True:
+    if args.use_dd1 is True:
         fea_types_str.append("dd1")
 
-    if params.use_dd2 is True:
+    if args.use_dd2 is True:
         fea_types_str.append("dd2")
 
     fea_types_str = f"{sep}".join([str(i) for i in fea_types_str])
     return fea_types_str
 
 
-def create_outdir_2(outdir, params=None):
+def create_outdir_2(outdir, args=None):
     from datetime import datetime
     t = datetime.now()
     t = [t.year, "-", str(t.month).zfill(2), "-", str(t.day).zfill(2),
          "_", "h", str(t.hour).zfill(2), "-", "m", str(t.minute).zfill(2)]
     t = "".join([str(i) for i in t])
 
-    # inputs = []
-    # # keys = ["ge", "tile"]
-
-    # if params.use_tile is True:
-    #     inputs.append("tile")
-
-    # if params.use_ge is True:
-    #     inputs.append("ge")
-
-    # if params.use_dd1 is True:
-    #     inputs.append("dd1")
-
-    # if params.use_dd2 is True:
-    #     inputs.append("dd2")
-
-    # inputs = "_".join([str(i) for i in inputs])
-    name = fea_types_to_str_name(params) + "_" + t
+    name = fea_types_to_str_name(args) + "_" + t
 
     outdir = Path(outdir)
     outdir = outdir/name

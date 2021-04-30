@@ -16,11 +16,7 @@
     "tile_px": 299,
     "tile_um": 302,
     "dropout1_top": 0.0,
-    "use_dd1": true,
-    "use_dd2": true,
     "use_fp16": true,
-    "use_ge": true,
-    "use_tile": false,
     "validate_on_batch": null,
     "y_encoding": "label"
 }
