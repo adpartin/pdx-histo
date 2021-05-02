@@ -1,3 +1,4 @@
+lightgbm==3.2.1
 matplotlib==3.0.3
 numpy==1.18.5
 opencv-python==4.4.0.46
