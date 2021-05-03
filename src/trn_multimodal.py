@@ -373,7 +373,7 @@ test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
 print("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
 
 # Missing tfrecords
-print("\nThese samples miss a tfrecord ...\n")
+print("\nThese samples miss a tfrecord:")
 df_miss = data.loc[~data[args.id_name].isin(tr_smp_names + vl_smp_names + te_smp_names), ["smp", "image_id"]]
 print(df_miss)
 
@@ -387,7 +387,9 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # -------------------------------
 # import ipdb; ipdb.set_trace()
 tile_cnts = pd.read_csv(tfr_dir/"tile_counts_per_slide.csv")
-cat = tile_cnts[tile_cnts["tfr_fname"].isin(train_tfr_files)]
+tile_cnts.insert(loc=0, column="tfr_abs_fname", value=tile_cnts["tfr_fname"].map(lambda s: str(tfr_dir/s)))
+# cat = tile_cnts[tile_cnts["tfr_fname"].isin(train_tfr_files)]
+cat = tile_cnts[tile_cnts["tfr_abs_fname"].isin(train_tfr_files)]
 cat = cat.groupby(args.target[0]).agg({"smp": "nunique", "max_tiles": "sum", "n_tiles": "sum", "slide": "nunique"}).reset_index()
 categories = {}
 for i, row_data in cat.iterrows():
@@ -866,7 +868,7 @@ else:
 # ----------------------
 # Define model
 # ----------------------
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 print_fn("\nCompute the bias of the NN output.")
 
 # Calc output bias
@@ -1010,13 +1012,40 @@ model = load_best_model(outdir)
 
 
 # --------------------------
+# Lightgbm baseline
+# --------------------------
+if args.use_tile is False:
+    # import ipdb; ipdb.set_trace()
+    import lightgbm as lgb
+    # from joblib import Parallel, delayed
+    lgb_cls_init_kwargs = {"boosting_type": 'gbdt',
+                           "num_leaves": 31,
+                           "max_depth": -1,
+                           "learning_rate": 0.1,
+                           "n_estimators": 100,
+                           "objective": "binary",
+                           "class_weight": "balanced"}
+    lgb_cls = lgb.LGBMClassifier(**lgb_cls_init_kwargs)
+    xtr_lgb = pd.concat([tr_ge, tr_dd1, tr_dd2], axis=1)
+    xvl_lgb = pd.concat([vl_ge, vl_dd1, vl_dd2], axis=1)
+    xte_lgb = pd.concat([te_ge, te_dd1, te_dd2], axis=1)
+    # https://stackoverflow.com/questions/60582050
+    lgb_cls.fit(xtr_lgb.values, ytr, eval_set=(xvl_lgb.values, yvl), early_stopping_rounds=100)
+    # import ipdb; ipdb.set_trace()
+    # pp = lgb_cls.predict_proba(xte_lgb, num_iteration=None, pred_leaf=False, pred_contrib=False)
+    # lgb_te_pred_prob = lgb_cls.predict_proba(xte)
+    # lgb_vl_pred_prob = lgb_cls.predict_proba(xvl)
+    # lgb_tr_pred_prob = lgb_cls.predict_proba(xtr)
+
+
+# --------------------------
 # Evaluate
 # --------------------------
 # import ipdb; ipdb.set_trace()
 
 p = 0.5  # probability threshold for binary classification
 
-def calc_per_tile_preds(data_with_meta, model, outdir, verbose=True):
+def calc_tile_preds(tf_data_with_meta, model, outdir, verbose=True):
     """ ... """
     # meta_keys = ["smp", "Group", "grp_name", "Response"]
     meta_keys = ["smp", "image_id", "tile_id"]
@@ -1024,7 +1053,7 @@ def calc_per_tile_preds(data_with_meta, model, outdir, verbose=True):
     y_true, y_pred_prob, y_pred_label = [], [], []
 
     # import ipdb; ipdb.set_trace()
-    for i, batch in enumerate(data_with_meta):
+    for i, batch in enumerate(tf_data_with_meta):
         if (i+1) % 50 == 0:
             print(f"\rbatch {i+1}", end="")
 
@@ -1080,8 +1109,8 @@ def calc_per_tile_preds(data_with_meta, model, outdir, verbose=True):
     return prd
 
 
-def agg_per_smp_preds(prd, id_name, outdir):
-    """ Agg predictions per smp. """
+def agg_tile_preds(prd, id_name, outdir):
+    """ Aggregate tile predictions per smp. """
     aa = []
     for sample in prd[id_name].unique():
         dd = {id_name: sample}
@@ -1093,7 +1122,6 @@ def agg_per_smp_preds(prd, id_name, outdir):
         aa.append(dd)
 
     agg_preds = pd.DataFrame(aa).sort_values(args.id_name).reset_index(drop=True)
-    # agg_preds.to_csv(outdir/'test_preds_per_smp.csv', index=False)
 
     # Efficient use of groupby().apply() !!
     # xx = prd.groupby("smp").apply(lambda x: pd.Series({
@@ -1110,17 +1138,17 @@ def get_preds(tf_data, meta, model, outdir, args, name):
     """ ... """
     # Predictions per tile
     timer = Timer()
-    tile_preds = calc_per_tile_preds(tf_data, model=model, outdir=outdir)
+    tile_preds = calc_tile_preds(tf_data, model=model, outdir=outdir)
     print_fn("")
     timer.display_timer(print_fn)
 
     # Aggregate predictions per sample
-    smp_preds = agg_per_smp_preds(tile_preds, id_name=args.id_name, outdir=outdir)
+    smp_preds = agg_tile_preds(tile_preds, id_name=args.id_name, outdir=outdir)
     smp_preds = smp_preds.merge(meta, on="smp", how="inner")
 
     # Save predictions
-    tile_preds.to_csv(outdir/f"{name}_preds_per_tile.csv", index=False)
-    smp_preds.to_csv(outdir/f"{name}_preds_per_smp.csv", index=False)
+    tile_preds.to_csv(outdir/f"{name}_tile_preds.csv", index=False)
+    smp_preds.to_csv(outdir/f"{name}_smp_preds.csv", index=False)
 
     # Scores
     # tile_scores = calc_scores(test_tile_preds["y_true"].values, test_tile_preds["prob_1"].values, mltype="cls")
@@ -1151,8 +1179,73 @@ def get_preds(tf_data, meta, model, outdir, args, name):
                           outpath=outdir/f"{name}_tile_confusion.png")
 
 
-# elif args.nn_arch == "multimodal":
+def calc_smp_preds(model, xdata, meta, name):
+    """ ... """
+    # Predict
+    if hasattr(model, "predict_proba"):
+        preds = model.predict_proba(xdata)
+    else:
+        preds = model.predict(xdata)
+    # preds = np.around(preds, 3)
+    preds = np.squeeze(preds)
+
+    # import ipdb; ipdb.set_trace()
+    if np.ndim(preds) > 1:
+        # cross-entropy
+        y_pred_label = np.argmax(preds, axis=1)
+    else:
+        # binary cross-entropy
+        # p = 0.5
+        y_pred_label = [0 if ii < p else 1 for ii in preds]
+
+    # Meta
+    # df_meta = meta.copy()
+
+    # Predictions
+    y_pred_prob = preds
+    if np.ndim(np.squeeze(y_pred_prob)) == 1:
+        # Binary
+        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=["prob"])
+    elif np.squeeze(y_pred_prob).shape[1] == 2:
+        # Binary
+        y_pred_prob = y_pred_prob[:, 1]
+        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=["prob"])
+    elif np.squeeze(y_pred_prob).shape[1] > 2:
+        # Multiclass
+        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f"prob_{c}" for c in range(y_pred_prob.shape[1])])
+    else:
+        raise ValueError("what's going on with the dim of 'preds'?")
+
+    # True labels
+    # y_true = yte["Response"].values
+    y_true = meta["Response"].values
+    df_labels = pd.DataFrame({"y_true": y_true, "y_pred_label": y_pred_label})
+
+    # Combine
+    # prd = pd.concat([df_meta, df_y_pred_prob, df_labels], axis=1)
+    prd = pd.concat([meta, df_y_pred_prob, df_labels], axis=1)
+    # prd = prd.sort_values(split_on, ascending=True)
+
+    # Save predictions
+    prd.to_csv(outdir/f"{name}_smp_preds.csv", index=False)
+
+    # Scores
+    scores = calc_scores(prd["y_true"].values, prd["prob"].values, mltype="cls")
+    dump_dict(scores, outdir/f"{name}_scores.txt")
+
+    # Confusion
+    print_fn("\nPer-sample confusion:")
+    cnf_mtrx = confusion_matrix(y_true, y_pred_label)
+    print_fn(cnf_mtrx)
+    save_confusion_matrix(true_labels=prd["y_true"].values,
+                          predictions=prd["prob"].values,
+                          p=p,
+                          labels=["Non-response", "Response"],
+                          outpath=outdir/f"{name}_confusion.png")
+
+
 if args.use_tile:
+    # TODO: this can be combined into a class for the multimodal model
     timer = Timer()
 
     print_fn("\n{}".format(bold("Test set predictions.")))
@@ -1169,58 +1262,14 @@ if args.use_tile:
 
     timer.display_timer(print_fn)
 
-# if args.nn_arch == "baseline":
 else:
-    name = "test"
-
-    # Predict
-    preds = model.predict(xte)
-    # preds = np.around(preds, 3)
-    preds = np.squeeze(preds)
-
     # import ipdb; ipdb.set_trace()
-    if np.ndim(preds) > 1:
-        # cross-entropy
-        y_pred_label = np.argmax(preds, axis=1)
-    else:
-        # binary cross-entropy
-        # p = 0.5
-        y_pred_label = [0 if ii < p else 1 for ii in preds]
+    calc_smp_preds(model, xdata=xte, meta=te_meta, name="test_keras")
+    calc_smp_preds(model, xdata=xvl, meta=vl_meta, name="val_keras")
+    calc_smp_preds(model, xdata=xtr, meta=tr_meta, name="train_keras")
 
-    # Meta
-    df_meta = te_meta.copy()
-
-    # Predictions
-    y_pred_prob = preds
-    if np.ndim(np.squeeze(y_pred_prob)) > 1:
-        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f"prob_{c}" for c in range(y_pred_prob.shape[1])])
-    else:
-        df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=["prob"])
-
-    # True labels
-    # y_true = yte["Response"].values
-    y_true = te_meta["Response"].values
-    df_labels = pd.DataFrame({"y_true": y_true, "y_pred_label": y_pred_label})
-
-    # Combine
-    prd = pd.concat([df_meta, df_y_pred_prob, df_labels], axis=1)
-    prd = prd.sort_values(split_on, ascending=True)
-
-    # Save predictions
-    prd.to_csv(outdir/f"{name}_preds_per_smp.csv", index=False)
-
-    # Scores
-    scores = calc_scores(prd["y_true"].values, prd["prob"].values, mltype="cls")
-    dump_dict(scores, outdir/f"{name}_scores.txt")
-
-    # Confusion
-    print_fn("\nPer-sample confusion:")
-    cnf_mtrx = confusion_matrix(y_true, y_pred_label)
-    print_fn(cnf_mtrx)
-    save_confusion_matrix(true_labels=prd["y_true"].values,
-                          predictions=prd["prob"].values,
-                          p=p,
-                          labels=["Non-response", "Response"],
-                          outpath=outdir/f"{name}_confusion.png")
+    calc_smp_preds(lgb_cls, xdata=xte_lgb, meta=te_meta, name="test_lgb")
+    calc_smp_preds(lgb_cls, xdata=xvl_lgb, meta=vl_meta, name="val_lgb")
+    calc_smp_preds(lgb_cls, xdata=xtr_lgb, meta=tr_meta, name="train_lgb")
 
 print_fn("\nDone.")
