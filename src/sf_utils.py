@@ -90,7 +90,7 @@ def read_annotations(annotations_file):
 
 def _process_image(image_string, augment):
     '''Converts a JPEG-encoded image string into RGB array, using normalization if specified.'''
-    image = tf.image.decode_jpeg(image_string, channels = 3)
+    image = tf.image.decode_jpeg(image_string, channels=3)
 
     # if self.normalizer:
     #     image = tf.py_function(self.normalizer.tf_to_rgb, [image], tf.int32)
@@ -541,7 +541,7 @@ def create_tf_data(tfrecords,
                    batch_size=32,
                    drop_remainder=False,
                    seed=None,
-                   prefetch=1,
+                   prefetch: Optional[int]=1,
                    parse_fn=None,
                    include_meta=False,
                    **parse_fn_kwargs):
@@ -568,7 +568,8 @@ def create_tf_data(tfrecords,
     # i. Randomly shuffle the list of shard filenames, using Dataset.list_files(...).shuffle(num_shards).
     if shuffle_files:
         # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
-        seed = tf.constant(seed, dtype=tf.int64)
+        if seed is not None:
+            seed = tf.constant(seed, dtype=tf.int64)
         shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
         # shards = shards.repeat()
 
@@ -586,7 +587,7 @@ def create_tf_data(tfrecords,
         dataset = tf.data.TFRecordDataset(
             shards,
             buffer_size=None,
-            num_parallel_reads=None)  # If None, files will be read sequentially.
+            num_parallel_reads=tf.data.AUTOTUNE)  # If None, files will be read sequentially.
 
     # # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
     # #      but you will probably want to set it to some value larger than the number of records in a single shard.
@@ -622,8 +623,9 @@ def create_tf_data(tfrecords,
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
     # (ap)
-    # dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-    dataset = dataset.prefetch(prefetch)
+    if prefetch is not None:
+        # dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        dataset = dataset.prefetch(prefetch)
 
     return dataset
 
