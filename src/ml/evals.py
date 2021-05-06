@@ -59,7 +59,9 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
         # Metric that accept probabilities
         scores["brier"] = sklearn.metrics.brier_score_loss(y_true, y_pred, sample_weight=None, pos_label=1)
         scores["roc_auc"] = sklearn.metrics.roc_auc_score(y_true, y_pred)
-        # scores["pr_auc"] = sklearn.metrics.precision_recall_curve(y_true, y_pred)
+
+        precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_true, y_pred)
+        scores["pr_auc"] = sklearn.metrics.auc(recall, precision)
 
         # Metric that don't accept probabilities
         y_pred_ = [0 if v < 0.5 else 1 for v in y_pred]
