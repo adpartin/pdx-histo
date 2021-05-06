@@ -174,9 +174,6 @@ if args.target[0] == "Response":
     if params.single_drug:
         tfr_dir = cfg.SF_TFR_DIR_RSP
     else:
-        # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
-        # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR_20percent  # TODO: required to change
-        # tfr_dir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR_10percent  # TODO: required to change
         tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
 elif args.target[0] == "ctype":
     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
@@ -344,7 +341,7 @@ print_groupby_stat(te_meta, print_fn=print_fn)
 # Make sure indices do not overlap
 assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
 assert len( set(tr_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and te"
-assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and vl"
+assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw vl and te"
 
 # Print split ratios
 print_fn("")
@@ -394,7 +391,6 @@ assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "S
 # import ipdb; ipdb.set_trace()
 tile_cnts = pd.read_csv(tfr_dir/"tile_counts_per_slide.csv")
 tile_cnts.insert(loc=0, column="tfr_abs_fname", value=tile_cnts["tfr_fname"].map(lambda s: str(tfr_dir/s)))
-# cat = tile_cnts[tile_cnts["tfr_fname"].isin(train_tfr_files)]
 cat = tile_cnts[tile_cnts["tfr_abs_fname"].isin(train_tfr_files)]
 cat = cat.groupby(args.target[0]).agg({"smp": "nunique", "max_tiles": "sum", "n_tiles": "sum", "slide": "nunique"}).reset_index()
 categories = {}

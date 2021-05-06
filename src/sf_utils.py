@@ -95,6 +95,7 @@ def _process_image(image_string, augment):
     # if self.normalizer:
     #     image = tf.py_function(self.normalizer.tf_to_rgb, [image], tf.int32)
 
+    # Linearly scales each image in image to have mean 0 and variance 1
     image = tf.image.per_image_standardization(image)
 
     if augment:
