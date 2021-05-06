@@ -26,6 +26,10 @@ from src.sf_utils import bold, green, blue, yellow, cyan, red
 
 _ModelDict = {
     "Xception": tf.keras.applications.Xception,
+    "ResNet50": tf.keras.applications.ResNet50,
+    "ResNet50V2": tf.keras.applications.ResNet50V2,
+    "ResNet101": tf.keras.applications.ResNet101,
+    "ResNet101V2": tf.keras.applications.ResNet101V2,
     "EfficientNetB1": tf.keras.applications.EfficientNetB1,
     "EfficientNetB2": tf.keras.applications.EfficientNetB2,
     "EfficientNetB3": tf.keras.applications.EfficientNetB3,
@@ -145,7 +149,8 @@ def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
 
 def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     ge_shape=None, dd_shape=None,
-                    dense1_img=500, dense1_ge=500,
+                    dense1_img=1024, dense2_img=512,
+                    dense1_ge=500,
                     dense1_dd1=250, dense1_dd2=250,
                     dense1_top=1000,
                     dropout1_top=0.1,
@@ -176,19 +181,31 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
             input_shape=None,
             input_tensor=None,
             pooling=pooling)
+
+        # import ipdb; ipdb.set_trace()
+        # print(len(base_img_model.trainable_weights))
+        # print(len(base_img_model.non_trainable_weights))
+        # print(len(base_img_model.layers))
+        # base_img_model.trainable = False
+        # x_tile = keras.layers.GlobalAveragePooling2D()(tile_input_tensor)
+
         x_tile = base_img_model(tile_input_tensor)
         model_inputs.append(tile_input_tensor)
 
         if dense1_img > 0:
             x_tile = Dense(dense1_img, activation=tf.nn.relu, name="dense1_img")(x_tile)
-            x_tile = BatchNormalization(name="im_batchnorm")(x_tile)
+            # x_tile = BatchNormalization(name="batchnorm_im")(x_tile)
+        if dense2_img > 0:
+            x_tile = Dense(dense2_img, activation=tf.nn.relu, name="dense2_img")(x_tile)
+        if (dense1_img > 0) or (dense2_img > 0):
+            x_tile = BatchNormalization(name="batchnorm_im")(x_tile)
         merge_inputs.append(x_tile)
         del tile_input_tensor, x_tile
 
     if use_ge:
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
         x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
-        x_ge = BatchNormalization(name="ge_batchnorm")(x_ge)
+        x_ge = BatchNormalization(name="batchnorm_ge")(x_ge)
         # x_ge = Dropout(0.4)(x_ge)
         model_inputs.append(ge_input_tensor)
         merge_inputs.append(x_ge)
@@ -197,7 +214,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     if use_dd1:
         dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
         x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
-        x_dd1 = BatchNormalization(name="dd1_batchnorm")(x_dd1)
+        x_dd1 = BatchNormalization(name="batchnorm_dd1")(x_dd1)
         # x_dd1 = Dropout(0.4)(x_dd1)
         model_inputs.append(dd1_input_tensor)
         merge_inputs.append(x_dd1)
@@ -206,7 +223,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     if use_dd2:
         dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
         x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
-        x_dd2 = BatchNormalization(name="dd2_batchnorm")(x_dd2)
+        x_dd2 = BatchNormalization(name="batchnorm_dd2")(x_dd2)
         # x_dd2 = Dropout(0.4)(x_dd2)
         model_inputs.append(dd2_input_tensor)
         merge_inputs.append(x_dd2)
@@ -217,7 +234,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
 
     merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
                                          name="dense1_top", kernel_regularizer=None)(merged_model)
-    merged_model = BatchNormalization(name="top_batchnorm")(merged_model)
+    merged_model = BatchNormalization(name="batchnorm_top")(merged_model)
     if dropout1_top > 0:
         merged_model = Dropout(dropout1_top)(merged_model)
 
