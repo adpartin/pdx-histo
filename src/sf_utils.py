@@ -61,6 +61,11 @@ BALANCE_BY_CATEGORY = 'BALANCE_BY_CATEGORY'
 BALANCE_BY_PATIENT = 'BALANCE_BY_PATIENT'
 NO_BALANCE = 'NO_BALANCE'
 
+preprocess_img_input = {
+    "Xception": tf.keras.applications.xception.preprocess_input,
+    "ResNet50": tf.keras.applications.resnet,
+    "EfficientNetB1": tf.keras.applications.efficientnet.preprocess_input,
+}
 
 # Create training_dataset (instance of class Dataset)
 # Part of the Dataset class construction
@@ -88,16 +93,52 @@ def read_annotations(annotations_file):
     return header, results
 
 
-def _process_image(image_string, augment):
-    '''Converts a JPEG-encoded image string into RGB array, using normalization if specified.'''
+def process_image(image_string, augment, application=None):
+    """ Converts a JPEG-encoded image string into RGB array, using normalization if specified.
+    https://www.kaggle.com/cdeotte/triple-stratified-kfold-with-tfrecords
+    """
     image = tf.image.decode_jpeg(image_string, channels=3)
 
     # if self.normalizer:
     #     image = tf.py_function(self.normalizer.tf_to_rgb, [image], tf.int32)
 
-    # Linearly scales each image in image to have mean 0 and variance 1
-    image = tf.image.per_image_standardization(image)
+    # =============
+    # Scale
+    # =============
+    # -----------------------------------------------------------------
+    # Linearly scales each image in image to have mean 0 and variance 1 - used in SlideFlow
+    # -----------------------------------------------------------------
+    # # Scale
+    # # image = tf.image.convert_image_dtype(image, tf.float32)
+    # image = tf.cast(image, tf.float32)
 
+    # # Use tf method
+    # # https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
+    # image = tf.image.per_image_standardization(image)  # this works only if image has been casted to float32!
+
+    # # Use implementation of tf.image.per_image_standardization:
+    # # mean = tf.cast(tf.math.reduce_mean(image), tf.float32)
+    # # N = tf.size(image)
+    # # stddev = tf.math.reduce_std(tf.cast(image, tf.float32))
+    # # adjusted_stddev = tf.math.maximum(stddev, 1.0/tf.math.sqrt(tf.cast(N, tf.float32)))
+    # # image = (image - mean) / adjusted_stddev
+    # -----------------------------------------------------------------
+
+    image = tf.cast(image, tf.float32)
+    if application is None:
+        image = image / 255.0  # Deotte
+    else:
+        image = preprocess_img_input[application]( image )
+
+    # https://www.tensorflow.org/guide/keras/transfer_learning
+    # image = tf.keras.layers.experimental.preprocessing.Normalization(mean=, variance=)
+
+    # https://www.tensorflow.org/tutorials/images/transfer_learning
+    # image = tf.keras.layers.experimental.preprocessing.Rescaling(scale=, offset=)
+
+    # =============
+    # Augment
+    # =============
     if augment:
         # Apply augmentations
         # Rotate 0, 90, 180, 270 degrees
@@ -107,9 +148,13 @@ def _process_image(image_string, augment):
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
 
-    image = tf.image.convert_image_dtype(image, tf.float32)
+    # =============
+    # Reshape
+    # =============
     image.set_shape([cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3])
+    # image = tf.reshape(image, [cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3])  # Deotte
     return image
+
 
 
 def decode_np_arr(tensor, dtype=cfg.FEA_DTYPE):
@@ -150,7 +195,7 @@ def parse_tfrec_fn_rna(record,
 
     if use_tile:
         image_string = features['image_raw']      
-        image = _process_image(image_string, AUGMENT)
+        image = process_image(image_string, AUGMENT)
         image_dict.update({'tile_image': image})
 
     if use_ge:
@@ -209,7 +254,7 @@ def parse_tfrec_fn_rna(record,
 
 #    if use_tile:
 #        image_string = features['image_raw']      
-#        image = _process_image(image_string, AUGMENT)
+#        image = process_image(image_string, AUGMENT)
 #        image_dict.update({'tile_image': image})
 #        del image
 
@@ -444,10 +489,15 @@ def parse_tfrec_fn_rsp(record,
                        dd2_scaler=None,
                        id_name="smp",
                        augment=False,
+                       application=None,
                        # MODEL_TYPE=None,
                        # ANNOTATIONS_TABLES=None,
                        ):
-    ''' Parses raw entry read from TFRecord. '''
+    """ Parses raw entry read from TFRecord.
+    
+    Args:
+        application : tf.keras.applications
+    """
     feature_description = FEA_SPEC_RSP_DRUG_PAIR
 
     features = tf.io.parse_single_example(record, feature_description)
@@ -485,7 +535,7 @@ def parse_tfrec_fn_rsp(record,
 
     if use_tile:
         image_string = features["image_raw"]
-        image = _process_image(image_string, augment)
+        image = process_image(image_string, augment, application)
         image_dict.update({"tile_image": image})
         del image
 
