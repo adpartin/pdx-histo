@@ -21,7 +21,8 @@ from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPla
 from tensorflow.keras.utils import plot_model
 
 fdir = Path(__file__).resolve().parent
-from config import cfg
+# from config import cfg
+from src.config import cfg
 from src.sf_utils import bold, green, blue, yellow, cyan, red
 
 _ModelDict = {
