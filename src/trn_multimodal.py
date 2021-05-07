@@ -329,8 +329,6 @@ te_meta.to_csv(outdir/"te_meta.csv", index=False)
 ge_shape = (tr_ge.shape[1],)
 dd_shape = (tr_dd1.shape[1],)
 
-# import ipdb; ipdb.set_trace()
-
 print_fn("\nTrain:")
 print_groupby_stat(tr_meta, print_fn=print_fn)
 print_fn("\nValidation:")
@@ -408,9 +406,7 @@ if args.use_tile:
     # -------------------------------
     # Parsing funcs
     # -------------------------------
-
     # import ipdb; ipdb.set_trace()
-
     if args.target[0] == "Response":
         # Response
         parse_fn = parse_tfrec_fn_rsp
@@ -498,7 +494,7 @@ if args.use_tile:
         if isinstance(item, dict):
             for k in item.keys():
                 print(f"\t{k}: {item[k].numpy().shape}")
-        if isinstance(item, list):
+        elif isinstance(item.numpy(), np.ndarray):
             print(item)
 
     # for i, rec in enumerate(train_data.take(2)):
@@ -547,7 +543,6 @@ if args.use_tile:
 # Callbacks
 # ----------------------
 # import ipdb; ipdb.set_trace()
-
 import csv
 
 class BatchCSVLogger(tf.keras.callbacks.Callback):
@@ -835,7 +830,7 @@ if params.use_fp16:
     print_fn("Variable dtype: %s" % policy.variable_dtype)
 
 
-# Target
+# Loss and target
 if args.use_tile:
     loss = losses.BinaryCrossentropy()
 else:
@@ -898,6 +893,7 @@ if args.target[0] == "Response":
                           "dense1_dd2": params.dense1_dd2,
                           "dense1_ge": params.dense1_ge,
                           "dense1_img": params.dense1_img,
+                          "dense2_img": params.dense2_img,
                           "dense1_top": params.dense1_top,
                           "dd_shape": dd_shape,
                           "ge_shape": ge_shape,
