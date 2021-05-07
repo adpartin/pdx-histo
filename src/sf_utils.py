@@ -156,7 +156,6 @@ def process_image(image_string, augment, application=None):
     return image
 
 
-
 def decode_np_arr(tensor, dtype=cfg.FEA_DTYPE):
     return np.frombuffer(tensor.numpy(), dtype=dtype)
 
@@ -221,71 +220,238 @@ def parse_tfrec_fn_rna(record,
         return image_dict, label
 
 
-#def parse_tfrec_fn_rsp(record,
-#                       include_smp_names=True,
-#                       use_tile=True,
-#                       use_ge=False,
-#                       use_dd=False,
-#                       ge_scaler=None,
-#                       dd_scaler=None,
-#                       id_name='smp',
-#                       MODEL_TYPE=None,
-#                       ANNOTATIONS_TABLES=None,
-#                       AUGMENT=True
-#                       ):
-#    ''' Parses raw entry read from TFRecord. '''
-#    feature_description = FEA_SPEC_RSP
+def parse_tfrec_fn_rsp(record,
+                       # include_smp_names=True,
+                       include_meta=False,
+                       use_tile=True,
+                       use_ge=False,
+                       use_dd2=False,
+                       use_dd1=False,
+                       ge_scaler=None,
+                       dd1_scaler=None,
+                       dd2_scaler=None,
+                       id_name="smp",
+                       augment=False,
+                       application=None,
+                       # MODEL_TYPE=None,
+                       # ANNOTATIONS_TABLES=None,
+                       ):
+    """ Parses raw entry read from TFRecord.
+    
+    Args:
+        application : tf.keras.applications
+    """
+    feature_description = FEA_SPEC_RSP_DRUG_PAIR
 
-#    features = tf.io.parse_single_example(record, feature_description)
-#    #slide = features['slide']
-#    #smp = features[cfg.ID_NAME]
-#    smp = features[id_name]
+    features = tf.io.parse_single_example(record, feature_description)
+    #slide = features['slide']
+    #smp = features[cfg.ID_NAME]
+    smp = features[id_name]
 
-#    #if MODEL_TYPE == 'linear':
-#    #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
-#    #    label = [ANNOTATIONS_TABLES[oi].lookup(smp) for oi in range(NUM_CLASSES)]
-#    #else:
-#    #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
-#    #    label = ANNOTATIONS_TABLES[0].lookup(smp)
-#    # label = {outcome_header[0]: label}  # ap, or {'ctype': label}
-#    label = {'Response': tf.cast(features['Response'], tf.int64)}  # ap, or {'ctype': label}
+    # Meta
+    meta = {}
+    meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
+                   "Response",
+                   "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
+                   "ctype", "csite",
+                   "Drug1", "Drug2", "trt", "aug"]
+    for f in meta_fields:
+        meta[f] = features[f] if f in features.keys() else None
+    
+    #if MODEL_TYPE == 'linear':
+    #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
+    #    label = [ANNOTATIONS_TABLES[oi].lookup(smp) for oi in range(NUM_CLASSES)]
+    #else:
+    #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
+    #    label = ANNOTATIONS_TABLES[0].lookup(smp)
+    
+    # TODO: {"Response": ...} doesn't work with class_weight!
+    # label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
+    label = tf.cast(features["Response"], tf.int64)
 
-#    image_dict = {}
+    # label = tf.cast(features["Response"].decode("utf-8"), tf.int64)  # probably won't work! didn't test!
+    # label = tf.strings.to_number(features["Response"], tf.int64)  # probably won't work! didn't test!
+    # label = tf.io.decode_raw(features["Response"], tf.int64)  # probably won't work! didn't test!
+    # label = tf.strings.unicode_decode(features["Response"], "UTF-8")  # probably won't work! didn't test!
 
-#    if use_tile:
-#        image_string = features['image_raw']      
-#        image = process_image(image_string, AUGMENT)
-#        image_dict.update({'tile_image': image})
-#        del image
+    image_dict = {}
 
-#    if use_ge:
-#        ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],
-#                                 Tout=[tf.float32])
-#        ge_data = tf.reshape(ge_data, [-1])
+    if use_tile:
+        image_string = features["image_raw"]
+        image = process_image(image_string, augment, application)
+        image_dict.update({"tile_image": image})
+        del image
 
-#        if ge_scaler is not None:
-#            ge_data = scale_fea(ge_data, ge_scaler)
+    if use_ge:
+        ge_data = tf.py_function(func=decode_np_arr, inp=[features["ge_data"]],
+                                 Tout=[tf.float32])
+        ge_data = tf.reshape(ge_data, [-1])
 
-#        ge_data = tf.cast(ge_data, tf.float32)
-#        image_dict.update({'ge_data': ge_data})      
-#        del ge_data
+        if ge_scaler is not None:
+            ge_data = scale_fea(ge_data, ge_scaler)
 
-#    if use_dd:
-#        dd_data = tf.py_function(func=decode_np_arr, inp=[features['dd_data']],
-#                                 Tout=[tf.float32])
-#        dd_data = tf.reshape(dd_data, [-1])
+        ge_data = tf.cast(ge_data, tf.float32)
+        image_dict.update({"ge_data": ge_data})      
+        del ge_data
 
-#        if dd_scaler is not None:
-#            dd_data = scale_fea(dd_data, dd_scaler)
+    if use_dd1:
+        dd_data = tf.py_function(func=decode_np_arr, inp=[features["dd1_data"]],
+                                 Tout=[tf.float32])
+        dd_data = tf.reshape(dd_data, [-1])
 
-#        dd_data = tf.cast(dd_data, tf.float32)
-#        image_dict.update({'dd_data': dd_data})      
-#        del dd_data
+        if dd1_scaler is not None:
+            dd_data = scale_fea(dd_data, dd1_scaler)
 
-#    if include_smp_names:
-#        return image_dict, label, smp
-#    else:
-#        return image_dict, label
+        dd_data = tf.cast(dd_data, tf.float32)
+        image_dict.update({"dd1_data": dd_data})
+        del dd_data
+
+    if use_dd2:
+        dd_data = tf.py_function(func=decode_np_arr, inp=[features["dd2_data"]],
+                                 Tout=[tf.float32])
+        dd_data = tf.reshape(dd_data, [-1])
+
+        if dd2_scaler is not None:
+            dd_data = scale_fea(dd_data, dd2_scaler)
+
+        dd_data = tf.cast(dd_data, tf.float32)
+        image_dict.update({"dd2_data": dd_data})
+        del dd_data
+
+    if include_meta:
+        return image_dict, label, meta
+    else:
+        return image_dict, label
+
+
+def create_tf_data(tfrecords,
+                   deterministic: Optional[bool]=False,
+                   n_concurrent_shards: Optional[int]=16,
+                   shuffle_files: bool=False,
+                   interleave: bool=False,
+                   shuffle_size: Optional[int]=8192,  # 1024*8
+                   repeat=True,
+                   # epochs=1,
+                   batch_size=32,
+                   drop_remainder=False,
+                   seed=None,
+                   prefetch: Optional[int]=1,
+                   parse_fn=None,
+                   include_meta=False,
+                   **parse_fn_kwargs):
+    """ Create tf.data datasets.
+    Args:
+        deterministic : True for determinstic flow of batches (TODO: this doesn't work)
+
+    https://cs230.stanford.edu/blog/datapipeline/
+    https://docs.google.com/presentation/d/16kHNtQslt-yuJ3w8GIx-eEH6t_AvFeQOchqGRFpAD7U/edit
+    https://www.kaggle.com/cdeotte/triple-stratified-kfold-with-tfrecords
+    """
+    if deterministic is True:
+        tf.random.set_seed(seed)
+
+    # Notes:
+    # Apply batch() before map():
+    #   https://www.tensorflow.org/guide/data_performance#vectorizing_mapping
+    #   https://stackoverflow.com/questions/58014123/how-to-improve-data-input-pipeline-performance
+    
+    # 1. Randomly shuffle the entire data once using a MapReduce/Spark/Beam/etc. job to create a set of roughly equal-sized files ("shards")
+    shards = tf.data.Dataset.from_tensor_slices(tfrecords)
+
+    # 2. In each epoch:
+    # i. Randomly shuffle the list of shard filenames, using Dataset.list_files(...).shuffle(num_shards).
+    if shuffle_files:
+        # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
+        if seed is not None:
+            seed = tf.constant(seed, dtype=tf.int64)
+        shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
+        # shards = shards.repeat()
+
+    # ii. Use dataset.interleave(lambda filename: tf.data.TextLineDataset(filename), cycle_length=N)
+    #     to mix together records from N different shards.
+    # If num_parallel_calls = tf.data.AUTOTUNE, the cycle_length argument identifies the maximum degree of parallelism
+    if interleave:
+        dataset = shards.interleave(
+            map_func=lambda x: tf.data.TFRecordDataset(x),
+            cycle_length=n_concurrent_shards,
+            block_length=None,  # defaults to 1
+            num_parallel_calls=None,
+            deterministic=deterministic)
+    else:
+        dataset = tf.data.TFRecordDataset(
+            shards,
+            buffer_size=None,
+            num_parallel_reads=tf.data.AUTOTUNE)  # If None, files will be read sequentially.
+
+    # # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
+    # #      but you will probably want to set it to some value larger than the number of records in a single shard.
+    # if shuffle_size is not None:
+    #     # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
+    #     dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
+
+    # (ap) recommended to use batch before map
+    # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+
+    # num_parallel_calls = tf.data.experimental.AUTOTUNE
+    # num_parallel_calls = 64
+    # num_parallel_calls = 16
+    num_parallel_calls = 8
+    # num_parallel_calls = 1
+    dataset = dataset.map(
+        map_func=partial(parse_fn, include_meta=include_meta, **parse_fn_kwargs),
+        num_parallel_calls=num_parallel_calls,
+        deterministic=deterministic
+    )
+
+    # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
+    #      but you will probably want to set it to some value larger than the number of records in a single shard.
+    if shuffle_size is not None:
+        # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
+        dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
+
+    # Apply batch after repeat (https://www.tensorflow.org/guide/data)
+    if repeat:
+        # dataset = dataset.repeat(epochs)
+        dataset = dataset.repeat()
+        
+    dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+
+    # (ap)
+    if prefetch is not None:
+        # dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        dataset = dataset.prefetch(prefetch)
+
+    return dataset
+
+
+def calc_class_weights(tfrecords,
+                       class_weights_method="BY_TILE",
+                       # manifest=None,
+                       # outcomes=None,
+                       categories=None,
+                       MODEL_TYPE=None):
+    """ ... """
+    # categories = get_categories_from_manifest(tfrecords, manifest, outcomes)
+
+    if class_weights_method == "NONE":
+        class_weight = None
+
+    elif class_weights_method == "BY_SAMPLE":
+        n_samples = len(tfrecords)
+        n_classes = len(categories)
+        bins = np.array([categories[c]["num_samples"] for c in categories.keys()])
+        weights = n_samples / (n_classes * bins)
+        class_weight = {c: value for c, value in zip(categories.keys(), weights)}
+
+    elif class_weights_method == "BY_TILE":
+        n_samples = sum([categories[c]["num_tiles"] for c in categories])
+        # n_samples = np.array(num_tiles).sum()
+        n_classes = len(categories)
+        bins = np.array([categories[c]["num_tiles"] for c in categories.keys()])
+        weights = n_samples / (n_classes * bins)
+        class_weight = {c: value for c, value in zip(categories.keys(), weights)}
+
+    return class_weight
 
 
 def interleave_tfrecords(tfrecords, batch_size, balance, finite,
@@ -477,210 +643,6 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
     return dataset, dataset_with_smp_names, global_num_tiles
 
 
-def parse_tfrec_fn_rsp(record,
-                       # include_smp_names=True,
-                       include_meta=False,
-                       use_tile=True,
-                       use_ge=False,
-                       use_dd2=False,
-                       use_dd1=False,
-                       ge_scaler=None,
-                       dd1_scaler=None,
-                       dd2_scaler=None,
-                       id_name="smp",
-                       augment=False,
-                       application=None,
-                       # MODEL_TYPE=None,
-                       # ANNOTATIONS_TABLES=None,
-                       ):
-    """ Parses raw entry read from TFRecord.
-    
-    Args:
-        application : tf.keras.applications
-    """
-    feature_description = FEA_SPEC_RSP_DRUG_PAIR
-
-    features = tf.io.parse_single_example(record, feature_description)
-    #slide = features['slide']
-    #smp = features[cfg.ID_NAME]
-    smp = features[id_name]
-
-    # Meta
-    meta = {}
-    meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
-                   "Response",
-                   "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
-                   "ctype", "csite",
-                   "Drug1", "Drug2", "trt", "aug"]
-    for f in meta_fields:
-        meta[f] = features[f] if f in features.keys() else None
-    
-    #if MODEL_TYPE == 'linear':
-    #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
-    #    label = [ANNOTATIONS_TABLES[oi].lookup(smp) for oi in range(NUM_CLASSES)]
-    #else:
-    #    #label = ANNOTATIONS_TABLES[0].lookup(slide)
-    #    label = ANNOTATIONS_TABLES[0].lookup(smp)
-    
-    # TODO: {"Response": ...} doesn't work with class_weight!
-    # label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
-    label = tf.cast(features["Response"], tf.int64)
-
-    # label = tf.cast(features["Response"].decode("utf-8"), tf.int64)  # probably won't work! didn't test!
-    # label = tf.strings.to_number(features["Response"], tf.int64)  # probably won't work! didn't test!
-    # label = tf.io.decode_raw(features["Response"], tf.int64)  # probably won't work! didn't test!
-    # label = tf.strings.unicode_decode(features["Response"], "UTF-8")  # probably won't work! didn't test!
-
-    image_dict = {}
-
-    if use_tile:
-        image_string = features["image_raw"]
-        image = process_image(image_string, augment, application)
-        image_dict.update({"tile_image": image})
-        del image
-
-    if use_ge:
-        ge_data = tf.py_function(func=decode_np_arr, inp=[features["ge_data"]],
-                                 Tout=[tf.float32])
-        ge_data = tf.reshape(ge_data, [-1])
-
-        if ge_scaler is not None:
-            ge_data = scale_fea(ge_data, ge_scaler)
-
-        ge_data = tf.cast(ge_data, tf.float32)
-        image_dict.update({"ge_data": ge_data})      
-        del ge_data
-
-    if use_dd1:
-        dd_data = tf.py_function(func=decode_np_arr, inp=[features["dd1_data"]],
-                                 Tout=[tf.float32])
-        dd_data = tf.reshape(dd_data, [-1])
-
-        if dd1_scaler is not None:
-            dd_data = scale_fea(dd_data, dd1_scaler)
-
-        dd_data = tf.cast(dd_data, tf.float32)
-        image_dict.update({"dd1_data": dd_data})
-        del dd_data
-
-    if use_dd2:
-        dd_data = tf.py_function(func=decode_np_arr, inp=[features["dd2_data"]],
-                                 Tout=[tf.float32])
-        dd_data = tf.reshape(dd_data, [-1])
-
-        if dd2_scaler is not None:
-            dd_data = scale_fea(dd_data, dd2_scaler)
-
-        dd_data = tf.cast(dd_data, tf.float32)
-        image_dict.update({"dd2_data": dd_data})
-        del dd_data
-
-    if include_meta:
-        return image_dict, label, meta
-    else:
-        return image_dict, label
-
-
-def create_tf_data(tfrecords,
-                   deterministic: Optional[bool]=False,
-                   n_concurrent_shards: Optional[int]=16,
-                   shuffle_files: bool=False,
-                   interleave: bool=False,
-                   shuffle_size: Optional[int]=8192,  # 1024*8
-                   repeat=True,
-                   # epochs=1,
-                   batch_size=32,
-                   drop_remainder=False,
-                   seed=None,
-                   prefetch: Optional[int]=1,
-                   parse_fn=None,
-                   include_meta=False,
-                   **parse_fn_kwargs):
-    """ ...
-
-    Args:
-        deterministic : True for determinstic flow of batches (TODO: this doesn't work)
-
-    https://cs230.stanford.edu/blog/datapipeline/
-    https://docs.google.com/presentation/d/16kHNtQslt-yuJ3w8GIx-eEH6t_AvFeQOchqGRFpAD7U/edit
-    """
-    if deterministic is True:
-        tf.random.set_seed(seed)
-
-    # Notes:
-    # Apply batch() before map():
-    #   https://www.tensorflow.org/guide/data_performance#vectorizing_mapping
-    #   https://stackoverflow.com/questions/58014123/how-to-improve-data-input-pipeline-performance
-    
-    # 1. Randomly shuffle the entire data once using a MapReduce/Spark/Beam/etc. job to create a set of roughly equal-sized files ("shards")
-    shards = tf.data.Dataset.from_tensor_slices(tfrecords)
-
-    # 2. In each epoch:
-    # i. Randomly shuffle the list of shard filenames, using Dataset.list_files(...).shuffle(num_shards).
-    if shuffle_files:
-        # shards = shards.shuffle(tf.shape(shards)[0]), seed=None)
-        if seed is not None:
-            seed = tf.constant(seed, dtype=tf.int64)
-        shards = shards.shuffle(len(tfrecords), seed=seed)  # shuffle files
-        # shards = shards.repeat()
-
-    # ii. Use dataset.interleave(lambda filename: tf.data.TextLineDataset(filename), cycle_length=N)
-    #     to mix together records from N different shards.
-    # If num_parallel_calls = tf.data.AUTOTUNE, the cycle_length argument identifies the maximum degree of parallelism
-    if interleave:
-        dataset = shards.interleave(
-            map_func=lambda x: tf.data.TFRecordDataset(x),
-            cycle_length=n_concurrent_shards,
-            block_length=None,  # defaults to 1
-            num_parallel_calls=None,
-            deterministic=deterministic)
-    else:
-        dataset = tf.data.TFRecordDataset(
-            shards,
-            buffer_size=None,
-            num_parallel_reads=tf.data.AUTOTUNE)  # If None, files will be read sequentially.
-
-    # # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
-    # #      but you will probably want to set it to some value larger than the number of records in a single shard.
-    # if shuffle_size is not None:
-    #     # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
-    #     dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
-
-    # (ap) recommended to use batch before map
-    # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
-
-    # num_parallel_calls = tf.data.experimental.AUTOTUNE
-    # num_parallel_calls = 64
-    # num_parallel_calls = 16
-    num_parallel_calls = 8
-    # num_parallel_calls = 1
-    dataset = dataset.map(
-        map_func=partial(parse_fn, include_meta=include_meta, **parse_fn_kwargs),
-        num_parallel_calls=num_parallel_calls,
-        deterministic=deterministic
-    )
-
-    # iii. Use dataset.shuffle(B) to shuffle the resulting dataset. Setting B might require some experimentation,
-    #      but you will probably want to set it to some value larger than the number of records in a single shard.
-    if shuffle_size is not None:
-        # dataset = dataset.shuffle(buffer_size=512)  # (ap) shuffles the examples in the relevant filenames
-        dataset = dataset.shuffle(buffer_size=shuffle_size, seed=seed)  # (ap) shuffles the examples in the relevant filenames
-
-    # Apply batch after repeat (https://www.tensorflow.org/guide/data)
-    if repeat:
-        # dataset = dataset.repeat(epochs)
-        dataset = dataset.repeat()
-        
-    dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
-
-    # (ap)
-    if prefetch is not None:
-        # dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-        dataset = dataset.prefetch(prefetch)
-
-    return dataset
-
-
 
 def get_categories_from_manifest(tfrecords, manifest, outcomes, MODEL_TYPE="categorical"):
     """ ... """
@@ -704,36 +666,6 @@ def get_categories_from_manifest(tfrecords, manifest, outcomes, MODEL_TYPE="cate
         # num_tiles += [tiles]
 
     return categories
-
-
-def calc_class_weights(tfrecords,
-                       class_weights_method="BY_TILE",
-                       # manifest=None,
-                       # outcomes=None,
-                       categories=None,
-                       MODEL_TYPE=None):
-    """ ... """
-    # categories = get_categories_from_manifest(tfrecords, manifest, outcomes)
-
-    if class_weights_method == "NONE":
-        class_weight = None
-
-    elif class_weights_method == "BY_SAMPLE":
-        n_samples = len(tfrecords)
-        n_classes = len(categories)
-        bins = np.array([categories[c]["num_samples"] for c in categories.keys()])
-        weights = n_samples / (n_classes * bins)
-        class_weight = {c: value for c, value in zip(categories.keys(), weights)}
-
-    elif class_weights_method == "BY_TILE":
-        n_samples = sum([categories[c]["num_tiles"] for c in categories])
-        # n_samples = np.array(num_tiles).sum()
-        n_classes = len(categories)
-        bins = np.array([categories[c]["num_tiles"] for c in categories.keys()])
-        weights = n_samples / (n_classes * bins)
-        class_weight = {c: value for c, value in zip(categories.keys(), weights)}
-
-    return class_weight
 
 
 def create_manifest(directory, n_files: Optional[int]=None):

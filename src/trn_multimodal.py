@@ -420,6 +420,7 @@ if args.use_tile:
             "dd2_scaler": dd2_scaler,
             "id_name": args.id_name,
             "augment": params.augment,
+            "application": params.base_image_model,
         }
     else:
         # Ctype
