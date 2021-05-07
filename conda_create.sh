@@ -6,6 +6,9 @@
 # TF-cudnn-cudatoolkit configs
 # https://www.tensorflow.org/install/source#gpu
 
+# The installation below is for lambda machines.
+# For lamina, see conda_create_on_lamina.sh
+
 # Step 1: create conda env and activate env
 # activate conda env from script:
 #   stackoverflow.com/questions/55507519
