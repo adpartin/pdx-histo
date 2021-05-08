@@ -94,11 +94,6 @@ parser.add_argument("--n_samples",
                     type=int,
                     default=-1,
                     help="Total samples from tr_id to process.")
-# parser.add_argument("--nn_arch",
-#                     type=str,
-#                     default="multimodal",
-#                     choices=["baseline", "multimodal", "lgbm"],
-#                     help="NN architecture (default: multimodal).")
 parser.add_argument("--tfr_dir_name",
                     type=str,
                     default="PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles",
@@ -920,9 +915,7 @@ model.summary(print_fn=print_fn)
 
 # import ipdb; ipdb.set_trace()
 # steps = 40
-# res = model.evaluate(train_data,
-#                      steps=params.batch_size * steps // params.batch_size,
-#                      verbose=1)
+# res = model.evaluate(train_data, steps=tr_steps, verbose=1)
 # print("Loss: {:0.4f}".format(res[0]))
 
 

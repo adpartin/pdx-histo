@@ -25,7 +25,7 @@ fdir = Path(__file__).resolve().parent
 from src.config import cfg
 from src.sf_utils import bold, green, blue, yellow, cyan, red
 
-_ModelDict = {
+ModelDict = {
     "Xception": tf.keras.applications.Xception,
     "ResNet50": tf.keras.applications.ResNet50,
     "ResNet50V2": tf.keras.applications.ResNet50V2,
@@ -176,26 +176,18 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     if use_tile:
         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-        base_img_model = _ModelDict[base_image_model](
+        base_img_model = ModelDict[base_image_model](
             include_top=False,
             weights=pretrain,
             input_shape=None,
             input_tensor=None,
             pooling=pooling)
 
-        # import ipdb; ipdb.set_trace()
-        # print(len(base_img_model.trainable_weights))
-        # print(len(base_img_model.non_trainable_weights))
-        # print(len(base_img_model.layers))
-        # base_img_model.trainable = False
-        # x_tile = keras.layers.GlobalAveragePooling2D()(tile_input_tensor)
-
         x_tile = base_img_model(tile_input_tensor)
         model_inputs.append(tile_input_tensor)
 
         if dense1_img > 0:
             x_tile = Dense(dense1_img, activation=tf.nn.relu, name="dense1_img")(x_tile)
-            # x_tile = BatchNormalization(name="batchnorm_im")(x_tile)
         if dense2_img > 0:
             x_tile = Dense(dense2_img, activation=tf.nn.relu, name="dense2_img")(x_tile)
         if (dense1_img > 0) or (dense2_img > 0):
@@ -207,7 +199,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
         x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
         x_ge = BatchNormalization(name="batchnorm_ge")(x_ge)
-        # x_ge = Dropout(0.4)(x_ge)
         model_inputs.append(ge_input_tensor)
         merge_inputs.append(x_ge)
         del ge_input_tensor, x_ge
@@ -216,7 +207,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
         x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
         x_dd1 = BatchNormalization(name="batchnorm_dd1")(x_dd1)
-        # x_dd1 = Dropout(0.4)(x_dd1)
         model_inputs.append(dd1_input_tensor)
         merge_inputs.append(x_dd1)
         del dd1_input_tensor, x_dd1
@@ -225,7 +215,6 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
         x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
         x_dd2 = BatchNormalization(name="batchnorm_dd2")(x_dd2)
-        # x_dd2 = Dropout(0.4)(x_dd2)
         model_inputs.append(dd2_input_tensor)
         merge_inputs.append(x_dd2)
         del dd2_input_tensor, x_dd2
@@ -233,17 +222,14 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # Merge towers
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
+    # Dense layers of the top classfier
     merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
                                          name="dense1_top", kernel_regularizer=None)(merged_model)
     merged_model = BatchNormalization(name="batchnorm_top")(merged_model)
     if dropout1_top > 0:
         merged_model = Dropout(dropout1_top)(merged_model)
 
-    # Add the softmax prediction layer
-    # activation = 'linear' if model_type == 'linear' else 'softmax'
-    # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-    # softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name="Response")(final_dense_layer)
-
+    # Output
     softmax_output = tf.keras.layers.Dense(
         1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
@@ -256,6 +242,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
           keras.metrics.AUC(name="roc-auc", curve="ROC"),
           keras.metrics.AUC(name="pr-auc", curve="PR"),
     ]
+
     if optimizer == "SGD":
         optimizer = optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
     elif optimizer == "Adam":
