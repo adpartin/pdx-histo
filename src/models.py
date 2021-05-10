@@ -45,9 +45,17 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     csv_logger = CSVLogger(outdir/"training.log")
     callbacks.append(csv_logger)
 
+    if monitor == "val_pr-auc":
+        mode = "max"
+    elif monitor == "val_loss":
+        mode = "min"
+    else:
+        mode = "auto"
+
     checkpointer = ModelCheckpoint(str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt"),
                                    monitor=monitor,
                                    verbose=0,
+                                   mode=mode,
                                    save_weights_only=False,
                                    save_best_only=True,
                                    save_freq="epoch")
@@ -55,9 +63,9 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
 
     reduce_lr = ReduceLROnPlateau(monitor=monitor,
                                   factor=0.5,
-                                  patience=10,
+                                  patience=5,
                                   verbose=1,
-                                  mode="auto",
+                                  mode=mode,
                                   min_delta=0.0001,
                                   cooldown=0,
                                   min_lr=0)
@@ -65,7 +73,7 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
 
     early_stop = EarlyStopping(monitor=monitor,
                                patience=patience,
-                               mode="auto",
+                               mode=mode,
                                restore_best_weights=True,
                                verbose=1)
     callbacks.append(early_stop)
@@ -176,6 +184,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     if use_tile:
         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
+
         base_img_model = ModelDict[base_image_model](
             include_top=False,
             weights=pretrain,
@@ -183,7 +192,13 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
             input_tensor=None,
             pooling=pooling)
 
-        x_tile = base_img_model(tile_input_tensor)
+        base_img_model.trainable = False  # Freeze the base_img_model
+
+        # We set training=False makes the base model to run in inference mode
+        # so that batchnorm layers are not updated during the fine-tuning
+        # stage.
+        # x_tile = base_img_model(tile_input_tensor)
+        x_tile = base_img_model(tile_input_tensor, training=False)
         model_inputs.append(tile_input_tensor)
 
         if dense1_img > 0:

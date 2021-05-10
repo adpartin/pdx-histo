@@ -78,6 +78,10 @@ parser.add_argument("--split_on",
                     default="Group",
                     choices=["Sample", "slide", "Group"],
                     help="Specify the hard split variable/column (default: None).")
+parser.add_argument("--split_id",
+                    type=int,
+                    default=81,
+                    help="Split id of the unique split for T/V/E sets (default: 0).")
 parser.add_argument("--prjname",
                     type=str,
                     help="Project name (folder that contains the annotations.csv dataframe).")
@@ -97,6 +101,10 @@ parser.add_argument("--n_samples",
 parser.add_argument("--tfr_dir_name",
                     type=str,
                     default="PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles",
+                    help="Dir name that contains TFRecords.")
+parser.add_argument("--pred_tfr_dir_name",
+                    type=str,
+                    default="PDX_FIXED_RSP_DRUG_PAIR",
                     help="Dir name that contains TFRecords.")
 parser.add_argument("--scale_fea",
                     action="store_true",
@@ -165,17 +173,19 @@ else:
 
 
 # Determine tfr_dir (where TFRecords are stored)
-if args.target[0] == "Response":
-    if params.single_drug:
-        tfr_dir = cfg.SF_TFR_DIR_RSP
-    else:
-        tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
-elif args.target[0] == "ctype":
-    tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
+# if args.target[0] == "Response":
+#     if params.single_drug:
+#         tfr_dir = cfg.SF_TFR_DIR_RSP
+#     else:
+#         tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
+# elif args.target[0] == "ctype":
+#     tfr_dir = cfg.SF_TFR_DIR_RNA_NEW
 
+tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
+pred_tfr_dir = (cfg.DATADIR/args.pred_tfr_dir_name).resolve()
 label = f"{params.tile_px}px_{params.tile_um}um"
 tfr_dir = tfr_dir/label
-
+pred_tfr_dir = pred_tfr_dir/label
 
 # Create outcomes (for drug response)
 # outcomes = {}
@@ -221,15 +231,12 @@ if args.scale_fea:
 if args.use_dd1 is False and args.use_dd2 is False:
     splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition_Drug_Specific"
     splitdir = splitdir/params.drug_specific
-    split_id = 0
 else:
     splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
-    split_id = 81
-    # split_id = 0
 
-tr_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TrainList.txt")), int)
-vl_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"ValList.txt")), int)
-te_id = cast_list(read_lines(str(splitdir/f"cv_{split_id}"/"TestList.txt")), int)
+tr_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"TrainList.txt")), int)
+vl_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"ValList.txt")), int)
+te_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"TestList.txt")), int)
 
 # Update ids
 index_col_name = "index"
@@ -365,7 +372,8 @@ te_smp_names = list(te_meta[args.id_name].values)
 # TFRecords filenames
 train_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)
 val_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)
-test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
+# test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
+test_tfr_files = get_tfr_files(pred_tfr_dir, te_smp_names)
 print("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
 
 # Missing tfrecords
@@ -416,6 +424,7 @@ if args.use_tile:
             "id_name": args.id_name,
             "augment": params.augment,
             "application": params.base_image_model,
+            # "application": None,
         }
     else:
         # Ctype
@@ -441,7 +450,7 @@ if args.use_tile:
     vl_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["n_tiles"].sum()
     te_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["n_tiles"].sum()
 
-    eval_batch_size = 8 * params.batch_size
+    eval_batch_size = 4 * params.batch_size
     tr_steps = tr_tiles // params.batch_size
     vl_steps = vl_tiles // eval_batch_size
     te_steps = te_tiles // eval_batch_size
@@ -781,10 +790,40 @@ class BatchEarlyStopping(tf.keras.callbacks.Callback):
         if self.stopped_batch > 0:
             self.print_fn("Early stop on epoch {} and batch {}.".format(self.stopped_epoch, self.stopped_batch))
 
+def get_lr_callback(batch_size=8):
+    """
+    https://www.kaggle.com/cdeotte/triple-stratified-kfold-with-tfrecords
+    """
+    lr_start   = 0.000005
+    lr_max     = 0.00000125 * batch_size
+    lr_min     = 0.000001
+    lr_ramp_ep = 5
+    lr_sus_ep  = 0
+    lr_decay   = 0.8
+
+    def lrfn(epoch):
+        if epoch < lr_ramp_ep:
+            lr = (lr_max - lr_start) / lr_ramp_ep * epoch + lr_start
+
+        elif epoch < lr_ramp_ep + lr_sus_ep:
+            lr = lr_max
+
+        else:
+            lr = (lr_max - lr_min) * lr_decay**(epoch - lr_ramp_ep - lr_sus_ep) + lr_min
+
+        return lr
+
+    lr_callback = tf.keras.callbacks.LearningRateScheduler(lrfn, verbose=False)
+    return lr_callback
 
 # Callbacks list
-callbacks = keras_callbacks(outdir, monitor="val_loss", patience=params.patience)
+monitor = "val_loss"
+# monitor = "val_pr-auc"
+callbacks = keras_callbacks(outdir, monitor=monitor, patience=params.patience)
 # callbacks = keras_callbacks(outdir, monitor="auc", patience=params.patience)
+
+# Learning rate schedule
+# callbacks.append(get_lr_callback(batch_size=params.batch_size))
 
 if args.use_tile:
     # callbacks = []
@@ -828,7 +867,7 @@ if params.use_fp16:
 
 # Loss and target
 if args.use_tile:
-    loss = losses.BinaryCrossentropy()
+    loss = losses.BinaryCrossentropy(label_smoothing=0)
 else:
     if params.y_encoding == "onehot":
         if index_col_name in data.columns:
@@ -1000,7 +1039,7 @@ if args.trn_phase == "train":
     timer.display_timer(print_fn)
 
     # Save final model
-    final_model_fpath = outdir/f"final_model_for_split_id_{split_id}"
+    final_model_fpath = outdir/f"final_model_for_split_id_{args.split_id}"
     model.save(final_model_fpath)
 
 
@@ -1177,6 +1216,7 @@ def get_preds(tf_data, meta, model, outdir, args, name):
     df_scores.columns = df_scores.iloc[0, :]
     df_scores = df_scores.iloc[1:, :]
     df_scores.to_csv(outdir/f"{name}_scores.csv", index=False)
+    print_fn(df_scores)
 
     # import ipdb; ipdb.set_trace()
 

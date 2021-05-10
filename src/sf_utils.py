@@ -64,7 +64,11 @@ NO_BALANCE = 'NO_BALANCE'
 preprocess_img_input = {
     "Xception": tf.keras.applications.xception.preprocess_input,
     "ResNet50": tf.keras.applications.resnet,
+    "ResNet50V2": tf.keras.applications.resnet,
+    "EfficientNetB0": tf.keras.applications.efficientnet.preprocess_input,
     "EfficientNetB1": tf.keras.applications.efficientnet.preprocess_input,
+    "EfficientNetB2": tf.keras.applications.efficientnet.preprocess_input,
+    "EfficientNetB3": tf.keras.applications.efficientnet.preprocess_input,
 }
 
 # Create training_dataset (instance of class Dataset)
@@ -147,6 +151,11 @@ def process_image(image_string, augment, application=None):
         # Random flip and rotation
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
+
+        # Deotte
+        # image = tf.image.random_saturation(image, 0.7, 1.3)
+        # image = tf.image.random_contrast(image, 0.8, 1.2)
+        # image = tf.image.random_brightness(image, 0.1)
 
     # =============
     # Reshape
