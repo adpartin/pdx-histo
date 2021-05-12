@@ -102,6 +102,7 @@ def create_outdir_2(outdir, args=None):
     t = "".join([str(i) for i in t])
 
     name = fea_types_to_str_name(args) + "_" + t
+    name = "split_" + str(args.split_id) + "_" + name
 
     outdir = Path(outdir)
     outdir = outdir/name
