@@ -18,12 +18,6 @@ target=Response
 # split_on=slide
 split_on=Group
 
-split_id=81
-# split_id=0
-# split_id=1
-# split_id=2
-# split_id=3
-
 # Number of drug response samples
 # n_samples=60
 # n_samples=80
@@ -43,20 +37,41 @@ pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
 DEVICE=$1
 echo "CUDA device: $DEVICE"
 
-trn_phase=$2
-# nn_arch=$3
+# split_id=81
+# split_id=0
+split_id=$2
 
+# -----------
+# Train
+# -----------
 CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
+    --train \
     --target $target \
     --split_on $split_on \
     --split_id $split_id \
     --id_name $id_name \
     --prjname $prjname \
-    --trn_phase $trn_phase \
     --dataname $dataname \
     --n_samples $n_samples \
     --tfr_dir_name $tfr_dir_name \
     --pred_tfr_dir_name $pred_tfr_dir_name \
     --use_tile --use_ge --use_dd1 --use_dd2
 
-    # --nn_arch $nn_arch \
+    # --eval \
+
+# -----------
+# Evaluate
+# -----------
+# CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
+#     --eval \
+#     --rundir projects/$prjname/split_81_tile_ge_dd1_dd2_2021-05-11_h11-m47 \
+#     --target $target \
+#     --split_on $split_on \
+#     --split_id $split_id \
+#     --id_name $id_name \
+#     --prjname $prjname \
+#     --dataname $dataname \
+#     --n_samples $n_samples \
+#     --tfr_dir_name $tfr_dir_name \
+#     --pred_tfr_dir_name $pred_tfr_dir_name \
+#     --use_tile --use_ge --use_dd1 --use_dd2
