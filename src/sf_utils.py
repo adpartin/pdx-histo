@@ -652,7 +652,6 @@ def interleave_tfrecords(tfrecords, batch_size, balance, finite,
     return dataset, dataset_with_smp_names, global_num_tiles
 
 
-
 def get_categories_from_manifest(tfrecords, manifest, outcomes, MODEL_TYPE="categorical"):
     """ ... """
     categories = {}
