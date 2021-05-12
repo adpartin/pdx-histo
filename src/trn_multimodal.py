@@ -136,7 +136,7 @@ split_on = "none" if args.split_on is (None or "none") else args.split_on
 
 
 # Create project dir (if it doesn't exist)
-import ipdb; ipdb.set_trace()
+# import ipdb; ipdb.set_trace()
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 os.makedirs(prjdir, exist_ok=True)
 
