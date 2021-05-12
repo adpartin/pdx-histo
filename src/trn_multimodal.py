@@ -136,7 +136,7 @@ split_on = "none" if args.split_on is (None or "none") else args.split_on
 
 
 # Create project dir (if it doesn't exist)
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 os.makedirs(prjdir, exist_ok=True)
 
@@ -349,9 +349,11 @@ te_smp_names = list(te_meta[args.id_name].values)
 # TFRecords filenames
 train_tfr_files = get_tfr_files(tfr_dir, tr_smp_names)
 val_tfr_files = get_tfr_files(tfr_dir, vl_smp_names)
-# test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)
-test_tfr_files = get_tfr_files(pred_tfr_dir, te_smp_names)
-print("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
+if args.eval is True:
+    assert pred_tfr_dir.exists(), f"Dir {pred_tfr_dir} is not found."
+    # test_tfr_files = get_tfr_files(tfr_dir, te_smp_names)  # use same tfr_dir for eval
+    test_tfr_files = get_tfr_files(pred_tfr_dir, te_smp_names)
+    # print_fn("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
 
 # Missing tfrecords
 print("\nThese samples miss a tfrecord:")
