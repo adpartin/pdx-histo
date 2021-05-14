@@ -7,6 +7,7 @@
 # conda create -n pdx_rbdgx python=3.7 pip --yes
 
 conda install -c anaconda tensorflow-gpu=2.4.1 --yes
+conda install -c anaconda flake8 --yes
 
 conda install -c conda-forge ipdb=0.13.4 \
     ipython=7.19.0 \
