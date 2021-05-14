@@ -230,7 +230,6 @@ def parse_tfrec_fn_rna(record,
 
 
 def parse_tfrec_fn_rsp(record,
-                       # include_smp_names=True,
                        include_meta=False,
                        use_tile=True,
                        use_ge=False,
@@ -258,14 +257,15 @@ def parse_tfrec_fn_rsp(record,
     smp = features[id_name]
 
     # Meta
-    meta = {}
-    meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
-                   "Response",
-                   "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
-                   "ctype", "csite",
-                   "Drug1", "Drug2", "trt", "aug"]
-    for f in meta_fields:
-        meta[f] = features[f] if f in features.keys() else None
+    if include_meta:
+        meta = {}
+        meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
+                       "Response",
+                       "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
+                       "ctype", "csite",
+                       "Drug1", "Drug2", "trt", "aug"]
+        for f in meta_fields:
+            meta[f] = features[f] if f in features.keys() else None
     
     #if MODEL_TYPE == 'linear':
     #    #label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
