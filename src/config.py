@@ -80,6 +80,8 @@ cfg.ID_NAME = 'smp'
 cfg.TILE_PX = 299
 cfg.TILE_UM = 302
 cfg.IMAGE_SIZE = cfg.TILE_PX 
+cfg.GE_SIZE = 976
+cfg.DD_SIZE = 1993
 
 # TF names
 tf_cfg = types.SimpleNamespace()

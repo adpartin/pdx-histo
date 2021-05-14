@@ -102,8 +102,9 @@ FEA_SPEC_RSP_DRUG_PAIR = {
     "Response": tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
     # "Response": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
 
-    # 'ge_data': tf.io.FixedLenFeature(shape=(GE_LEN,), dtype=tf.float32),
-    # 'dd_data': tf.io.FixedLenFeature(shape=(DD_LEN,), dtype=tf.float32),
+    # 'ge_data': tf.io.FixedLenFeature(shape=(cfg.GE_SIZE,), dtype=tf.float32),
+    # 'dd1_data': tf.io.FixedLenFeature(shape=(cfg.DD_SIZE,), dtype=tf.float32),
+    # 'dd2_data': tf.io.FixedLenFeature(shape=(cfg.DD_SIZE,), dtype=tf.float32),
     "ge_data":  tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "dd1_data": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "dd2_data": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
