@@ -299,6 +299,10 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         y_pred_prob.append(preds)
         preds = np.squeeze(preds)
 
+        # If batch size is 1, np.squeeze will create an array of dim [0, 0]
+        if np.ndim(preds) == 0:
+            preds = [np.asscalar(preds)]
+
         # Predictions
         if np.ndim(preds) > 1:
             y_pred_label.extend( np.argmax(preds, axis=1).tolist() )  # SparseCategoricalCrossentropy
