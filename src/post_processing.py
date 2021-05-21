@@ -40,8 +40,9 @@ all_te_scores = []
 missing_scores = []
 for split_dir in splits_dir_list:
     split_id = str(split_dir.name).split("split_")[1].split("_")[0]
-    if (split_dir/"test_scores.csv").exists():
-        te_scores = pd.read_csv(split_dir/"test_scores.csv")
+    fpath = split_dir/"test_scores.csv"
+    if (fpath).exists():
+        te_scores = pd.read_csv(fpath)
         te_scores["split"] = split_id
         all_te_scores.append(te_scores)
     else:
@@ -50,6 +51,34 @@ for split_dir in splits_dir_list:
 print(f"Test scores were found for these splits: {missing_scores}")
 mm = pd.concat(all_te_scores, axis=0)
 mm = mm.rename(columns={"pred_for": "metric"})
+del fpath, te_scores, all_te_scores
+
+# ------------------------------------
+# Single-modal
+# ------------------------------------
+dataname = "tidy_drug_pairs_all_samples"
+prjname = "bin_rsp_drug_pairs_all_samples"
+
+datadir = fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd"
+splits_dir_list = sorted(datadir.glob("split_*"))
+
+# import ipdb; ipdb.set_trace()
+all_te_scores = []
+missing_scores = []
+for split_dir in splits_dir_list:
+    split_id = str(split_dir.name).split("split_")[1].split("_")[0]
+    fpath = split_dir/"test_keras_scores.csv"
+    if fpath.exists():
+        te_scores = pd.read_csv(fpath)
+        te_scores["split"] = split_id
+        all_te_scores.append(te_scores)
+    else:
+        missing_scores.append(split_id)
+
+print(f"Test scores were found for these splits: {missing_scores}")
+sm = pd.concat(all_te_scores, axis=0)
+sm = sm.rename(columns={"pred_for": "metric"})
+del fpath, te_scores, all_te_scores
 
 # ------------------------------------
 # LGBM
@@ -62,8 +91,9 @@ all_te_scores = []
 missing_scores = []
 for split_dir in splits_dir_list:
     split_id = str(split_dir.name).split("cv_")[1].split("_")[0]
-    if (split_dir/"te_scores.csv").exists():
-        te_scores = pd.read_csv(split_dir/"te_scores.csv")
+    fpath = split_dir/"te_scores.csv"
+    if (fpath).exists():
+        te_scores = pd.read_csv(fpath)
         te_scores["split"] = split_id
         all_te_scores.append(te_scores)
     else:
@@ -71,6 +101,8 @@ for split_dir in splits_dir_list:
 
 print(f"Test scores were found for these splits: {missing_scores}")
 lgb = pd.concat(all_te_scores, axis=0)
+del fpath, te_scores, all_te_scores
+
 
 def agg_metrics(df):
     df = df.groupby("metric").agg(smp_mean=("smp", "mean"), smp_std=("smp", "std"),

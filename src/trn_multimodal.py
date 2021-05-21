@@ -135,9 +135,6 @@ def parse_args(args):
 
 
 def run(args):
-    pprint(vars(args))
-    # import ipdb; ipdb.set_trace()
-
     split_on = "none" if args.split_on is (None or "none") else args.split_on
 
 
@@ -1062,41 +1059,39 @@ def run(args):
             calc_smp_preds(xdata=xtr, meta=tr_meta, model=model, outdir=outdir, name="train_keras", print_fn=print_fn)
 
 
-    # --------------------------
-    # Lightgbm baseline
-    # --------------------------
-    if args.use_tile is False:
-        # import ipdb; ipdb.set_trace()
-        import lightgbm as lgb
-        # from joblib import Parallel, delayed
-        lgb_cls_init_kwargs = {"boosting_type": "gbdt",
-                               "num_leaves": 31,
-                               "max_depth": -1,
-                               "learning_rate": 0.1,
-                               "n_estimators": 5000,
-                               "n_jobs": 8,
-                               "objective": "binary",
-                               "class_weight": "balanced"}
-        lgb_cls = lgb.LGBMClassifier(**lgb_cls_init_kwargs)
-        xtr_lgb = pd.concat([tr_ge, tr_dd1, tr_dd2], axis=1)
-        xvl_lgb = pd.concat([vl_ge, vl_dd1, vl_dd2], axis=1)
-        xte_lgb = pd.concat([te_ge, te_dd1, te_dd2], axis=1)
-        # https://stackoverflow.com/questions/60582050
-        lgb_cls.fit(xtr_lgb.values, ytr,
-                    eval_set=(xvl_lgb.values, yvl),
-                    early_stopping_rounds=200)
+    # # --------------------------
+    # # Lightgbm baseline
+    # # --------------------------
+    # if args.use_tile is False:
+    #     import lightgbm as lgb
+    #     lgb_cls_init_kwargs = {"boosting_type": "gbdt",
+    #                            "num_leaves": 31,
+    #                            "max_depth": -1,
+    #                            "learning_rate": 0.1,
+    #                            "n_estimators": 5000,
+    #                            "n_jobs": 8,
+    #                            "objective": "binary",
+    #                            "class_weight": "balanced"}
+    #     lgb_cls = lgb.LGBMClassifier(**lgb_cls_init_kwargs)
+    #     xtr_lgb = pd.concat([tr_ge, tr_dd1, tr_dd2], axis=1)
+    #     xvl_lgb = pd.concat([vl_ge, vl_dd1, vl_dd2], axis=1)
+    #     xte_lgb = pd.concat([te_ge, te_dd1, te_dd2], axis=1)
+    #     # https://stackoverflow.com/questions/60582050
+    #     lgb_cls.fit(xtr_lgb.values, ytr,
+    #                 eval_set=(xvl_lgb.values, yvl),
+    #                 early_stopping_rounds=200)
+    #     print_fn("\n{}".format(bold("LightGBM Classifier.")))
+    #     print_fn("Test:")
+    #     calc_smp_preds(xdata=xte_lgb, meta=te_meta, model=lgb_cls, outdir=outdir, name="test_lgb", print_fn=print_fn)
+    #     print_fn("\nVal:")
+    #     calc_smp_preds(xdata=xvl_lgb, meta=vl_meta, model=lgb_cls, outdir=outdir, name="val_lgb", print_fn=print_fn)
+    #     print_fn("\nTrain:")
+    #     calc_smp_preds(xdata=xtr_lgb, meta=tr_meta, model=lgb_cls, outdir=outdir, name="train_lgb", print_fn=print_fn)
 
-        print_fn("\n{}".format(bold("LightGBM Classifier.")))
-        print_fn("Test:")
-        calc_smp_preds(xdata=xte_lgb, meta=te_meta, model=lgb_cls, outdir=outdir, name="test_lgb", print_fn=print_fn)
-        print_fn("\nVal:")
-        calc_smp_preds(xdata=xvl_lgb, meta=vl_meta, model=lgb_cls, outdir=outdir, name="val_lgb", print_fn=print_fn)
-        print_fn("\nTrain:")
-        calc_smp_preds(xdata=xtr_lgb, meta=tr_meta, model=lgb_cls, outdir=outdir, name="train_lgb", print_fn=print_fn)
+    lg.close_logger()
 
 
 def main(args):
-    # import ipdb; ipdb.set_trace()
     args = parse_args(args)
     run(args)
 

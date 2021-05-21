@@ -491,6 +491,9 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     y_true = meta["Response"].values
     df_labels = pd.DataFrame({"y_true": y_true, "y_pred_label": y_pred_label})
 
+    # -------------------
+    # Per-sample analysis
+    # -------------------
     # Combine
     # prd = pd.concat([df_meta, df_y_pred_prob, df_labels], axis=1)
     prd = pd.concat([meta, df_y_pred_prob, df_labels], axis=1)
@@ -500,8 +503,8 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     prd.to_csv(outdir/f"{name}_smp_preds.csv", index=False)
 
     # Scores
-    scores = calc_scores(prd["y_true"].values, prd["prob"].values, mltype="cls")
-    dump_dict(scores, outdir/f"{name}_scores.txt")
+    smp_scores = calc_scores(prd["y_true"].values, prd["prob"].values, mltype="cls")
+    dump_dict(smp_scores, outdir/f"{name}_smp_scores.txt")
 
     # Confusion
     print_fn("Per-sample confusion:")
@@ -511,10 +514,11 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
                           predictions=prd["prob"].values,
                           p=p,
                           labels=["Non-response", "Response"],
-                          outpath=outdir/f"{name}_confusion.png")
+                          outpath=outdir/f"{name}_smp_confusion.png")
 
+    # ------------------
     # Per-group analysis
-    # import ipdb; ipdb.set_trace()
+    # ------------------
     grp_prd = prd.groupby("Group").agg({"prob": "mean"}).reset_index()
     # jj = prd[["Sample", "image_id", "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response", "y_true", "y_pred_label"]]
     jj = prd[["Sample", "image_id", "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response", "y_true"]]
@@ -537,6 +541,18 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
                           p=p,
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_grp_confusion.png")
+
+    # ------------------
+    # Combined
+    # ------------------
+    df_smp_scores = pd.DataFrame.from_dict(smp_scores, orient="index", columns=["smp"])
+    df_grp_scores = pd.DataFrame.from_dict(grp_scores, orient="index", columns=["Group"])
+    scores = pd.concat([df_smp_scores, df_grp_scores], axis=1)
+    scores = scores.reset_index().rename(columns={"index": "metric"})
+    scores.to_csv(outdir/f"{name}_scores.csv", index=False)
+
+    return None
+
 
 
 # def build_model_rna(pooling='max', pretrain='imagenet'):

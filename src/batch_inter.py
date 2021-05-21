@@ -25,8 +25,7 @@ pred_tfr_dir_name = "PDX_FIXED_RSP_DRUG_PAIR"
 # # --------
 # datadir = fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd"
 # splits_dir_list = sorted(datadir.glob("split_*"))
-# base_args_list = ["--train",
-#                   "--eval",
+# base_args_list = ["--eval",
 #                   "--tfr_dir_name", tfr_dir_name,
 #                   "--pred_tfr_dir_name", pred_tfr_dir_name,
 #                   "--dataname", dataname,
@@ -42,7 +41,6 @@ pred_tfr_dir_name = "PDX_FIXED_RSP_DRUG_PAIR"
 # -----------
 datadir = fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd"
 splits_dir_list = sorted(datadir.glob("split_*"))
-
 base_args_list = ["--eval",
                   "--tfr_dir_name", tfr_dir_name,
                   "--pred_tfr_dir_name", pred_tfr_dir_name,
@@ -64,4 +62,4 @@ for split_dir in splits_dir_list:
     args_list.extend(["--rundir", str(split_dir), "--split_id", split_id])
     trn_multimodal.main(args_list)
 
-print("\nDone.")
+print("Done.")
