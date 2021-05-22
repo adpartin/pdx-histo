@@ -28,23 +28,33 @@ n_samples=-1
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
 tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles
+# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.4_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_10_tiles
+
+# Dir name that contains TFRecords for predictions
+pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"
 
-trn_phase=$2
-# nn_arch=$3
+# split_id=81
+# split_id=0
+split_id=$2
 
+# -----------
+# Train
+# -----------
 CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
+    --train \
+    --eval \
     --target $target \
     --split_on $split_on \
+    --split_id $split_id \
     --id_name $id_name \
     --prjname $prjname \
-    --trn_phase $trn_phase \
     --dataname $dataname \
     --n_samples $n_samples \
     --tfr_dir_name $tfr_dir_name \
+    --pred_tfr_dir_name $pred_tfr_dir_name \
     --use_tile --use_dd1 --use_dd2
 
-    # --nn_arch $nn_arch \

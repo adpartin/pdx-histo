@@ -831,7 +831,10 @@ def run(args):
         # Callbacks list
         monitor = "val_loss"
         # monitor = "val_pr-auc"
-        callbacks = keras_callbacks(outdir, monitor=monitor, patience=params.patience)
+        save_best_only = False
+        callbacks = keras_callbacks(outdir, monitor=monitor,
+                                    save_best_only=params.save_best_only,
+                                    patience=params.patience)
         # callbacks = keras_callbacks(outdir, monitor="auc", patience=params.patience)
 
         # Learning rate schedule
@@ -1012,7 +1015,7 @@ def run(args):
         if model is None:
             model = load_best_model(outdir)
 
-        # import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
         if args.use_tile:
             create_tf_data_eval_kwargs.update({"tfrecords": test_tfr_files, "include_meta": True})
             test_data = create_tf_data(

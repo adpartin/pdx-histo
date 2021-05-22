@@ -42,7 +42,7 @@ ModelDict = {
 }
 
 
-def keras_callbacks(outdir, monitor="val_loss", patience=5):
+def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5):
     """ ... """
     callbacks = []
 
@@ -57,13 +57,16 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
         mode = "auto"
 
     # filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
-    filepath = str(outdir/"best_model.ckpt")
+    if save_best_only is True:
+        filepath = str(outdir/"best_model.ckpt")
+    else:
+        filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
     checkpointer = ModelCheckpoint(filepath,
                                    monitor=monitor,
                                    verbose=0,
                                    mode=mode,
                                    save_weights_only=False,
-                                   save_best_only=True,
+                                   save_best_only=save_best_only,
                                    save_freq="epoch")
     callbacks.append(checkpointer)
 
@@ -254,11 +257,14 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         merged_model = Dropout(dropout1_top)(merged_model)
 
     # Output
-    softmax_output = tf.keras.layers.Dense(
-        1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
+    # output = tf.keras.layers.Dense(
+    #     1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
+
+    logits = tf.keras.layers.Dense(1, name="logits")(merged_model)
+    output = tf.keras.layers.Activation("sigmoid", name="Response")(logits)
 
     # Assemble final model
-    model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
+    model = tf.keras.Model(inputs=model_inputs, outputs=output)
 
     metrics = [
           # keras.metrics.FalsePositives(name="fp"),
@@ -444,6 +450,7 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
                           predictions=grp_preds["prob"].values,
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_grp_confusion.png")
+    return None
 
 
 def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
