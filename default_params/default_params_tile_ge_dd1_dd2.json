@@ -20,6 +20,7 @@
     "patience": 10,
     "pooling": "avg",
     "pretrain": "imagenet",
+    "save_best_only": true,
     "shuffle_size": 8192,
     "single_drug": false,
     "tile_px": 299,

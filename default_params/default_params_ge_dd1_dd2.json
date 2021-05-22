@@ -14,6 +14,7 @@
     "learning_rate": 0.0005,
     "optimizer": "Adam",
     "patience": 30,
+    "save_best_only": true,
     "single_drug": false,
     "tile_px": 299,
     "tile_um": 302,
