@@ -7,6 +7,7 @@ from scipy.stats import pearsonr, spearmanr
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+from sklearn.calibration import calibration_curve
 
 
 def calc_preds(model, x, y, mltype):
@@ -106,6 +107,30 @@ def save_confusion_matrix(true_labels, predictions, p=0.5,
     ax.set_yticklabels(labels)
     ax.set(ylabel="True", xlabel="Predicted")
     ax.set_title("Confusion matrix at p={:.2f}".format(p))
+    plt.savefig(outpath, bbox_inches="tight", dpi=150)
+
+
+def plot_calibration_curve(name, fig_index, y_true, probs, outpath):
+    """ Plot calibration curve for est w/o and with calibration.
+    https://towardsdatascience.com/classifier-calibration-7d0be1e05452
+    """
+    fig = plt.figure(fig_index, figsize=(10, 10))
+    ax1 = plt.subplot2grid(shape=(3, 1), loc=(0, 0), rowspan=2)
+    ax2 = plt.subplot2grid(shape=(3, 1), loc=(2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+
+    frac_of_pos, mean_pred_value = calibration_curve(y_true, probs, n_bins=10)
+
+    ax1.plot(mean_pred_value, frac_of_pos, "s-", label=f"{name}")
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="best")
+    ax1.set_title(f"Calibration plot ({name})")
+
+    ax2.hist(probs, range=(0, 1), bins=10, label=name, histtype="step", lw=2)
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
     plt.savefig(outpath, bbox_inches="tight", dpi=150)
 
 
