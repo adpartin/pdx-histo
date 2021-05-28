@@ -46,6 +46,7 @@ split_id=$2
 # -----------
 CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
     --train \
+    --eval \
     --target $target \
     --split_on $split_on \
     --split_id $split_id \

@@ -72,7 +72,3 @@ for split_dir in splits_dir_list:
 
 timer.display_timer()
 print("Done.")
-
-
-if __name__ == "__main__":
-    main()
