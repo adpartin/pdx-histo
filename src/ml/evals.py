@@ -47,6 +47,7 @@ def dump_preds(y_true, y_pred, meta=None, outpath='./preds.csv'):
     else:
         preds = pd.concat([y_true, y_pred], axis=1)
     preds.to_csv(Path(outpath), index=False)
+    return None
 
 
 def calc_scores(y_true, y_pred, mltype, metrics=None):
@@ -109,6 +110,8 @@ def save_confusion_matrix(true_labels, predictions, p=0.5,
     ax.set_title("Confusion matrix at p={:.2f}".format(p))
     plt.savefig(outpath, bbox_inches="tight", dpi=150)
 
+    return None
+
 
 def plot_calibration_curve(name, fig_index, y_true, probs, outpath):
     """ Plot calibration curve for est w/o and with calibration.
@@ -132,6 +135,8 @@ def plot_calibration_curve(name, fig_index, y_true, probs, outpath):
     ax2.set_xlabel("Mean predicted value")
     ax2.set_ylabel("Count")
     plt.savefig(outpath, bbox_inches="tight", dpi=150)
+
+    return None
 
 
 # def scores_to_df(scores_all):
