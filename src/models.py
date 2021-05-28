@@ -87,19 +87,22 @@ def keras_callbacks(outdir, monitor="val_loss", patience=5):
     return callbacks
 
 
-def load_best_model(models_dir):
+def load_best_model(models_dir, verbose=True, print_fn=print):
     """ Load the best checkpointed model where best is defined as a model with
     the lowest val_loss. The names of checkpointed models follow the same naming
     convention that contains the val_loss: model_{epoch:02d}-{val_loss:.3f}.ckpt
     """
     if (models_dir/"best_model.ckpt").exists():
-        model = tf.keras.models.load_model(models_dir/"best_model.ckpt")
+        model_path = models_dir/"best_model.ckpt"
+        model = tf.keras.models.load_model(model_path)
     else:
         model_paths = sorted(models_dir.glob("model*.ckpt"))
         values = np.array([float(p.name.split(".ckpt")[0].split("-")[1]) for p in model_paths])
         # best_value = min(values)
         model_path = model_paths[np.argmin(values)]
         model = tf.keras.models.load_model(model_path)
+    if verbose:
+        print_fn(f"Loading model from: {model_path}")
     return model
 
 
@@ -264,7 +267,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
           # keras.metrics.FalsePositives(name="fp"),
           # keras.metrics.TruePositives(name="tp"),
           keras.metrics.AUC(name="roc-auc", curve="ROC"),
-          keras.metrics.AUC(name="pr-auc", curve="PR"),
+          keras.metrics.AUC(name="prc-auc", curve="PR"),
     ]
 
     if optimizer == "SGD":
@@ -345,7 +348,7 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
     return prd
 
 
-def agg_tile_preds(prd, agg_by, meta, outdir):
+def agg_tile_preds(prd, agg_by, meta, agg_method="mean"):
     """ Aggregate tile predictions per agg_by. """
     n_rows = prd.shape[0]
     unq_items = meta[agg_by].nunique()
@@ -355,13 +358,13 @@ def agg_tile_preds(prd, agg_by, meta, outdir):
         assert prd.shape[0] == n_rows, "Mismatch in number of rows after merge."
 
     # Agg tile pred on agg_by
-    agg_preds = prd.groupby(agg_by).agg({"prob": "mean"}).reset_index()
+    agg_preds = prd.groupby(agg_by).agg({"prob": agg_method}).reset_index()
     # agg_preds = agg_preds.rename(columns={"prob": f"prob_mean_by_{agg_by}"})
 
     # Merge with meta
     mm = meta.merge(agg_preds, on=agg_by, how="inner")
     mm = mm.drop_duplicates(subset=[agg_by, "Response"])
-    assert mm.shape[0] == unq_items, "Mismatch in number of rows after merge."
+    assert mm.shape[0] == unq_items, "Mismatch in the number of rows after merge."
 
     """
     # Efficient use of groupby().apply() !!
@@ -387,8 +390,9 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
 
     # Aggregate predictions
     # import ipdb; ipdb.set_trace()
-    smp_preds = agg_tile_preds(tile_preds, agg_by="smp", meta=meta, outdir=outdir)
-    grp_preds = agg_tile_preds(tile_preds, agg_by="Group",meta=meta, outdir=outdir)
+    agg_method = "mean"
+    smp_preds = agg_tile_preds(tile_preds, agg_by="smp", meta=meta, agg_method=agg_method)
+    grp_preds = agg_tile_preds(tile_preds, agg_by="Group", meta=meta, agg_method=agg_method)
 
     # Save predictions
     tile_preds.to_csv(outdir/f"{name}_tile_preds.csv", index=False)
@@ -444,6 +448,7 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
                           predictions=grp_preds["prob"].values,
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_grp_confusion.png")
+    return None
 
 
 def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):

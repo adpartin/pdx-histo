@@ -302,7 +302,7 @@ def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
     # Cast image_id values to int
     cref['image_id'] = [str(int(x)) for x in cref['image_id'].values]
     # cref['image_id'] = [int(x) if ~np.isnan(x) else x for x in cref['image_id'].values]
-    
+
     # Remove bad samples with bad slides
     if drop_bad_slides:
         bad_slides = [str(slide) for slide in cfg.BAD_SLIDES]
@@ -311,7 +311,10 @@ def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
         print(f'Bad slides: {bad_slides}')
         cref = cref[~cref.image_id.isin(bad_slides)].reset_index(drop=True)
         print(f'cref after: {cref.shape}')
-    
+        
+    # Add passage number and sample types
+    # TODO
+
     return cref
 
 
