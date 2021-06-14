@@ -14,6 +14,10 @@ from src.config import cfg
 PDX_SAMPLE_COLS = ['model', 'patient_id', 'specimen_id', 'sample_id']
 
 
+def encode_categorical(vv):
+    return {value: label for label, value in enumerate(sorted(np.unique(vv)))}
+
+
 def get_dups(df):
     """ Return df of duplicates. """
     df = df[df.duplicated(keep=False) == True]
@@ -78,14 +82,14 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     if "Image_ID" in rsp.columns:
         # rsp = rsp.astype({"Image_ID": str})
         rsp = rsp.drop(columns="Image_ID")
-    
-    # Remove PDX samples that were generated from cryo-preserved samples
+
+    # Remove PDX samples that were re-grown from cryo-preserved samples
     # https://pdmr.cancer.gov/database/default.htm
     rsp = rsp[rsp["Sample"].map(lambda s: True if "RG" not in s else False)].reset_index(drop=True)
-    
+
     # Remove 'NCIPDM.' from sample name
-    rsp['Sample'] = rsp['Sample'].map(lambda x: x.split('NCIPDM.')[1])    
-    
+    rsp['Sample'] = rsp['Sample'].map(lambda x: x.split('NCIPDM.')[1])
+
     # ------------------------------------
     # Augment Drug2 from Drug1
     # TODO: need to test the code below!
@@ -124,7 +128,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     # rsp = pd.concat([rsp, df_aug], axis=0)
     # rsp = rsp.sort_values(["grp", "aug", "Sample"]).reset_index(drop=True)
     # ------------------------------------
-    
+
     # import ipdb; ipdb.set_trace()
 
     # Single drug or drug pairs
@@ -144,7 +148,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         # rsp = rsp.drop_duplicates()
     else:
         # Create drug treatment string ids
-        # rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]        
+        # rsp["trt"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
         rsp["trt"] = [str(d1) + "_" + str(d2) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
 
         # Augment drug-pair treatments
@@ -152,7 +156,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
 
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     # rsp = parse_Sample_col(rsp)
-    
+
     # Create column of treatments
     col_name = "smp"
     if col_name not in rsp.columns:
@@ -208,10 +212,10 @@ def load_rna(rna_dpath=cfg.RNA_DPATH, add_prefix: bool=True, fea_dtype=np.float3
 
     fea_cast = {c: fea_dtype for c in rna.columns if c.startswith(fea_pfx)}
     rna = rna.astype(fea_cast)
-        
+
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     rna = parse_Sample_col(rna)
-    
+
     return rna
 
 
@@ -253,7 +257,7 @@ def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, add_prefix: bool=True, fea_dt
 
         # col_ids = dd_fea.std(axis=0, skipna=True, numeric_only=True).values == 0
         # dd_fea = dd_fea.iloc[:, ~col_ids]
-        
+
         # print(dd_fea.nunique(dropna=True).sort_values())
         # ii = dd_fea.nunique(dropna=True) == 1
         # gg = dd_fea.iloc[:, ii.values]
@@ -273,32 +277,32 @@ def load_dd(dd_dpath=cfg.DD_DPATH, treat_nan=True, add_prefix: bool=True, fea_dt
 
     fea_cast = {c: fea_dtype for c in dd.columns if c.startswith(fea_pfx)}
     dd = dd.astype(fea_cast)
-        
+
     return dd
 
 
 def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
     """ PDX slide meta that comes with the origianl slides (from NCI/Globus). """
     cref = pd.read_excel(path, engine='openpyxl', header=2)
-    
+
     cref = cref.rename(columns={'Capture Date': 'capture_date',
                                 'Image ID': 'image_id',
                                 'Model': 'model',
                                 'Sample ID': 'sample_id',
                                 'Date Loaded to BW_Transfers': 'date_loaded_to_bw_transfers'})
-      
-    cref = cref.drop(columns=['capture_date', 'date_loaded_to_bw_transfers', 'Notes'])    
-    
+
+    cref = cref.drop(columns=['capture_date', 'date_loaded_to_bw_transfers', 'Notes'])
+
     # Drop nan
     cref = cref.dropna(subset=['model', 'image_id']).reset_index(drop=True)
-    
+
     cref.insert(loc=1, column='patient_id',  value=cref['model'].map(lambda x: x.split('~')[0]), allow_duplicates=True)
     cref.insert(loc=2, column='specimen_id', value=cref['model'].map(lambda x: x.split('~')[1]), allow_duplicates=True)
-    
+
     # Cast and sort
     cref = cref.astype({c: str for c in PDX_SAMPLE_COLS})
     cref = cref.sort_values(PDX_SAMPLE_COLS).reset_index(drop=True)
-    
+
     # Cast image_id values to int
     cref['image_id'] = [str(int(x)) for x in cref['image_id'].values]
     # cref['image_id'] = [int(x) if ~np.isnan(x) else x for x in cref['image_id'].values]
@@ -311,7 +315,7 @@ def load_crossref(path=cfg.METAPATH/cfg.CROSSREF_FNAME, drop_bad_slides=True):
         print(f'Bad slides: {bad_slides}')
         cref = cref[~cref.image_id.isin(bad_slides)].reset_index(drop=True)
         print(f'cref after: {cref.shape}')
-        
+
     # Add passage number and sample types
     # TODO
 
@@ -341,7 +345,7 @@ def load_pdx_meta():
     return yy
 
 
-def load_pdx_meta2(path=cfg.METAPATH/cfg.PDX_META_FNAME):
+def load_pdx_meta2(path=cfg.METAPATH/cfg.PDX_META_FNAME, add_type_labels: bool=False):
     """ PDX meta (from Yitan updated). """
     file_type = str(path).split('.')[-1]
     if file_type == 'csv':
@@ -351,7 +355,14 @@ def load_pdx_meta2(path=cfg.METAPATH/cfg.PDX_META_FNAME):
         yy = yy.dropna(subset=['patient_id']).reset_index(drop=True)
     else:
         raise f"File type ({file_type}) not supported."
-    
+
+    # Encode categorical cols
+    if add_type_labels:
+        ctype_enc = encode_categorical(yy['ctype'])
+        csite_enc = encode_categorical(yy['csite'])
+        yy['ctype_label'] = yy['ctype'].map(lambda x: ctype_enc[x])
+        yy['csite_label'] = yy['csite'].map(lambda x: csite_enc[x])
+
     yy = yy.sort_values(['patient_id', 'specimen_id'], ascending=True).reset_index(drop=True)
     yy = yy.astype(str)
     return yy

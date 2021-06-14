@@ -38,7 +38,7 @@ rsp = load_data.load_rsp(single_drug=False)
 rna = load_data.load_rna()
 dd = load_data.load_dd()
 cref = load_data.load_crossref()
-pdx = load_data.load_pdx_meta2()
+pdx = load_data.load_pdx_meta2(add_type_labels=True)
 
 # Merge rsp with rna
 print("\nMerge rsp and rna")
