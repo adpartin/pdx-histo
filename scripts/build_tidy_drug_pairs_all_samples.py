@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 
 # import pdb; pdb.set_trace()
-# import ipdb; ipdb.set_trace()
+import ipdb; ipdb.set_trace()
 
 fdir = Path(__file__).resolve().parent
 sys.path.append(str(fdir/".."))
@@ -34,71 +34,62 @@ os.makedirs(outdir, exist_ok=True)
 target = "Response"
 
 # Load data
-rsp = load_data.load_rsp(single_drug=False)
-rna = load_data.load_rna()
-dd = load_data.load_dd()
-cref = load_data.load_crossref()
-pdx = load_data.load_pdx_meta2(add_type_labels=True)
+data = load_data.load_tidy_dataset_rsp(single_drug=False, add_type_labels=True)
+# rsp = load_data.load_rsp(single_drug=False)
+# rna = load_data.load_rna()
+# dd = load_data.load_dd()
+# cref = load_data.load_crossref()
+# pdx = load_data.load_pdx_meta2(add_type_labels=True)
 
-# Merge rsp with rna
-print("\nMerge rsp and rna")
-print(rsp.shape)
-print(rna.shape)
-rsp_rna = rsp.merge(rna, on="Sample", how="inner")
-print(rsp_rna.shape)
+# # Merge rsp with rna
+# print("\nMerge rsp and rna")
+# print(rsp.shape)
+# print(rna.shape)
+# rsp_rna = rsp.merge(rna, on="Sample", how="inner")
+# print(rsp_rna.shape)
 
-# Merge with dd
-print("Merge with descriptors")
-print(rsp_rna.shape)
-print(dd.shape)
-# d1 = set(rsp_rna.Drug1.values)
-# d2 = set(rsp_rna.Drug2.values)
-# dd_vec = set(dd.ID.values)
-# print(len(set(d1)))
-# print(len(set(d2)))
-# print(len(set(d1).intersection(set(d2))))
-# print(len(set(dd_vec).intersection(set(d2))))
-# print(set(d2).difference(set(dd_vec)))
+# # Merge with dd
+# print("Merge with descriptors")
+# print(rsp_rna.shape)
+# print(dd.shape)
 
-dd1 = dd.copy()
-dd2 = dd.copy()
-dd1 = dd1.rename(columns={"ID": "Drug1"})
-dd2 = dd2.rename(columns={"ID": "Drug2"})
-fea_id0 = 1
-fea_pfx = "dd_"
-dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
-dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+# dd1 = dd.copy()
+# dd2 = dd.copy()
+# dd1 = dd1.rename(columns={"ID": "Drug1"})
+# dd2 = dd2.rename(columns={"ID": "Drug2"})
+# fea_id0 = 1
+# fea_pfx = "dd_"
+# dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+# dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
 
-tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
-rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
-# print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
-print(rsp_rna_dd.shape)
-del dd, dd1, dd2, tmp
+# tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
+# rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
+# # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
+# print(rsp_rna_dd.shape)
+# del dd, dd1, dd2, tmp
 
-# Merge with pdx meta
-print("Merge with pdx meta")
-print(pdx.shape)
-print(rsp_rna_dd.shape)
-rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
-print(rsp_rna_dd_pdx.shape)
+# # Merge with pdx meta
+# print("Merge with pdx meta")
+# print(pdx.shape)
+# print(rsp_rna_dd.shape)
+# rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
+# print(rsp_rna_dd_pdx.shape)
 
-# Merge cref
-print("Merge with cref")
-# (we loose some samples because we filter the bad slides)
-print(cref.shape)
-print(rsp_rna_dd_pdx.shape)
-data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
-print(data.shape)
+# # Merge cref
+# print("Merge with cref")
+# # (we loose some samples because we filter the bad slides)
+# print(cref.shape)
+# print(rsp_rna_dd_pdx.shape)
+# data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
+# print(data.shape)
 
-# Add 'slide' column
-data.insert(loc=5, column="slide", value=data["image_id"], allow_duplicates=True)
+# # Add 'slide' column
+# data.insert(loc=5, column="slide", value=data["image_id"], allow_duplicates=True)
 
-if "index" in data.columns:
-    cols = data.columns.tolist()
-    cols.remove("index")
-    data = data[["index"] + cols]
-
-# import ipdb; ipdb.set_trace()
+# if "index" in data.columns:
+#     cols = data.columns.tolist()
+#     cols.remove("index")
+#     data = data[["index"] + cols]
 
 df = data; del data
 pprint(df.groupby(["ctype", "Response"]).agg({"Group": "nunique", "smp": "nunique"}).reset_index().rename(
