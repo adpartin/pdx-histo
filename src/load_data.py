@@ -417,6 +417,121 @@ def load_slides_meta(path=cfg.METAPATH/cfg.SLIDES_META_FNAME):
     return slides_meta
 
 
+def load_tidy_dataset_rsp(single_drug: bool=False, add_type_labels: bool=True):
+    """ Create a tidy dataframe that contains gene expression, drug descriptors
+    for both drugs, metadata, and the drug response.
+
+    Args:
+        single_drug: if True, include only single drug treatments; if False, single drug and drug pairs are included
+        add_type_labels: if True, add the columns "csite_label" and "ctype_label"
+    """
+    # Load data
+    rsp = load_rsp(single_drug=single_drug)
+    rna = load_rna()
+    dd = load_dd()
+    cref = load_crossref()
+    pdx = load_pdx_meta2(add_type_labels=True)
+
+    # Merge rsp with rna
+    print("\nMerge rsp and rna")
+    print(rsp.shape)
+    print(rna.shape)
+    rsp_rna = rsp.merge(rna, on="Sample", how="inner")
+    print(rsp_rna.shape)
+
+    # Merge with dd
+    print("Merge with descriptors")
+    print(rsp_rna.shape)
+    print(dd.shape)
+
+    dd1 = dd.copy()
+    dd2 = dd.copy()
+    dd1 = dd1.rename(columns={"ID": "Drug1"})
+    dd2 = dd2.rename(columns={"ID": "Drug2"})
+    fea_id0 = 1
+    fea_pfx = "dd_"
+    dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+    dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+
+    tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
+    rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
+    # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
+    print(rsp_rna_dd.shape)
+    del dd, dd1, dd2, tmp
+
+    # Merge with pdx meta
+    print("Merge with pdx meta")
+    print(pdx.shape)
+    print(rsp_rna_dd.shape)
+    rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
+    print(rsp_rna_dd_pdx.shape)
+
+    # Merge with pdx meta
+    print("Merge with pdx meta")
+    print(pdx.shape)
+    print(rsp_rna_dd.shape)
+    rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
+    print(rsp_rna_dd_pdx.shape)
+
+    # Merge cref
+    print("Merge with cref")
+    # (we loose some samples because we filter the bad slides)
+    print(cref.shape)
+    print(rsp_rna_dd_pdx.shape)
+    data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
+    print(data.shape)
+
+    # -------------------
+    # Explore (merge and identify from which df the items are coming from)
+    # https://kanoki.org/2019/07/04/pandas-difference-between-two-dataframes/
+    # --------
+    # mrg_outer = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='outer', indicator=True)
+    # print('Outer merge', mrg_outer.shape)
+    # print(mrg_outer['_merge'].value_counts())
+
+    # miss_r = mrg_outer.loc[lambda x: x['_merge']=='right_only']
+    # miss_r = miss_r.sort_values(PDX_SAMPLE_COLS, ascending=True)
+    # print('Missing right items', miss_r.shape)
+
+    # miss_l = mrg_outer.loc[lambda x: x['_merge']=='left_only']
+    # miss_l = miss_l.sort_values(PDX_SAMPLE_COLS, ascending=True)
+    # print('Missing left items', miss_l.shape)
+
+    # print(miss_r.patient_id.unique())
+    # jj = load_data.load_pdx_meta_jc()
+    # miss_found = jj[ jj.patient_id.isin(miss_r.patient_id.unique()) ]
+    # print(miss_r.Response.value_counts())
+    # print(miss_found)
+
+    # print(miss_r[miss_r.Response==1])
+    # -------------------
+
+    # Add 'slide' column
+    data.insert(loc=5, column="slide", value=data["image_id"], allow_duplicates=True)
+
+    if "index" in data.columns:
+        # Put "index" in first column
+        cols = data.columns.tolist()
+        cols.remove("index")
+        data = data[["index"] + cols]
+
+    # Re-org cols
+    dim = data.shape[1]
+    meta_cols = ["index", "smp", "Sample",
+                 "model", "patient_id", "specimen_id", "sample_id", "image_id", "slide",
+                 "csite_src", "ctype_src", "csite", "ctype", "csite_label", "ctype_label",
+                 "stage_or_grade",
+                 "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]
+    ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
+    # dd_cols = [c for c in data.columns if str(c).startswith('dd_')]
+    dd1_cols = [c for c in data.columns if str(c).startswith("dd1_")]
+    dd2_cols = [c for c in data.columns if str(c).startswith("dd2_")]
+    data = data[meta_cols + ge_cols + dd1_cols + dd2_cols]
+    assert data.shape[1] == dim, "There are missing cols after re-organizing the cols."
+
+    return data
+
+
 # def load_meta(meta_dpath=cfg.META_DPATH, verbose=False):
 #     """ Load the combined metadata. """
 #     meta = pd.read_csv(meta_dpath)
