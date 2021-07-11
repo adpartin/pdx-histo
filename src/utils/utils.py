@@ -101,7 +101,14 @@ def create_outdir_2(outdir, args=None):
          "_", "h", str(t.hour).zfill(2), "-", "m", str(t.minute).zfill(2)]
     t = "".join([str(i) for i in t])
 
-    name = fea_types_to_str_name(args) + "_" + t
+    name = fea_types_to_str_name(args)
+
+    if args.drop_single_drug:
+        name = name + "_drop_singles"
+    if args.drop_drug_pair_aug:
+        name = name + "_drop_aug"
+
+    name = name + "_" + t
     name = "split_" + str(args.split_id) + "_" + name
 
     outdir = Path(outdir)

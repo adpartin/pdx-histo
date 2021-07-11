@@ -129,6 +129,12 @@ def parse_args(args):
     parser.add_argument("--use_dd2",
                         action="store_true",
                         help="Use drug descriptors for drug 2.")
+    parser.add_argument("--drop_single_drug",
+                        action="store_true",
+                        help="Whether to drop single drug treatments from training set.")
+    parser.add_argument("--drop_drug_pair_aug",
+                        action="store_true",
+                        help="Whether to drop the augmented drug-pair samples from training set.")
     args, other_args = parser.parse_known_args(args)
     # args = parser.parse_args(args)
     return args
@@ -174,7 +180,7 @@ def run(args):
     # Load dataframe (annotations)
     annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
     dtype = {"image_id": str, "slide": str}
-    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"])
+    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"], low_memory=False)
     # data = data.astype({"image_id": str, "slide": str})
     print_fn(data.shape)
 
@@ -258,6 +264,19 @@ def run(args):
         if args.n_samples < len(te_id):
             te_id = te_id[:args.n_samples]
 
+    # Drop the augmented drug-pair samples
+    if args.drop_drug_pair_aug:
+        df = data[data[index_col_name].isin(tr_id)]
+        df = df[df["pair_aug"] == False].reset_index(drop=True)
+        tr_id_tmp = df[index_col_name].values
+        tr_id = sorted(set(tr_id_tmp).intersection(set(tr_id)))
+
+    # Drop single drug samples
+    if args.drop_single_drug:
+        df = data[data[index_col_name].isin(tr_id)]
+        df = df[df["single"] == False].reset_index(drop=True)
+        tr_id_tmp = df[index_col_name].values
+        tr_id = sorted(set(tr_id_tmp).intersection(set(tr_id)))
 
     # --------------
     # TidyData
@@ -300,6 +319,10 @@ def run(args):
               "index_col_name": index_col_name,
               "split_on": split_on
               }
+    # trn_kwargs = kwargs.copy()
+    # trn_kwargs.update({"drop_drug_pair_aug": args.drop_drug_pair_aug,
+    #                    "drop_single_drug": args.drop_single_drug})
+    # tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **trn_kwargs)
     tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
     vl_ge, vl_dd1, vl_dd2, vl_meta = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
     te_ge, te_dd1, te_dd2, te_meta = split_data_and_extract_fea(data, ids=te_id, **kwargs)
@@ -326,9 +349,9 @@ def run(args):
 
     # Print split ratios
     print_fn("")
-    print_fn("Train samples {} ({:.2f}%)".format( len(tr_id), 100*len(tr_id)/data.shape[0] ))
-    print_fn("Val   samples {} ({:.2f}%)".format( len(vl_id), 100*len(vl_id)/data.shape[0] ))
-    print_fn("Test  samples {} ({:.2f}%)".format( len(te_id), 100*len(te_id)/data.shape[0] ))
+    print_fn("Train samples {} ({:.2f}%)".format( tr_meta.shape[0], 100*tr_meta.shape[0]/data.shape[0] ))
+    print_fn("Val   samples {} ({:.2f}%)".format( vl_meta.shape[0], 100*vl_meta.shape[0]/data.shape[0] ))
+    print_fn("Test  samples {} ({:.2f}%)".format( te_meta.shape[0], 100*te_meta.shape[0]/data.shape[0] ))
 
     tr_grp_unq = set(tr_meta[split_on].values)
     vl_grp_unq = set(vl_meta[split_on].values)
@@ -519,7 +542,8 @@ def run(args):
 
     # Loss and target
     if args.use_tile:
-        loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
+        # loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
+        loss = losses.BinaryCrossentropy()
     else:
         if params.y_encoding == "onehot":
             if index_col_name in data.columns:
@@ -541,7 +565,8 @@ def run(args):
                 ytr = tr_meta[args.target[0]].values
                 yvl = vl_meta[args.target[0]].values
                 yte = te_meta[args.target[0]].values
-                loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
+                # loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
+                loss = losses.BinaryCrossentropy()
             else:
                 ytr = ydata_label[tr_id]
                 yvl = ydata_label[vl_id]
@@ -1015,7 +1040,7 @@ def run(args):
         if model is None:
             model = load_best_model(outdir)
 
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         if args.use_tile:
             create_tf_data_eval_kwargs.update({"tfrecords": test_tfr_files, "include_meta": True})
             test_data = create_tf_data(

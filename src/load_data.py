@@ -152,7 +152,12 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         rsp["trt"] = [str(d1) + "_" + str(d2) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
 
         # Augment drug-pair treatments
+        # TODO: consider to modify this (here I abuse "aug" to call all drug-pair treatments,
+        # and not just the augmented treatments)
         rsp["aug"] = [True if d1 != d2 else False for (d1, d2) in zip(rsp["Drug1"], rsp["Drug2"])]
+
+    # Add bool whether it's single-drug
+    rsp["single"] = [True if d1 == d2 else False for (d1, d2) in zip(rsp["Drug1"], rsp["Drug2"])]
 
     # Parse Sample and add columns for model, patient_id, specimen_id, sample_id
     # rsp = parse_Sample_col(rsp)
@@ -163,6 +168,12 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         smp = [str(s) + "_" + str(d) for s, d in zip(rsp["Sample"], rsp["trt"])]
         # rsp.insert(loc=0, column=col_name, value=smp, allow_duplicates=False)
         rsp.insert(loc=1, column=col_name, value=smp, allow_duplicates=False)
+
+    # Add bool whether it's the augmented sample of an already existing drug-pair
+    rsp["trt_sorted"] = ["_".join(sorted([d1, d2])) for d1, d2 in zip(rsp["Drug1"], rsp["Drug2"])]
+    rsp["smp_sorted"] = [str(s) + "_" + str(d) for s, d in zip(rsp["Sample"], rsp["trt_sorted"])]
+    rsp["pair_aug"] = rsp.duplicated(subset=["smp_sorted"], keep="first")
+    # print(rsp[rsp["single"]==False].sort_values(["smp_sorted", "pair_aug"], ascending=True)) # test
 
     # Create grp_name
     col_name = "grp_name"
@@ -175,7 +186,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
         # rsp = rsp[["smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
         rsp = rsp[["index", "smp", "Sample", "Drug1", "trt", "Group", "grp_name", "Response"]]
     else:
-        rsp = rsp[["index", "smp", "Sample", "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]]
+        rsp = rsp[["index", "smp", "Sample", "Drug1", "Drug2", "trt", "aug", "single", "pair_aug", "Group", "grp_name", "Response"]]
 
     if verbose:
         print("\nUnique samples   {}".format(rsp["Sample"].nunique()))
@@ -521,7 +532,7 @@ def load_tidy_dataset_rsp(single_drug: bool=False, add_type_labels: bool=True):
                  "model", "patient_id", "specimen_id", "sample_id", "image_id", "slide",
                  "csite_src", "ctype_src", "csite", "ctype", "csite_label", "ctype_label",
                  "stage_or_grade",
-                 "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]
+                 "Drug1", "Drug2", "trt", "aug", "single", "pair_aug", "Group", "grp_name", "Response"]
     ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
     # dd_cols = [c for c in data.columns if str(c).startswith('dd_')]
     dd1_cols = [c for c in data.columns if str(c).startswith("dd1_")]
