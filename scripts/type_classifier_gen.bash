@@ -10,10 +10,13 @@ dataname=tidy_drug_pairs_all_samples
 # prjname=bin_rsp_all
 # prjname=bin_rsp_partially_balanced
 # prjname=bin_rsp_single_drug_all_samples
-prjname=bin_rsp_drug_pairs_all_samples
+
+# prjname=bin_rsp_drug_pairs_all_samples
+prjname=bin_ctype_drug_pairs_all_samples
 
 id_name=smp
-target=Response
+# target=Response
+target=ctype_label
 
 # split_on=slide
 split_on=Group
@@ -25,8 +28,9 @@ split_on=Group
 n_samples=-1
 
 # Dir name that contains TFRecords
-# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
-tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
+tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
+# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
+# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.18_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.4_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_10_tiles
@@ -39,40 +43,25 @@ echo "CUDA device: $DEVICE"
 
 # split_id=81
 # split_id=0
-split_id=$2
+# split_id=$2
 
 # -----------
 # Train
 # -----------
-# n_splits=4
-# n_splits=99
-# splits_arr=($(seq 0 1 $n_splits))
-splits_arr=($split_id)
-# echo -e "\nList of splits:"
-# echo -e "${splits_arr[@]}\n"
+CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_ctype_cls_gen.py \
+    --train \
+    --eval \
+    --target $target \
+    --split_on $split_on \
+    --id_name $id_name \
+    --prjname $prjname \
+    --dataname $dataname \
+    --n_samples $n_samples \
+    --tfr_dir_name $tfr_dir_name \
+    --pred_tfr_dir_name $pred_tfr_dir_name \
+    --use_tile
 
-# for ii in {0..${n_splits}}; do
-# for ii in {0..99}; do
-for split_id in ${splits_arr[@]}; do
-    echo -e "Split ${split_id}"
-
-    CUDA_VISIBLE_DEVICES=$DEVICE python src/trn_multimodal.py \
-        --train \
-        --eval \
-        --target $target \
-        --split_on $split_on \
-        --split_id $split_id \
-        --id_name $id_name \
-        --prjname $prjname \
-        --dataname $dataname \
-        --n_samples $n_samples \
-        --tfr_dir_name $tfr_dir_name \
-        --pred_tfr_dir_name $pred_tfr_dir_name \
-        --use_tile --use_ge --use_dd1 --use_dd2
-
-done
-
-    # --eval \
+    # --split_id $split_id \
 
 # -----------
 # Evaluate

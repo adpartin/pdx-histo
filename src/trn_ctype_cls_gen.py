@@ -21,6 +21,7 @@ from time import time
 import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -72,8 +73,6 @@ def print_groupby_stat_ctype(df, split_on="Group", print_fn=print):
 
 # Per-slide hits
 def calc_hits(df, meta):
-    # df = te_tile_preds.copy()
-    # meta = te_meta.copy()
     df["hit"] = df.y_true == df.y_pred_label
     df = df.groupby("image_id").agg(hit_tiles=("hit", "sum"), n_tiles=("tile_id", "nunique")).reset_index()
     df["hit_rate"] = df["hit_tiles"] / df["n_tiles"]
@@ -100,10 +99,10 @@ def parse_args(args):
                         default="Group",
                         choices=["Sample", "slide", "Group"],
                         help="Specify the hard split variable/column (default: None).")
-    parser.add_argument("--split_id",
-                        type=int,
-                        default=81,
-                        help="Split id of the unique split for T/V/E sets (default: 0).")
+    # parser.add_argument("--split_id",
+    #                     type=int,
+    #                     default=81,
+    #                     help="Split id of the unique split for T/V/E sets (default: 0).")
     parser.add_argument("--prjname",
                         type=str,
                         help="Project name (to the store the restuls.")
@@ -164,7 +163,7 @@ def run(args):
 
 
     # Create project dir (if it doesn't exist)
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
     prjdir = cfg.MAIN_PRJDIR/args.prjname
     os.makedirs(prjdir, exist_ok=True)
 
@@ -184,7 +183,8 @@ def run(args):
         assert outdir.exists(), f"The {outdir} doen't exist."
         print_fn = print
     else:
-        outdir = create_outdir_2(prjdir, args)
+        # outdir = create_outdir(prjdir, args)
+        outdir = prjdir/f"{params.base_image_model}_finetuned"
 
         # Save hyper-parameters
         params.save(outdir/"params.json")
@@ -204,12 +204,48 @@ def run(args):
     print_fn(data.shape)
 
 
-    print_fn("\nFull dataset:")
-    if args.target[0] == "Response":
-        print_groupby_stat_rsp(data, split_on="Group", print_fn=print_fn)
-    else:
-        print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
+    # print_fn("\nFull dataset:")
+    # if args.target[0] == "Response":
+    #     print_groupby_stat_rsp(data, split_on="Group", print_fn=print_fn)
+    # else:
+    #     print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
+    print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
 
+
+    # Drop slide dups
+    fea_columns = ["slide"]
+    data = data.drop_duplicates(subset=fea_columns)
+
+    # Aggregate non-responders to balance the responders
+    # import ipdb; ipdb.set_trace()
+    # n_samples = data["ctype"].value_counts().min()
+    n_samples = 30
+    dfs = []
+    for ctype, count in data['ctype'].value_counts().items():
+        aa = data[data.ctype == ctype]
+        if aa.shape[0] > n_samples:
+            aa = aa.sample(n=n_samples)
+        dfs.append(aa)
+    data = pd.concat(dfs, axis=0).reset_index(drop=True)
+    print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
+
+    te_size = 0.15
+    itr, ite = train_test_split(np.arange(data.shape[0]), test_size=te_size, shuffle=True, stratify=data["ctype_label"].values)
+    tr_meta_ = data.iloc[itr,:].reset_index(drop=True)
+    te_meta = data.iloc[ite,:].reset_index(drop=True)
+
+    vl_size = 0.10
+    itr, ivl = train_test_split(np.arange(tr_meta_.shape[0]), test_size=vl_size, shuffle=True, stratify=tr_meta_["ctype_label"].values)
+    tr_meta = tr_meta_.iloc[itr,:].reset_index(drop=True)
+    vl_meta = tr_meta_.iloc[ivl,:].reset_index(drop=True)
+
+    print_groupby_stat_ctype(tr_meta, split_on="Group", print_fn=print_fn)
+    print_groupby_stat_ctype(vl_meta, split_on="Group", print_fn=print_fn)
+    print_groupby_stat_ctype(te_meta, split_on="Group", print_fn=print_fn)
+
+    print_fn(tr_meta.shape)
+    print_fn(vl_meta.shape)
+    print_fn(te_meta.shape)
 
     # Determine tfr_dir (the path to TFRecords)
     tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
@@ -218,16 +254,7 @@ def run(args):
     tfr_dir = tfr_dir/label
     pred_tfr_dir = pred_tfr_dir/label
 
-    # Create outcomes (for drug response)
-    # outcomes = {}
-    # unique_outcomes = list(set(data[args.target[0]].values))
-    # unique_outcomes.sort()
-    # for smp, o in zip(data[args.id_name], data[args.target[0]]):
-    #     outcomes[smp] = {"outcome": unique_outcomes.index(o)}
-
-
     # Scalers for each feature set
-    # import ipdb; ipdb.set_trace()
     ge_scaler, dd1_scaler, dd2_scaler = None, None, None
 
     ge_cols  = [c for c in data.columns if c.startswith("ge_")]
@@ -241,170 +268,6 @@ def run(args):
             dd1_scaler = get_scaler(data[dd1_cols])
         if args.use_dd2 and len(dd2_cols) > 0:
             dd2_scaler = get_scaler(data[dd2_cols])
-
-
-    # Create manifest
-    # print_fn("\nCreate/load manifest ...")
-    # timer = Timer()
-    # manifest = create_manifest(directory=tfr_dir, n_files=None)
-    # timer.display_timer(print_fn)
-
-
-    # -----------------------------------------------
-    # Data splits
-    # -----------------------------------------------
-
-    # --------------
-    # Yitan's splits
-    # --------------
-    if args.target[0] == "Response":
-        if args.use_dd1 is False and args.use_dd2 is False:
-            splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition_Drug_Specific"
-            splitdir = splitdir/params.drug_specific
-        else:
-            splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
-    else:
-        splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition"
-
-    tr_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"TrainList.txt")), int)
-    vl_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"ValList.txt")), int)
-    te_id = cast_list(read_lines(str(splitdir/f"cv_{args.split_id}"/"TestList.txt")), int)
-
-    # Update ids
-    index_col_name = "index"
-    tr_id = sorted(set(data[index_col_name]).intersection(set(tr_id)))
-    vl_id = sorted(set(data[index_col_name]).intersection(set(vl_id)))
-    te_id = sorted(set(data[index_col_name]).intersection(set(te_id)))
-
-    # Subsample train samples
-    if args.n_samples > 0:
-        if args.n_samples < len(tr_id):
-            tr_id = tr_id[:args.n_samples]
-        if args.n_samples < len(vl_id):
-            vl_id = vl_id[:args.n_samples]
-        if args.n_samples < len(te_id):
-            te_id = te_id[:args.n_samples]
-
-    
-    ### ap --------------
-    # Drop slide duplicates
-    ###
-    fea_columns = ["slide"]
-    data = data.drop_duplicates(subset=fea_columns)
-    ### ap --------------
-
-    # --------------
-    # TidyData
-    # --------------
-    # TODO: finish and test this class
-    # td = TidyData(data,
-    #               ge_prfx="ge_",
-    #               dd1_prfx="dd1_",
-    #               dd2_prfx="dd2_",
-    #               index_col_name="index",
-    #               split_ids={"tr_id": tr_id, "vl_id": vl_id, "te_id": te_id}
-    # )
-    # ge_scaler = td.ge_scaler
-    # dd1_scaler = td.dd1_scaler
-    # dd2_scaler = td.dd2_scaler
-
-    # tr_meta = td.tr_meta
-    # vl_meta = td.vl_meta
-    # te_meta = td.te_meta
-    # tr_meta.to_csv(outdir/"tr_meta.csv", index=False)
-    # vl_meta.to_csv(outdir/"vl_meta.csv", index=False)
-    # te_meta.to_csv(outdir/"te_meta.csv", index=False)
-
-    # # Variables (dict/dataframes/arrays) that are passed as features to the NN
-    # xtr = {"ge_data": td.tr_ge.values, "dd1_data": td.tr_dd1.values, "dd2_data": td.tr_dd2.values}
-    # xvl = {"ge_data": td.vl_ge.values, "dd1_data": td.vl_dd1.values, "dd2_data": td.vl_dd2.values}
-    # xte = {"ge_data": td.te_ge.values, "dd1_data": td.te_dd1.values, "dd2_data": td.te_dd2.values}
-
-    # --------------
-    # w/o TidyData
-    # --------------
-    kwargs = {"ge_cols": ge_cols,
-              "dd1_cols": dd1_cols,
-              "dd2_cols": dd2_cols,
-              "ge_scaler": ge_scaler,
-              "dd1_scaler": dd1_scaler,
-              "dd2_scaler": dd2_scaler,
-              "ge_dtype": cfg.GE_DTYPE,
-              "dd_dtype": cfg.DD_DTYPE,
-              "index_col_name": index_col_name,
-              "split_on": split_on
-              }
-    tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
-    vl_ge, vl_dd1, vl_dd2, vl_meta = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
-    te_ge, te_dd1, te_dd2, te_meta = split_data_and_extract_fea(data, ids=te_id, **kwargs)
-
-    ### ap --------------
-    # Create annotations for slideflow
-    ###
-    # import ipdb; ipdb.set_trace()
-    tr_meta["submitter_id"] = tr_meta["Group"]  # submitter_id (specific patient); Group (specific treatment group)
-    vl_meta["submitter_id"] = vl_meta["Group"]
-    te_meta["submitter_id"] = te_meta["Group"]
-    tr_meta["training_phase"] = "train"
-    vl_meta["training_phase"] = "validation"
-    te_meta["training_phase"] = "test"
-    keep_cols = ["submitter_id", "slide", "model", "patient_id", "specimen_id", "sample_id",
-                 "training_phase", "Group", "ctype", "csite", "ctype_label", "csite_label"]
-    tr_meta_tmp = tr_meta[keep_cols]
-    vl_meta_tmp = vl_meta[keep_cols]
-    te_meta_tmp = te_meta[keep_cols]
-    tr_meta.to_csv(outdir/"train_annotations.csv", index=False)
-    vl_meta.to_csv(outdir/"validation_annotations.csv", index=False)
-    te_meta.to_csv(outdir/"test_annotations.csv", index=False)
-    sf_df = pd.concat([tr_meta_tmp, vl_meta_tmp, te_meta_tmp], axis=0)
-    sf_df.to_csv(outdir/"annotations_for_sf.csv", index=False)
-    del tr_meta_tmp, vl_meta_tmp, te_meta_tmp, sf_df
-    ### ap --------------
-
-    if args.train is True:
-        tr_meta.to_csv(outdir/"tr_meta.csv", index=False)
-        vl_meta.to_csv(outdir/"vl_meta.csv", index=False)
-        te_meta.to_csv(outdir/"te_meta.csv", index=False)
-
-    ge_shape = (tr_ge.shape[1],)
-    dd_shape = (tr_dd1.shape[1],)
-
-    if args.target[0] == "Response":
-        print_fn("\nTrain:")
-        print_groupby_stat_rsp(tr_meta, split_on="Group", print_fn=print_fn)
-        print_fn("\nValidation:")
-        print_groupby_stat_rsp(vl_meta, split_on="Group", print_fn=print_fn)
-        print_fn("\nTest:")
-        print_groupby_stat_rsp(te_meta, split_on="Group", print_fn=print_fn)
-    else:
-        print_fn("\nTrain:")
-        print_groupby_stat_ctype(tr_meta, split_on="Group", print_fn=print_fn)
-        print_fn("\nValidation:")
-        print_groupby_stat_ctype(vl_meta, split_on="Group", print_fn=print_fn)
-        print_fn("\nTest:")
-        print_groupby_stat_ctype(te_meta, split_on="Group", print_fn=print_fn)
-
-    # Make sure indices do not overlap
-    assert len( set(tr_id).intersection(set(vl_id)) ) == 0, "Overlapping indices btw tr and vl"
-    assert len( set(tr_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw tr and te"
-    assert len( set(vl_id).intersection(set(te_id)) ) == 0, "Overlapping indices btw vl and te"
-
-    # Print split ratios
-    print_fn("")
-    print_fn("Train samples {} ({:.2f}%)".format( tr_meta.shape[0], 100*tr_meta.shape[0]/data.shape[0] ))
-    print_fn("Val   samples {} ({:.2f}%)".format( vl_meta.shape[0], 100*vl_meta.shape[0]/data.shape[0] ))
-    print_fn("Test  samples {} ({:.2f}%)".format( te_meta.shape[0], 100*te_meta.shape[0]/data.shape[0] ))
-
-    tr_grp_unq = set(tr_meta[split_on].values)
-    vl_grp_unq = set(vl_meta[split_on].values)
-    te_grp_unq = set(te_meta[split_on].values)
-    print_fn("")
-    print_fn(f"Total intersects on {split_on} btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}")
-    print_fn(f"Total intersects on {split_on} btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}")
-    print_fn(f"Total intersects on {split_on} btw vl and te: {len(vl_grp_unq.intersection(te_grp_unq))}")
-    print_fn(f"Unique {split_on} in tr: {len(tr_grp_unq)}")
-    print_fn(f"Unique {split_on} in vl: {len(vl_grp_unq)}")
-    print_fn(f"Unique {split_on} in te: {len(te_grp_unq)}")
 
 
     # --------------------------
@@ -424,11 +287,6 @@ def run(args):
         test_tfr_files = get_tfr_files(pred_tfr_dir, te_smp_names)
         # print_fn("Total samples {}".format(len(train_tfr_files) + len(val_tfr_files) + len(test_tfr_files)))
 
-    # Missing tfrecords
-    print("\nThese samples miss a tfrecord:")
-    df_miss = data.loc[~data[args.id_name].isin(tr_smp_names + vl_smp_names + te_smp_names), ["smp", "image_id"]]
-    print(df_miss)
-
     assert sorted(tr_smp_names) == sorted(tr_meta[args.id_name].values.tolist()), "Sample names in the tr_smp_names and tr_meta don't match."
     assert sorted(vl_smp_names) == sorted(vl_meta[args.id_name].values.tolist()), "Sample names in the vl_smp_names and vl_meta don't match."
     assert sorted(te_smp_names) == sorted(te_meta[args.id_name].values.tolist()), "Sample names in the te_smp_names and te_meta don't match."
@@ -441,6 +299,7 @@ def run(args):
     tile_cnts.insert(loc=0, column="tfr_abs_fname", value=tile_cnts["tfr_fname"].map(lambda s: str(tfr_dir/s)))
     cat = tile_cnts[tile_cnts["tfr_abs_fname"].isin(train_tfr_files)]
 
+    # import ipdb; ipdb.set_trace()
     ### ap --------------
     # if args.target[0] not in cat.columns:
     #     tile_cnts = tile_cnts[tile_cnts["smp"].isin(tr_meta["smp"])]
@@ -457,7 +316,6 @@ def run(args):
     class_weight = calc_class_weights(train_tfr_files,
                                       class_weights_method=params.class_weights_method,
                                       categories=categories)
-    # class_weight = {"Response": class_weight}
 
 
     # --------------------------
@@ -514,7 +372,7 @@ def run(args):
         eval_batch_size = 4 * params.batch_size
         tr_steps = tr_tiles // params.batch_size
         vl_steps = vl_tiles // eval_batch_size
-        # te_steps = te_tiles // eval_batch_size
+        te_steps = te_tiles // eval_batch_size
 
         # -------------------------------
         # Create TF datasets
@@ -562,9 +420,6 @@ def run(args):
             elif isinstance(item.numpy(), np.ndarray):
                 print(item)
 
-        # for i, rec in enumerate(train_data.take(2)):
-        #     tf.print(rec[1])
-
         # Evaluation (val, test, train)
         create_tf_data_eval_kwargs = {
             "batch_size": eval_batch_size,
@@ -590,38 +445,6 @@ def run(args):
     # ----------------------
     # import ipdb; ipdb.set_trace()
 
-    # # Loss and target
-    # if args.use_tile:
-    #     loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
-    # else:
-    #     if params.y_encoding == "onehot":
-    #         if index_col_name in data.columns:
-    #             # Using Yitan's T/V/E splits
-    #             # print(te_meta[["index", "Group", "grp_name", "Response"]])
-    #             ytr = pd.get_dummies(tr_meta[args.target[0]].values)
-    #             yvl = pd.get_dummies(vl_meta[args.target[0]].values)
-    #             yte = pd.get_dummies(te_meta[args.target[0]].values)
-    #         else:
-    #             ytr = y_onehot.iloc[tr_id, :].reset_index(drop=True)
-    #             yvl = y_onehot.iloc[vl_id, :].reset_index(drop=True)
-    #             yte = y_onehot.iloc[te_id, :].reset_index(drop=True)
-    #         loss = losses.CategoricalCrossentropy()
-    #     elif params.y_encoding == "label":
-    #         if index_col_name in data.columns:
-    #             # Using Yitan's T/V/E splits
-    #             ytr = tr_meta[args.target[0]].values
-    #             yvl = vl_meta[args.target[0]].values
-    #             yte = te_meta[args.target[0]].values
-    #             loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
-    #         else:
-    #             ytr = ydata_label[tr_id]
-    #             yvl = ydata_label[vl_id]
-    #             yte = ydata_label[te_id]
-    #             loss = losses.SparseCategoricalCrossentropy()
-    #     else:
-    #         raise ValueError(f"Unknown value for y_encoding ({params.y_encoding}).")
-
-
     # -------------
     # Train model
     # -------------
@@ -632,11 +455,9 @@ def run(args):
 
         # Callbacks list
         monitor = "val_loss"
-        # monitor = "val_pr-auc"
         callbacks = keras_callbacks(outdir, monitor=monitor,
                                     save_best_only=params.save_best_only,
                                     patience=params.patience)
-        # callbacks = keras_callbacks(outdir, monitor="auc", patience=params.patience)
 
         # Mixed precision
         if params.use_fp16:
@@ -754,12 +575,12 @@ def run(args):
         print_fn("Trainable variables: {}".format(len(model.trainable_variables)))
 
         print_fn(f"Train steps:      {tr_steps}")
-        print_fn(f"Validation steps: {vl_steps}")
+        # print_fn(f"Validation steps: {vl_steps}")
 
         # ------------
         # Train
         # ------------
-        # import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
         # tr_steps = 10  # tr_tiles // params.batch_size // 15  # for debugging
         print_fn("\n{}".format(yellow("Train")))
         timer = Timer()
@@ -838,7 +659,6 @@ def run(args):
 
         print_fn("\n{}".format(bold("Test set predictions.")))
         timer = Timer()
-        # calc_tf_preds(test_data, te_meta, model, outdir, args, name="test", print_fn=print_fn)
         # import ipdb; ipdb.set_trace()
         te_tile_preds = calc_tile_preds(test_data, model=model, outdir=outdir)
         te_tile_preds = te_tile_preds.sort_values(["image_id", "tile_id"], ascending=True)
@@ -851,10 +671,7 @@ def run(args):
         hits_fn = calc_hits(te_tile_preds, te_meta)
         hits_fn.to_csv(outdir/"hits_fn.csv", index=False)
 
-        # from sklearn.metrics import roc_curve, roc_auc_score, auc, average_precision_score
-        # roc_auc = roc_auc_score(te_tile_preds["y_true"], te_tile_preds["prob"], average="macro")
-
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         roc_auc = {}
         import matplotlib.pyplot as plt
         from sklearn.metrics import roc_curve, auc

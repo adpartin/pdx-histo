@@ -62,7 +62,13 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
         scores["roc_auc"] = sklearn.metrics.roc_auc_score(y_true, y_pred)
 
         precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_true, y_pred)
-        scores["pr_auc"] = sklearn.metrics.auc(recall, precision)
+        scores["pr_auc"] = sklearn.metrics.auc(x=recall, y=precision)
+
+        # average_precision_score corresponds to the area under the precision-recall curve.
+        # Note! This implementation is restricted to the binary classification task or multilabel classification task
+        scores["ap_micro"] = sklearn.metrics.average_precision_score(y_true, y_pred, average="micro", pos_label=1, sample_weight=None)
+        scores["ap_macro"] = sklearn.metrics.average_precision_score(y_true, y_pred, average="macro", pos_label=1, sample_weight=None)
+        scores["ap_weighted"] = sklearn.metrics.average_precision_score(y_true, y_pred, average="weighted", pos_label=1, sample_weight=None)
 
         # Metric that don't accept probabilities
         y_pred_ = [0 if v < 0.5 else 1 for v in y_pred]

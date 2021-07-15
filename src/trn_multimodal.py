@@ -180,7 +180,7 @@ def run(args):
     # Load dataframe (annotations)
     annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
     dtype = {"image_id": str, "slide": str}
-    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"], low_memory=False)
+    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"], low_memory=True)
     # data = data.astype({"image_id": str, "slide": str})
     print_fn(data.shape)
 
@@ -414,6 +414,8 @@ def run(args):
     # --------------------------
     # Build tf.data objects
     # --------------------------
+    tf.keras.backend.clear_session()
+
     # import ipdb; ipdb.set_trace()
     if args.use_tile:
 
@@ -439,14 +441,14 @@ def run(args):
             }
         else:
             # Ctype
-            parse_fn = parse_tfrec_fn_rna
+            parse_fn = parse_tfrec_fn_ctype
             parse_fn_train_kwargs = {
-                'use_tile': args.use_tile,
-                'use_ge': args.use_ge,
-                'ge_scaler': ge_scaler,
-                'id_name': args.id_name,
-                'MODEL_TYPE': params.model_type,
-                'AUGMENT': params.augment,
+                "use_tile": args.use_tile,
+                "use_ge": args.use_ge,
+                "ge_scaler": ge_scaler,
+                "id_name": args.id_name,
+                "augment": params.augment,
+                "target": args.target[0]
             }
 
         parse_fn_non_train_kwargs = parse_fn_train_kwargs.copy()
@@ -994,8 +996,8 @@ def run(args):
         # aa = model.evaluate(val_data, steps=vl_steps, verbose=1)
         # print_fn("Base model val_loss: {}".format(aa[0]))
 
+        print_fn("\n{}".format(yellow("Train")))
         timer = Timer()
-
         if args.use_tile is True:
             print_fn(f"Train steps:      {tr_steps}")
             print_fn(f"Validation steps: {vl_steps}")
