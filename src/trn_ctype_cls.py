@@ -171,7 +171,6 @@ def run(args):
 
     # Create outdir (using the loaded hyperparamters) or
     # use content (model) from an existing run
-    # fea_strs = ["use_tile", "use_ge", "use_dd1", "use_dd2"]
     fea_strs = ["use_tile"]
     args_dict = vars(args)
     fea_names = "_".join([k.split("use_")[-1] for k in fea_strs if args_dict[k] is True])
@@ -200,7 +199,7 @@ def run(args):
     # Load dataframe (annotations)
     annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
     dtype = {"image_id": str, "slide": str}
-    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"])
+    data = pd.read_csv(annotations_file, dtype=dtype, engine="c", na_values=["na", "NaN"], low_memory=True)
     # data = data.astype({"image_id": str, "slide": str})
     print_fn(data.shape)
 
@@ -209,7 +208,6 @@ def run(args):
     if args.target[0] == "Response":
         print_groupby_stat_rsp(data, split_on="Group", print_fn=print_fn)
     else:
-        # print_fn(data[args.target[0]].value_counts())
         print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
 
 
@@ -815,7 +813,7 @@ def run(args):
                                     patience=params.patience,
                                     name="finetune")
 
-        total_epochs = params.epochs + params.finetune_epochs
+        total_epochs = history.epoch[-1] + params.finetune_epochs
         timer = Timer()
         history_fn = model.fit(x=train_data,
                                validation_data=val_data,
@@ -876,11 +874,12 @@ def run(args):
             else:
                 roc_auc[i] = None
 
+        # plt.plot([0,0], [1,1], '--', label="Random")
         plt.title("Multiclass ROC Curve")
         plt.xlabel("FPR")
         plt.ylabel("TPR")
         plt.legend(loc="best")
-        plt.savefig(outdir/"Multiclass ROC", dpi=150);  
+        plt.savefig(outdir/"Multiclass ROC", dpi=70);
 
 
 

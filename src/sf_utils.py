@@ -229,6 +229,71 @@ def parse_tfrec_fn_rna(record,
         return image_dict, label
 
 
+def parse_tfrec_fn_ctype(record,
+                         include_meta=False,
+                         use_tile=True,
+                         use_ge=False,
+                         ge_scaler=None,
+                         id_name="slide",
+                         MODEL_TYPE=None,
+                         ANNOTATIONS_TABLES=None,
+                         augment=True,
+                         target="ctype_label"
+                         ):
+    '''Parses raw entry read from TFRecord.'''
+    feature_description = FEA_SPEC_RSP_DRUG_PAIR
+
+    features = tf.io.parse_single_example(record, feature_description)
+    smp = features[id_name]
+
+    # if MODEL_TYPE == 'linear':
+    #     label = [ANNOTATIONS_TABLES[oi].lookup(slide) for oi in range(NUM_CLASSES)]
+    # else:
+    #     label = ANNOTATIONS_TABLES[0].lookup(slide)
+    # label = {'ctype': label}
+
+    # Meta
+    if include_meta:
+        meta = {}
+        meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
+                       "Response",
+                       "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
+                       "ctype", "csite", "ctype_label", "csite_label",
+                       "Drug1", "Drug2", "trt", "aug"]
+        for f in meta_fields:
+            meta[f] = features[f] if f in features.keys() else None
+    
+    # TODO: {"Response": ...} doesn't work with class_weight!
+    # label = {"Response": tf.cast(features["Response"], tf.int64)}  # ap, or {'ctype': label}
+    label = tf.cast(features[target], tf.int64)
+    # label = tf.cast(features["ctype_label"], tf.int64)
+
+    image_dict = {}	
+
+    if use_tile:
+        image_string = features['image_raw']      
+        image = process_image(image_string, augment)
+        image_dict.update({'tile_image': image})
+
+    if use_ge:
+        # new
+        ge_data = tf.py_function(func=decode_np_arr, inp=[features['ge_data']],
+                                 Tout=[tf.float32])
+        ge_data = tf.reshape(ge_data, [-1])
+
+        if ge_scaler is not None:
+            ge_data = scale_fea(ge_data, ge_scaler)
+
+        ge_data = tf.cast(ge_data, tf.float32)
+        image_dict.update({'ge_data': ge_data})      
+        # new
+
+    if include_meta:
+        return image_dict, label, meta
+    else:
+        return image_dict, label
+
+
 def parse_tfrec_fn_rsp(record,
                        include_meta=False,
                        use_tile=True,
@@ -262,7 +327,7 @@ def parse_tfrec_fn_rsp(record,
         meta_fields = ["index", "smp", "Group", "grp_name", "tile_id",
                        "Response",
                        "Sample", "model", "patient_id", "specimen_id", "sample_id", "image_id",
-                       "ctype", "csite",
+                       "ctype", "csite", "ctype_label", "csite_label",
                        "Drug1", "Drug2", "trt", "aug"]
         for f in meta_fields:
             meta[f] = features[f] if f in features.keys() else None

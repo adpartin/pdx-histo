@@ -42,7 +42,7 @@ ModelDict = {
 }
 
 
-def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5):
+def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5, name=None):
     """ ... """
     callbacks = []
 
@@ -58,7 +58,10 @@ def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5)
 
     # filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
     if save_best_only is True:
-        filepath = str(outdir/"best_model.ckpt")
+        if name is None:
+            filepath = str(outdir/f"best_model.ckpt")
+        else:
+            filepath = str(outdir/f"best_model_{name}.ckpt")
     else:
         filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
     checkpointer = ModelCheckpoint(filepath,
@@ -209,9 +212,8 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
 
         base_img_model.trainable = False  # Freeze the base_img_model
 
-        # We set training=False makes the base model to run in inference mode
-        # so that batchnorm layers are not updated during the fine-tuning
-        # stage.
+        # training=False makes the base model to run in inference mode so
+        # that batchnorm layers are not updated during the fine-tuning stage.
         # x_tile = base_img_model(tile_input_tensor)
         x_tile = base_img_model(tile_input_tensor, training=False)
         model_inputs.append(tile_input_tensor)
@@ -253,8 +255,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
 
     # Dense layers of the top classfier
-    merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
-                                         name="dense1_top", kernel_regularizer=None)(merged_model)
+    merged_model = Dense(dense1_top, activation=tf.nn.relu, name="dense1_top")(merged_model)
     merged_model = BatchNormalization(name="batchnorm_top")(merged_model)
     if dropout1_top > 0:
         merged_model = Dropout(dropout1_top)(merged_model)
@@ -263,11 +264,11 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # output = tf.keras.layers.Dense(
     #     1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
-    logits = tf.keras.layers.Dense(1, name="logits")(merged_model)
-    output = tf.keras.layers.Activation("sigmoid", name="Response")(logits)
+    logits = Dense(1, name="logits")(merged_model)
+    output = Activation("sigmoid", name="Response")(logits)
 
     # Assemble final model
-    model = tf.keras.Model(inputs=model_inputs, outputs=output)
+    model = Model(inputs=model_inputs, outputs=output)
 
     metrics = [
           # keras.metrics.FalsePositives(name="fp"),
@@ -289,7 +290,9 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
     """ ... """
     # meta_keys = ["smp", "Group", "grp_name", "Response"]
     # meta_keys = ["smp", "Group", "grp_name", "image_id", "tile_id"]
-    meta_keys = ["smp", "tile_id"]
+    # meta_keys = ["smp", "tile_id"]
+    meta_keys = ["smp", "image_id", "tile_id"]
+    # meta_keys = ["smp", "Group", "image_id", "tile_id"]
     meta_agg = {k: None for k in meta_keys}
     y_true, y_pred_prob, y_pred_label = [], [], []
 
@@ -305,6 +308,8 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         # Predict
         preds = model.predict(fea)
         # preds = np.around(preds, 3)
+        if (np.ndim(preds) > 1) and (abs(preds.sum(axis=1).mean() - 1) > 0.05):
+            preds = tf.nn.softmax(preds, axis=1).numpy()
         y_pred_prob.append(preds)
         preds = np.squeeze(preds)
 
@@ -314,6 +319,7 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
 
         # Predictions
         if np.ndim(preds) > 1:
+            # probabilities (post softmax)
             y_pred_label.extend( np.argmax(preds, axis=1).tolist() )  # SparseCategoricalCrossentropy
         else:
             # p = 0.5
@@ -326,6 +332,7 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         # Meta
         # smp_list.extend( [smp_bytes.decode('utf-8') for smp_bytes in batch[2].numpy().tolist()] )
         for k in meta_keys:
+            # print(len(meta[k]))  # the size should as the batch size
             vv = [val_bytes.decode("utf-8") for val_bytes in meta[k].numpy().tolist()]
             if meta_agg[k] is None:
                 meta_agg[k] = vv
@@ -336,13 +343,18 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
 
     # Meta
     df_meta = pd.DataFrame(meta_agg)
+    df_meta = df_meta.astype({"tile_id": int}) # "image_id": int
     # print("\ndf memory {:.2f} GB".format( df_meta.memory_usage().sum()/1e9 ))
 
     # Predictions
     y_pred_prob = np.vstack(y_pred_prob)
     if np.ndim(np.squeeze(y_pred_prob)) > 1:
+        # Multiclass classifier
         df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=[f"prob_{c}" for c in range(y_pred_prob.shape[1])])
+        y_pred_prob_true = [row[1].values[y] for row, y in zip(df_y_pred_prob.iterrows(), y_true)]
+        df_y_pred_prob["prob"] = y_pred_prob_true  # predicted prob of the true class (true_prob)
     else:
+        # Binary classifier
         df_y_pred_prob = pd.DataFrame(y_pred_prob, columns=["prob"])
 
     # True labels
@@ -365,6 +377,7 @@ def agg_tile_preds(prd, agg_by, meta, agg_method="mean"):
 
     # Agg tile pred on agg_by
     agg_preds = prd.groupby(agg_by).agg({"prob": agg_method}).reset_index()
+    agg_preds = prd.groupby(agg_by).agg({"prob": agg_method, "y_true": "unique", "y_pred_label": "unique"}).reset_index()
     # agg_preds = agg_preds.rename(columns={"prob": f"prob_mean_by_{agg_by}"})
 
     # Merge with meta
