@@ -93,6 +93,10 @@ FEA_SPEC_RSP_DRUG_PAIR = {
     "csite":     tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "ctype_src": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "csite_src": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    # "ctype_label": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    # "csite_label": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
+    "ctype_label": tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
+    "csite_label": tf.io.FixedLenFeature(shape=[], dtype=tf.int64),
 
     "Drug1": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
     "Drug2": tf.io.FixedLenFeature(shape=[], dtype=tf.string),
@@ -111,11 +115,12 @@ FEA_SPEC_RSP_DRUG_PAIR = {
 }
 
 
-def original_tfr_names(label='299px_302um'):
+def original_tfr_names(tfr_basedir=cfg.PDX_FIXED, label='299px_302um'):
     """ Return list of the original tfrecords file names. """
 
     # Obtain slide names for which we need to update the tfrecords
-    directory = cfg.SF_TFR_DIR/label
+    # directory = cfg.SF_TFR_DIR/label
+    directory = tfr_basedir/label
     tfr_files = list(directory.glob('*.tfrec*'))
     print(f'A total of {len(tfr_files)} original tfrecords.')
 

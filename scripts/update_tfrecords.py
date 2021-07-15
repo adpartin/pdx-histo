@@ -67,10 +67,11 @@ pprint(args)
 
 
 LABEL = "299px_302um"
-directory = cfg.SF_TFR_DIR/LABEL
+# directory = cfg.SF_TFR_DIR/LABEL
+directory = cfg.PDX_FIXED/LABEL
 
 # single_drug = True
-single_drug = False  # drug pairs
+# single_drug = False  # drug pairs
 
 timer = Timer()
 
@@ -94,123 +95,124 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     # else:
     #     outpath = cfg.SF_TFR_DIR_RSP_DRUG_PAIR/LABEL
     if single_drug:
-        base_outdir = cfg.SF_TFR_DIR_RSP
+        # base_outdir = cfg.SF_TFR_DIR_RSP
+        pass
     else:
-        base_outdir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
+        # base_outdir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
+        base_outdir = cfg.PDX_FIXED_RSP_DRUG_PAIR
     if frac_tiles < 1.0:
         base_outdir = str(base_outdir) + "_" + str(frac_tiles) + "_of_tiles"
     outpath = Path(base_outdir)/LABEL
     os.makedirs(outpath, exist_ok=True)
 
     # Load data
-    rsp = load_data.load_rsp(single_drug=single_drug)
-    rna = load_data.load_rna()
-    dd = load_data.load_dd()
-    cref = load_data.load_crossref()
-    pdx = load_data.load_pdx_meta2()
+    data = load_data.load_tidy_dataset_rsp(single_drug=single_drug, add_type_labels=True)
+    # rsp = load_data.load_rsp(single_drug=single_drug)
+    # rna = load_data.load_rna()
+    # dd = load_data.load_dd()
+    # cref = load_data.load_crossref()
+    # pdx = load_data.load_pdx_meta2(add_type_labels=True)
 
-    # import ipdb; ipdb.set_trace()
-
-    # Merge rsp with rna
-    print("\nMerge rsp and rna")
-    print(rsp.shape)
-    print(rna.shape)
-    rsp_rna = rsp.merge(rna, on="Sample", how="inner")
-    print(rsp_rna.shape)
+    # # Merge rsp with rna
+    # print("\nMerge rsp and rna")
+    # print(rsp.shape)
+    # print(rna.shape)
+    # rsp_rna = rsp.merge(rna, on="Sample", how="inner")
+    # print(rsp_rna.shape)
 
     # # Merge with dd
+    # print("Merge with descriptors")
     # print(rsp_rna.shape)
     # print(dd.shape)
-    # rsp_rna_dd = rsp_rna.merge(dd, left_on='Drug1', right_on='ID', how='inner').reset_index(drop=True)
+
+    # dd1 = dd.copy()
+    # dd2 = dd.copy()
+    # dd1 = dd1.rename(columns={"ID": "Drug1"})
+    # dd2 = dd2.rename(columns={"ID": "Drug2"})
+    # fea_id0 = 1
+    # fea_pfx = "dd_"
+    # dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+    # dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+
+    # tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
+    # rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
+    # # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
     # print(rsp_rna_dd.shape)
+    # del dd, dd1, dd2, tmp
 
-    # Merge with dd
-    print("Merge with descriptors")
-    print(rsp_rna.shape)
-    print(dd.shape)
+    # # Merge with pdx meta
+    # print("Merge with pdx meta")
+    # print(pdx.shape)
+    # print(rsp_rna_dd.shape)
+    # rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
+    # print(rsp_rna_dd_pdx.shape)
 
-    dd1 = dd.copy()
-    dd2 = dd.copy()
-    dd1 = dd1.rename(columns={"ID": "Drug1"})
-    dd2 = dd2.rename(columns={"ID": "Drug2"})
-    fea_id0 = 1
-    fea_pfx = "dd_"
-    dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
-    dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+    # # Merge cref
+    # print("Merge with cref")
+    # # (we loose some samples because we filter the bad slides)
+    # print(cref.shape)
+    # print(rsp_rna_dd_pdx.shape)
+    # data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
+    # print(data.shape)
 
-    tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
-    rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
-    # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
-    print(rsp_rna_dd.shape)
-    del dd, dd1, dd2, tmp
+    # # -------------------
+    # # Explore (merge and identify from which df the items are coming from)
+    # # https://kanoki.org/2019/07/04/pandas-difference-between-two-dataframes/
+    # # --------
+    # # mrg_outer = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='outer', indicator=True)
+    # # print('Outer merge', mrg_outer.shape)
+    # # print(mrg_outer['_merge'].value_counts())
 
-    # Merge with pdx meta
-    print("Merge with pdx meta")
-    print(pdx.shape)
-    print(rsp_rna_dd.shape)
-    rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
-    print(rsp_rna_dd_pdx.shape)
+    # # miss_r = mrg_outer.loc[lambda x: x['_merge']=='right_only']
+    # # miss_r = miss_r.sort_values(PDX_SAMPLE_COLS, ascending=True)
+    # # print('Missing right items', miss_r.shape)
 
-    # Merge cref
-    print("Merge with cref")
-    # (we loose some samples because we filter the bad slides)
-    print(cref.shape)
-    print(rsp_rna_dd_pdx.shape)
-    data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
-    print(data.shape)
+    # # miss_l = mrg_outer.loc[lambda x: x['_merge']=='left_only']
+    # # miss_l = miss_l.sort_values(PDX_SAMPLE_COLS, ascending=True)
+    # # print('Missing left items', miss_l.shape)
 
-    # -------------------
-    # Explore (merge and identify from which df the items are coming from)
-    # https://kanoki.org/2019/07/04/pandas-difference-between-two-dataframes/
-    # --------
-    # mrg_outer = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='outer', indicator=True)
-    # print('Outer merge', mrg_outer.shape)
-    # print(mrg_outer['_merge'].value_counts())
+    # # print(miss_r.patient_id.unique())
+    # # jj = load_data.load_pdx_meta_jc()
+    # # miss_found = jj[ jj.patient_id.isin(miss_r.patient_id.unique()) ]
+    # # print(miss_r.Response.value_counts())
+    # # print(miss_found)
 
-    # miss_r = mrg_outer.loc[lambda x: x['_merge']=='right_only']
-    # miss_r = miss_r.sort_values(PDX_SAMPLE_COLS, ascending=True)
-    # print('Missing right items', miss_r.shape)
+    # # print(miss_r[miss_r.Response==1])
+    # # -------------------
 
-    # miss_l = mrg_outer.loc[lambda x: x['_merge']=='left_only']
-    # miss_l = miss_l.sort_values(PDX_SAMPLE_COLS, ascending=True)
-    # print('Missing left items', miss_l.shape)
-
-    # print(miss_r.patient_id.unique())
-    # jj = load_data.load_pdx_meta_jc()
-    # miss_found = jj[ jj.patient_id.isin(miss_r.patient_id.unique()) ]
-    # print(miss_r.Response.value_counts())
-    # print(miss_found)
-
-    # print(miss_r[miss_r.Response==1])
-    # -------------------
+    # # Re-org cols
+    # dim = data.shape[1]
+    # # meta_cols = ['smp', 'Sample', 'Drug1', 'Response',
+    # #              'model', 'patient_id', 'specimen_id', 'sample_id', 'image_id', 
+    # #              'csite_src', 'ctype_src', 'csite', 'ctype', 'stage_or_grade',
+    # #              'NAME', 'CLEAN_NAME', 'SMILES', 'ID']
+    # meta_cols = ["index", "smp", "Sample",
+    #              "model", "patient_id", "specimen_id", "sample_id", "image_id", 
+    #              "csite_src", "ctype_src", "csite", "ctype", "stage_or_grade",
+    #              "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]
+    # ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
+    # # dd_cols = [c for c in data.columns if str(c).startswith('dd_')]
+    # dd1_cols = [c for c in data.columns if str(c).startswith("dd1_")]
+    # dd2_cols = [c for c in data.columns if str(c).startswith("dd2_")]
+    # data = data[meta_cols + ge_cols + dd1_cols + dd2_cols]
+    # assert data.shape[1] == dim, "There are missing cols after re-organizing the cols."
 
     if n_samples > 0:
         data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
 
-    # Re-org cols
-    dim = data.shape[1]
-    # meta_cols = ['smp', 'Sample', 'Drug1', 'Response',
-    #              'model', 'patient_id', 'specimen_id', 'sample_id', 'image_id', 
-    #              'csite_src', 'ctype_src', 'csite', 'ctype', 'stage_or_grade',
-    #              'NAME', 'CLEAN_NAME', 'SMILES', 'ID']
-    meta_cols = ["index", "smp", "Sample",
-                 "model", "patient_id", "specimen_id", "sample_id", "image_id", 
-                 "csite_src", "ctype_src", "csite", "ctype", "stage_or_grade",
-                 "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]
     ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
-    # dd_cols = [c for c in data.columns if str(c).startswith('dd_')]
     dd1_cols = [c for c in data.columns if str(c).startswith("dd1_")]
     dd2_cols = [c for c in data.columns if str(c).startswith("dd2_")]
-    data = data[meta_cols + ge_cols + dd1_cols + dd2_cols]
-    assert data.shape[1] == dim, "There are missing cols after re-organizing the cols."
+    cols = data.columns.tolist()
+    meta_cols = [c for c in cols if c not in (ge_cols + dd1_cols + dd2_cols)]
 
-    # Create dict of slide ids. Each slide (key) contains a dict with metadata.
+    # Create dict of sample ids. Each sample (key) contains a dict with metadata.
     mm = {}  # dict to store all metadata
     id_name = "smp"  # col name that contains the IDs for the samples 
 
     # import ipdb; ipdb.set_trace()
 
-    # Iterate over rows a collect data into dict
+    # Iterate over rows and collect data into dict
     for i, row_data in data.iterrows():
         # Dict to contain metadata for the current slide
         sample_dct = {}
@@ -239,7 +241,8 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
 
     # Common slides (that have both image data, other features, and drug response)
     slides = data["image_id"].unique().tolist()
-    all_slides = original_tfr_names(label=LABEL)
+    # all_slides = original_tfr_names(label=LABEL)
+    all_slides = original_tfr_names(tfr_basedir=cfg.PDX_FIXED, label=LABEL)
     c_slides = set(slides).intersection(set(all_slides))
     print(f"A total of {len(c_slides)} slides that are relevant for our drug response samples.")
 
@@ -309,6 +312,10 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
                         "csite":       _bytes_feature(bytes(slide_meta["csite"], "utf-8")),
                         "ctype_src":   _bytes_feature(bytes(slide_meta["ctype_src"], "utf-8")),
                         "csite_src":   _bytes_feature(bytes(slide_meta["csite_src"], "utf-8")),
+                        # "ctype_label": _bytes_feature(bytes(slide_meta["ctype_label"], "utf-8")),
+                        # "csite_label": _bytes_feature(bytes(slide_meta["csite_label"], "utf-8")),
+                        "ctype_label": _int64_feature(int(slide_meta["ctype_label"])),
+                        "csite_label": _int64_feature(int(slide_meta["csite_label"])),
 
                         # "Drug1":       _bytes_feature(bytes(slide_meta["Drug1"], "utf-8")),
                         # "NAME":        _bytes_feature(bytes(slide_meta["NAME"], "utf-8")),
@@ -324,21 +331,20 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
 
                         # 'ge_data':     _float_feature(slide_meta['ge_data']),
                         # 'dd_data':     _float_feature(slide_meta['dd_data']),
-                        "ge_data":      _bytes_feature(slide_meta["ge_data"]),
-                        "dd1_data":     _bytes_feature(slide_meta["dd1_data"]),
-                        "dd2_data":     _bytes_feature(slide_meta["dd2_data"]),
+                        "ge_data":     _bytes_feature(slide_meta["ge_data"]),
+                        "dd1_data":    _bytes_feature(slide_meta["dd1_data"]),
+                        "dd2_data":    _bytes_feature(slide_meta["dd2_data"]),
                     }
                 ))
                 
                 writer.write(ex.SerializeToString())
 
             # print(f"Total tiles in the sample {tile_id+1}")
-            # tile_cnts.append( {"smp": smp, "slide": slide_name, "max_tiles": tile_id+1} )
-            tile_cnts.append( {"tfr_fname": tfr_fname.split(os.sep)[-1],
-                               "smp": smp,
-                               "slide": slide_name,
-                               "max_tiles": max_tiles,
-                               "n_tiles": n_tiles} )
+            tile_cnts.append({"tfr_fname": tfr_fname.split(os.sep)[-1],
+                              "smp": smp,
+                              "slide": slide_name,
+                              "max_tiles": max_tiles,
+                              "n_tiles": n_tiles})
             writer.close()
         print()
         
@@ -370,10 +376,14 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
 
     for rec in raw_dataset.take(4):
         features = tf.io.parse_single_example(rec, features=FEA_SPEC_RSP_DRUG_PAIR)
-        print("tile_id: ", features["tile_id"].numpy())
-        print("Response:", features["Response"].numpy())
+        print("tile_id:     ", features["tile_id"].numpy())
+        print("Response:    ", features["Response"].numpy())
+        print("ctype_label: ", features["ctype_label"].numpy())
+        print("csite_label: ", features["csite_label"].numpy())
+        # print("ctype_label: ", tf.cast(tf.strings.to_number(features["ctype_label"]), tf.int64))
 
     print("\nDone.")
+    return None
 
 
 def update_tfrecords_with_rna(n_samples: int=-1) -> None:

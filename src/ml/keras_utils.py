@@ -148,4 +148,4 @@ def plot_prfrm_metrics(history=None, logfile_path=None, title=None, name=None, s
         plt.savefig(figpath, bbox_inches='tight')
         plt.close()
         
-    return history
+    return None
