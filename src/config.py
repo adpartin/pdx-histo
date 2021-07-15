@@ -24,6 +24,8 @@ cfg.ANNOTATIONS_FILENAME = "annotations.csv"
 cfg.SF_ANNOTATIONS_FILENAME = "annotations_slideflow.csv"
 
 # TFRecords
+cfg.PDX_FIXED = (fdir/"../data/PDX_FIXED").resolve()
+cfg.PDX_FIXED_RSP_DRUG_PAIR = (fdir/"../data/PDX_FIXED_RSP_DRUG_PAIR").resolve()
 # cfg.TFR_DIR = (cfg.DATADIR/"tfrecords").resolve()
 # cfg.SF_TFR_DIR = (fdir/"../../slideflow-proj/PDX_FIXED").resolve()
 # cfg.SF_TFR_DIR_RNA = (fdir/"../../slideflow-proj/PDX_FIXED_RNA").resolve()
