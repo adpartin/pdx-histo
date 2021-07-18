@@ -33,6 +33,7 @@ tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
 
 # Dir name that contains TFRecords for predictions
 pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
+# pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"

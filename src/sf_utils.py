@@ -110,7 +110,7 @@ def process_image(image_string, augment, application=None):
     # Scale
     # =============
     # -----------------------------------------------------------------
-    # Linearly scales each image in image to have mean 0 and variance 1 - used in SlideFlow
+    # Linearly scales each image to have mean 0 and variance 1 - used in SlideFlow
     # -----------------------------------------------------------------
     # # Scale
     # # image = tf.image.convert_image_dtype(image, tf.float32)
