@@ -984,6 +984,7 @@ def run(args):
                                   "use_dd2": args.use_dd2,
                                   "use_ge": args.use_ge,
                                   "use_tile": args.use_tile,
+                                  "from_logits": params.from_logits,
                                   # "model_type": params.model_type,
             }
             model = build_model_rsp(**build_model_kwargs)
@@ -1121,11 +1122,11 @@ def run(args):
         else:
             # import ipdb; ipdb.set_trace()
             print_fn("\n{}".format(bold("Keras NN.")))
-            print_fn("Test:")
+            print_fn("\n{}".format(red("Test:")))
             calc_smp_preds(xdata=xte, meta=te_meta, model=model, outdir=outdir, name="test_keras", print_fn=print_fn)
-            print_fn("\nVal:")
+            print_fn("\n{}".format(red("Validation:")))
             calc_smp_preds(xdata=xvl, meta=vl_meta, model=model, outdir=outdir, name="val_keras", print_fn=print_fn)
-            print_fn("\nTrain:")
+            print_fn("\n{}".format(red("Train:")))
             calc_smp_preds(xdata=xtr, meta=tr_meta, model=model, outdir=outdir, name="train_keras", print_fn=print_fn)
 
 

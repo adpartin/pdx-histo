@@ -20,7 +20,7 @@ from time import time
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, average_precision_score
 from sklearn.model_selection import train_test_split
 
 import warnings
@@ -71,14 +71,50 @@ def print_groupby_stat_ctype(df, split_on="Group", print_fn=print):
         columns={split_on: f"{split_on}_unq", "smp": "smp_unq", "slide": "slide_unq"}))
 
 
-# Per-slide hits
 def calc_hits(df, meta):
+    """ Per-slide hits. """
     df["hit"] = df.y_true == df.y_pred_label
     df = df.groupby("image_id").agg(hit_tiles=("hit", "sum"), n_tiles=("tile_id", "nunique")).reset_index()
     df["hit_rate"] = df["hit_tiles"] / df["n_tiles"]
     df = df.merge(meta[["image_id", "ctype_label", "ctype"]], on="image_id", how="inner")
     df = df.sort_values(["hit_rate"], ascending=False)
     return df
+
+
+def plot_multiclass_roc_curve(y_true, y_pred, n_classes, outdir, fname="multiclass_ROC.png"):
+    roc_auc = {}
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import roc_curve, auc
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for true in range(0, n_classes):
+        if true in y_true:
+            fpr, tpr, thresh = roc_curve(y_true, y_pred, pos_label=true)
+            roc_auc[true] = auc(fpr, tpr)
+            plt.plot(fpr, tpr, linestyle='--', label=f"Class {true} vs Rest")
+        else:
+            roc_auc[true] = None
+
+    # plt.plot([0,0], [1,1], '--', label="Random")
+    plt.title("Multiclass ROC Curve")
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    plt.legend(loc="best")
+    plt.savefig(outdir/fname, dpi=70);
+
+
+def calc_mAP(tile_preds, n_classes, print_fn=print):
+    """
+    Avergae precision score.
+    """
+    y_true_vec = tile_preds.y_true.values
+    y_true_onehot = np.zeros((y_true_vec.size, n_classes))
+    y_true_onehot[np.arange(y_true_vec.size), y_true_vec] = 1
+    y_probs = tile_preds[[c for c in tile_preds.columns if "prob_" in c]]
+    print_fn("\nAvearge precision")
+    print_fn("Micro    {}".format(average_precision_score(y_true_onehot, y_probs, average="micro")))
+    print_fn("Macro    {}".format(average_precision_score(y_true_onehot, y_probs, average="macro")))
+    print_fn("Wieghted {}".format(average_precision_score(y_true_onehot, y_probs, average="weighted")))
+    print_fn("Samples  {}".format(average_precision_score(y_true_onehot, y_probs, average="samples")))
 
 
 def parse_args(args):
@@ -163,7 +199,7 @@ def run(args):
 
 
     # Create project dir (if it doesn't exist)
-    # import ipdb; ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
     prjdir = cfg.MAIN_PRJDIR/args.prjname
     os.makedirs(prjdir, exist_ok=True)
 
@@ -185,6 +221,7 @@ def run(args):
     else:
         # outdir = create_outdir(prjdir, args)
         outdir = prjdir/f"{params.base_image_model}_finetuned"
+        os.makedirs(outdir, exist_ok=True)
 
         # Save hyper-parameters
         params.save(outdir/"params.json")
@@ -204,11 +241,7 @@ def run(args):
     print_fn(data.shape)
 
 
-    # print_fn("\nFull dataset:")
-    # if args.target[0] == "Response":
-    #     print_groupby_stat_rsp(data, split_on="Group", print_fn=print_fn)
-    # else:
-    #     print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
+    print_fn("\nFull dataset:")
     print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
 
 
@@ -219,7 +252,7 @@ def run(args):
     # Aggregate non-responders to balance the responders
     # import ipdb; ipdb.set_trace()
     # n_samples = data["ctype"].value_counts().min()
-    n_samples = 30
+    n_samples = 50
     dfs = []
     for ctype, count in data['ctype'].value_counts().items():
         aa = data[data.ctype == ctype]
@@ -229,7 +262,7 @@ def run(args):
     data = pd.concat(dfs, axis=0).reset_index(drop=True)
     print_groupby_stat_ctype(data, split_on="Group", print_fn=print_fn)
 
-    te_size = 0.15
+    te_size = 0.10
     itr, ite = train_test_split(np.arange(data.shape[0]), test_size=te_size, shuffle=True, stratify=data["ctype_label"].values)
     tr_meta_ = data.iloc[itr,:].reset_index(drop=True)
     te_meta = data.iloc[ite,:].reset_index(drop=True)
@@ -239,8 +272,11 @@ def run(args):
     tr_meta = tr_meta_.iloc[itr,:].reset_index(drop=True)
     vl_meta = tr_meta_.iloc[ivl,:].reset_index(drop=True)
 
+    print_fn("\nTrain dataset:")
     print_groupby_stat_ctype(tr_meta, split_on="Group", print_fn=print_fn)
+    print_fn("\nValidation dataset:")
     print_groupby_stat_ctype(vl_meta, split_on="Group", print_fn=print_fn)
+    print_fn("\nTest dataset:")
     print_groupby_stat_ctype(te_meta, split_on="Group", print_fn=print_fn)
 
     print_fn(tr_meta.shape)
@@ -316,6 +352,7 @@ def run(args):
     class_weight = calc_class_weights(train_tfr_files,
                                       class_weights_method=params.class_weights_method,
                                       categories=categories)
+    print_fn(class_weight)
 
 
     # --------------------------
@@ -371,8 +408,11 @@ def run(args):
 
         eval_batch_size = 4 * params.batch_size
         tr_steps = tr_tiles // params.batch_size
-        vl_steps = vl_tiles // eval_batch_size
         te_steps = te_tiles // eval_batch_size
+        if params.validation_steps is None:
+            vl_steps = vl_tiles // eval_batch_size
+        else:
+            vl_steps = params.validation_steps
 
         # -------------------------------
         # Create TF datasets
@@ -440,11 +480,6 @@ def run(args):
             **parse_fn_non_train_kwargs
         )
 
-    # ----------------------
-    # Prep for training
-    # ----------------------
-    # import ipdb; ipdb.set_trace()
-
     # -------------
     # Train model
     # -------------
@@ -452,12 +487,6 @@ def run(args):
 
     # import ipdb; ipdb.set_trace()
     if args.train is True:
-
-        # Callbacks list
-        monitor = "val_loss"
-        callbacks = keras_callbacks(outdir, monitor=monitor,
-                                    save_best_only=params.save_best_only,
-                                    patience=params.patience)
 
         # Mixed precision
         if params.use_fp16:
@@ -486,8 +515,8 @@ def run(args):
 
         # trainable = True
         trainable = False
-        # from_logits = True
-        from_logits = False
+        from_logits = True
+        # from_logits = False
         fit_verbose = 1
         pretrain = params.pretrain
         pooling = params.pooling
@@ -516,20 +545,15 @@ def run(args):
             base_img_model.trainable = trainable  # Freeze the base_img_model
             print_fn("Trainable variables: {}".format(len(base_img_model.trainable_variables)))
 
-            print_fn("\nPrint some layers")
-            print_fn("Name of layer {}: {}".format(0, base_img_model.layers[0].name))
-            print_fn("Name of layer {}: {}".format(-1, base_img_model.layers[-1].name))
+            # print_fn("\nPrint some layers")
+            # print_fn("Name of layer {}: {}".format(0, base_img_model.layers[0].name))
+            # print_fn("Name of layer {}: {}".format(-1, base_img_model.layers[-1].name))
 
             # training=False makes the base model to run in inference mode so
             # that batchnorm layers are not updated during the fine-tuning stage.
-            # x_tile = base_img_model(tile_input_tensor)
             x_tile = base_img_model(tile_input_tensor, training=False)
-            # x_tile = base_img_model(tile_input_tensor, training=trainable)
             model_inputs.append(tile_input_tensor)
 
-            # x_tile = Dense(params.dense1_img, activation=tf.nn.relu, name="dense1_img")(x_tile)
-            # x_tile = Dense(params.dense2_img, activation=tf.nn.relu, name="dense2_img")(x_tile)
-            # x_tile = BatchNormalization(name="batchnorm_im")(x_tile)
             merge_inputs.append(x_tile)
             del tile_input_tensor, x_tile
 
@@ -542,10 +566,10 @@ def run(args):
         # Dense layers of the top classfier
         mm = Dense(params.dense1_top, activation=tf.nn.relu, name="dense1_top")(mm)
         # mm = BatchNormalization(name="batchnorm_top")(mm)
-        # mm = Dropout(params.dropout1_top)(mm)
+        mm = Dropout(params.dropout1_top)(mm)
 
         # Output
-        output = Dense(n_classes, activation=tf.nn.relu, name="logits")(mm)
+        output = Dense(n_classes, name="logits")(mm)
         if from_logits is False:
             output = Activation(tf.nn.softmax, dtype="float32", name="softmax")(output)
 
@@ -568,19 +592,28 @@ def run(args):
 
 
         # import ipdb; ipdb.set_trace()
-        print_fn("\nBase model")
+        print_fn("\n{}".format(red("Base model")))
         base_img_model.summary(print_fn=print_fn)
-        print_fn("\nFull model")
+        print_fn("\n{}".format(red("Full model")))
         model.summary(print_fn=print_fn)
         print_fn("Trainable variables: {}".format(len(model.trainable_variables)))
 
         print_fn(f"Train steps:      {tr_steps}")
-        # print_fn(f"Validation steps: {vl_steps}")
+        print_fn(f"Validation steps: {vl_steps}")
+
+        print_fn("\nEval before training {}:".format(model.evaluate(val_data, steps=vl_steps)))
 
         # ------------
         # Train
         # ------------
-        import ipdb; ipdb.set_trace()
+        # Callbacks list
+        monitor = "val_loss"
+        callbacks = keras_callbacks(outdir, monitor=monitor,
+                                    save_best_only=params.save_best_only,
+                                    patience=params.patience,
+                                    fname="best_trained.ckpt")
+
+        # import ipdb; ipdb.set_trace()
         # tr_steps = 10  # tr_tiles // params.batch_size // 15  # for debugging
         print_fn("\n{}".format(yellow("Train")))
         timer = Timer()
@@ -592,14 +625,13 @@ def run(args):
                             epochs=params.epochs,
                             verbose=fit_verbose,
                             callbacks=callbacks)
-        # del train_data, val_data
         timer.display_timer(print_fn)
         plot_prfrm_metrics(history, title="Train stage", name="tn", outdir=outdir)
-        model = load_best_model(outdir)  # load best model
+        print_fn("\nEval after training {}:".format(model.evaluate(val_data, steps=vl_steps)))
 
         # Save trained model
-        print_fn("\nSave trained model.")
-        model.save(outdir/"best_model_trained")
+        # print_fn("\nSave trained model.")
+        # model.save(outdir/"best_model_trained")
 
         create_tf_data_eval_kwargs.update({"tfrecords": test_tfr_files, "include_meta": True})
         test_data = create_tf_data(
@@ -608,33 +640,39 @@ def run(args):
         )
 
         # Calc hits
+        import ipdb; ipdb.set_trace()
         te_tile_preds = calc_tile_preds(test_data, model=model, outdir=outdir)
         te_tile_preds = te_tile_preds.sort_values(["image_id", "tile_id"], ascending=True)
         hits_tn = calc_hits(te_tile_preds, te_meta)
         hits_tn.to_csv(outdir/"hits_tn.csv", index=False)
+
+        calc_mAP(tile_preds=te_tile_preds, n_classes=n_classes, print_fn=print_fn)
 
         # ------------
         # Finetune
         # ------------
         # import ipdb; ipdb.set_trace()
         print_fn("\n{}".format(green("Finetune")))
-        unfreeze_top_layers = 50
+        unfreeze_top_layers = 46
         # Unfreeze layers of the base model
         for layer in base_img_model.layers[-unfreeze_top_layers:]:
-            layer.trainable = True
+            if "_bn" not in layer.name:
+                layer.trainable = True
             print_fn("{}: (trainable={})".format(layer.name, layer.trainable))
         print_fn("Trainable variables: {}".format(len(model.trainable_variables)))
 
+        lr_factor = 10
+        # lr_factor = 1
         model.compile(loss=loss,
-                      optimizer=optimizers.Adam(learning_rate=params.learning_rate/10),
+                      optimizer=optimizers.Adam(learning_rate=params.learning_rate/lr_factor),
                       metrics=metrics)
 
         callbacks = keras_callbacks(outdir, monitor=monitor,
                                     save_best_only=params.save_best_only,
                                     patience=params.patience,
-                                    name="finetune")
+                                    fname="best_finetuned.ckpt")
 
-        total_epochs = history.epoch[-1] + params.finetune_epochs
+        total_epochs = len(history.epoch) + params.finetune_epochs
         timer = Timer()
         history_fn = model.fit(x=train_data,
                                validation_data=val_data,
@@ -645,70 +683,39 @@ def run(args):
                                initial_epoch=history.epoch[-1]+1,
                                verbose=fit_verbose,
                                callbacks=callbacks)
-        del train_data, val_data
-        plot_prfrm_metrics(history_fn, title="Finetune stage", name="fn", outdir=outdir)
         timer.display_timer(print_fn)
+        plot_prfrm_metrics(history_fn, title="Finetune stage", name="fn", outdir=outdir)
+        print_fn("\nEval after finetuning {}:".format(model.evaluate(val_data, steps=vl_steps)))
+        base_img_model.save(outdir/"best_finetuned_img_base")
 
-        # Save trained model
-        print_fn("\nSave finetuned model.")
-        model.save(outdir/"best_model_finetuned")
-        base_img_model.save(outdir/"best_model_img_base_finetuned")
-
-
-    if args.eval is True:
-
-        print_fn("\n{}".format(bold("Test set predictions.")))
-        timer = Timer()
-        # import ipdb; ipdb.set_trace()
+        # Calc hits
         te_tile_preds = calc_tile_preds(test_data, model=model, outdir=outdir)
         te_tile_preds = te_tile_preds.sort_values(["image_id", "tile_id"], ascending=True)
+        hits_fn = calc_hits(te_tile_preds, te_meta)
+        hits_fn.to_csv(outdir/"hits_fn.csv", index=False)
         te_tile_preds.to_csv(outdir/"te_tile_preds.csv", index=False)
         # print(te_tile_preds[["image_id", "tile_id", "y_true", "y_pred_label", "prob"]][:20])
         # print(te_tile_preds.iloc[:20, 1:])
-        del test_data
 
-        # Calc hits
-        hits_fn = calc_hits(te_tile_preds, te_meta)
-        hits_fn.to_csv(outdir/"hits_fn.csv", index=False)
+        calc_mAP(tile_preds=te_tile_preds, n_classes=n_classes, print_fn=print_fn)
 
         # import ipdb; ipdb.set_trace()
-        roc_auc = {}
-        import matplotlib.pyplot as plt
-        from sklearn.metrics import roc_curve, auc
-        fig, ax = plt.subplots(figsize=(8, 6))
-        for true in range(0, n_classes):
-            if true in te_tile_preds["y_true"].values:
-                fpr, tpr, thresh = roc_curve(te_tile_preds["y_true"], te_tile_preds["prob"], pos_label=true)
-                roc_auc[i] = auc(fpr, tpr)
-                plt.plot(fpr, tpr, linestyle='--', label=f"Class {true} vs Rest")
-            else:
-                roc_auc[i] = None
+        plot_multiclass_roc_curve(y_true=te_tile_preds["y_true"].values,
+                                  y_pred=te_tile_preds["prob"].values,
+                                  n_classes=n_classes, outdir=outdir)
 
-        # plt.plot([0,0], [1,1], '--', label="Random")
-        plt.title("Multiclass ROC Curve")
-        plt.xlabel("FPR")
-        plt.ylabel("TPR")
-        plt.legend(loc="best")
-        plt.savefig(outdir/"Multiclass ROC", dpi=70);
+        # base_img_model = tf.keras.applications.Xception(
+        #     include_top=False,
+        #     weights=outdir/"best_finetuned_img_base",
+        #     input_shape=None,
+        #     input_tensor=None,
+        #     pooling=pooling)
 
-        # Avergae precision score
-        from sklearn.metrics import average_precision_score
-        y_true_vec = te_tile_preds.y_true.values
-        y_true_onehot = np.zeros((y_true_vec.size, n_classes))
-        y_true_onehot[np.arange(y_true_vec.size), y_true_vec] = 1
-        y_probs = te_tile_preds[[c for c in te_tile_preds.columns if "prob_" in c]]
-        print_fn("\nAvearge precision")
-        print_fn("Micro    {}".format(average_precision_score(y_true_onehot, y_probs, average="micro")))
-        print_fn("Macro    {}".format(average_precision_score(y_true_onehot, y_probs, average="macro")))
-        print_fn("Wieghted {}".format(average_precision_score(y_true_onehot, y_probs, average="weighted")))
-        print_fn("Samples  {}".format(average_precision_score(y_true_onehot, y_probs, average="samples")))
-
-
-        import ipdb; ipdb.set_trace()
-        agg_method = "mean"
-        # agg_by = "smp"
-        agg_by = "image_id"
-        smp_preds = agg_tile_preds(te_tile_preds, agg_by=agg_by, meta=te_meta, agg_method=agg_method)
+        # Save trained model
+        # print_fn("\nSave finetuned model.")
+        # model = load_best_model(outdir)  # load best model
+        # model.save(outdir/"best_model_finetuned")
+        # base_img_model.save(outdir/"best_model_img_base_finetuned")
 
         timer.display_timer(print_fn)
 

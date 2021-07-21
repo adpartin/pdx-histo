@@ -42,7 +42,7 @@ ModelDict = {
 }
 
 
-def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5, name=None):
+def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5, fname=None):
     """ ... """
     callbacks = []
 
@@ -58,10 +58,10 @@ def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5,
 
     # filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
     if save_best_only is True:
-        if name is None:
+        if fname is None:
             filepath = str(outdir/f"best_model.ckpt")
         else:
-            filepath = str(outdir/f"best_model_{name}.ckpt")
+            filepath = str(outdir/fname)
     else:
         filepath = str(outdir/"model_{epoch:02d}-{val_loss:.3f}.ckpt")
     checkpointer = ModelCheckpoint(filepath,
@@ -93,13 +93,13 @@ def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5,
     return callbacks
 
 
-def load_best_model(models_dir, verbose=True, print_fn=print):
+def load_best_model(models_dir, ckpt_name="best_model.ckpt", verbose=True, print_fn=print):
     """ Load the best checkpointed model where best is defined as a model with
     the lowest val_loss. The names of checkpointed models follow the same naming
     convention that contains the val_loss: model_{epoch:02d}-{val_loss:.3f}.ckpt
     """
-    if (models_dir/"best_model.ckpt").exists():
-        model_path = models_dir/"best_model.ckpt"
+    if (models_dir/ckpt_name).exists():
+        model_path = models_dir/ckpt_name
         model = tf.keras.models.load_model(model_path)
     else:
         model_paths = sorted(models_dir.glob("model*.ckpt"))
@@ -188,7 +188,8 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     pretrain="imagenet",
                     loss=losses.BinaryCrossentropy(),
                     optimizer="SGD",
-                    learning_rate=0.0001):
+                    learning_rate=0.0001,
+                    from_logits=False):
     """ ...
     refs:
         https://github.com/jkjung-avt/keras_imagenet/blob/master/utils/dataset.py
@@ -264,8 +265,9 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     # output = tf.keras.layers.Dense(
     #     1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
-    logits = Dense(1, name="logits")(merged_model)
-    output = Activation("sigmoid", name="Response")(logits)
+    output = Dense(1, name="logits")(merged_model)
+    if from_logits:
+        output = Activation(tf.nn.sigmoid, name="Response")(output)
 
     # Assemble final model
     model = Model(inputs=model_inputs, outputs=output)
@@ -308,7 +310,7 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         # Predict
         preds = model.predict(fea)
         # preds = np.around(preds, 3)
-        if (np.ndim(preds) > 1) and (abs(preds.sum(axis=1).mean() - 1) > 0.05):
+        if (np.ndim(np.squeeze(preds)) > 1) and (abs(preds.sum(axis=1).mean() - 1) > 0.05):
             preds = tf.nn.softmax(preds, axis=1).numpy()
         y_pred_prob.append(preds)
         preds = np.squeeze(preds)
@@ -438,12 +440,9 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
     df_scores.columns = df_scores.iloc[0, :]
     df_scores = df_scores.iloc[1:, :]
     df_scores.to_csv(outdir/f"{name}_scores.csv", index=False)
-    print_fn(df_scores)
-
-    # import ipdb; ipdb.set_trace()
 
     # Confusion
-    print_fn("Per-tile confusion:")
+    print_fn("\n{}".format(yellow("Per-tile confusion:")))
     tile_cnf_mtrx = confusion_matrix(tile_preds["y_true"], tile_preds["y_pred_label"])
     print_fn(tile_cnf_mtrx)
     save_confusion_matrix(true_labels=tile_preds["y_true"].values,
@@ -452,7 +451,7 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_tile_confusion.png")
 
-    print_fn("\nPer-sample confusion:")
+    print_fn("\n{}".format(yellow("Per-sample confusion:")))
     smp_cnf_mtrx = confusion_matrix(smp_preds["Response"], smp_preds["prob"] > p)
     print_fn(smp_cnf_mtrx)
     save_confusion_matrix(true_labels=smp_preds["Response"].values,
@@ -460,13 +459,17 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_smp_confusion.png")
 
-    print_fn("\nPer-group confusion:")
+    print_fn("\n{}".format(yellow("Per-group confusion:")))
     grp_cnf_mtrx = confusion_matrix(grp_preds["Response"], grp_preds["prob"] > p)
     print_fn(grp_cnf_mtrx)
     save_confusion_matrix(true_labels=grp_preds["Response"].values,
                           predictions=grp_preds["prob"].values,
                           labels=["Non-response", "Response"],
                           outpath=outdir/f"{name}_grp_confusion.png")
+
+    print_fn("\n{}".format(cyan("Scores:")))
+    print_fn(df_scores)
+
     return None
 
 
@@ -492,9 +495,6 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
         # p = 0.5
         y_pred_label = [0 if ii < p else 1 for ii in preds]
 
-    # Meta
-    # df_meta = meta.copy()
-
     # Predictions
     y_pred_prob = preds
     if np.ndim(np.squeeze(y_pred_prob)) == 1:
@@ -519,7 +519,6 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     # Per-sample analysis
     # -------------------
     # Combine
-    # prd = pd.concat([df_meta, df_y_pred_prob, df_labels], axis=1)
     prd = pd.concat([meta, df_y_pred_prob, df_labels], axis=1)
     # prd = prd.sort_values(split_on, ascending=True)
 
@@ -531,7 +530,7 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     dump_dict(smp_scores, outdir/f"{name}_smp_scores.txt")
 
     # Confusion
-    print_fn("Per-sample confusion:")
+    print_fn("{}".format(yellow("Per-sample confusion:")))
     cnf_mtrx = confusion_matrix(y_true, y_pred_label)
     print_fn(cnf_mtrx)
     save_confusion_matrix(true_labels=prd["y_true"].values,
@@ -557,7 +556,7 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     dump_dict(grp_scores, outdir/f"{name}_grp_scores.txt")
 
     # Confusion
-    print_fn("Per-group confusion:")
+    print_fn("\n{}".format(yellow("Per-group confusion:")))
     cnf_mtrx = confusion_matrix(df["y_true"].values, df["y_pred_label"].values)
     print_fn(cnf_mtrx)
     save_confusion_matrix(true_labels=df["y_true"].values,
@@ -574,6 +573,8 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     scores = pd.concat([df_smp_scores, df_grp_scores], axis=1)
     scores = scores.reset_index().rename(columns={"index": "metric"})
     scores.to_csv(outdir/f"{name}_scores.csv", index=False)
+    print_fn("\n{}".format(cyan("Scores:")))
+    print_fn(scores)
 
     return None
 

@@ -12,6 +12,7 @@
     "dense1_top": 500,
     "dropout1_top": 0.2,
     "epochs": 50,
+    "finetune_epochs": 10,
     "learning_rate": 0.0005,
     "label_smoothing": 0.05,
     "model_type": "categorical",
@@ -27,5 +28,6 @@
     "tile_um": 302,
     "use_fp16": true,
     "validate_on_batch": null,
+    "validation_steps": null,
     "y_encoding": "label"
 }

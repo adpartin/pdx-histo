@@ -28,15 +28,16 @@ split_on=Group
 n_samples=-1
 
 # Dir name that contains TFRecords
-tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
+# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
-# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.18_of_tiles
-# tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles
+tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.4_of_tiles
 # tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_10_tiles
 
 # Dir name that contains TFRecords for predictions
-pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
+# pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
+pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.1_of_tiles
+# pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR_0.2_of_tiles
 
 DEVICE=$1
 echo "CUDA device: $DEVICE"
