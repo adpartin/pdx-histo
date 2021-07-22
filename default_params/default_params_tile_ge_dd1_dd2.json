@@ -12,6 +12,7 @@
     "dense1_top": 500,
     "dropout1_top": 0.2,
     "epochs": 50,
+    "from_logits": true,
     "learning_rate": 0.0005,
     "label_smoothing": 0.05,
     "model_type": "categorical",

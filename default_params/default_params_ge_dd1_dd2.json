@@ -10,6 +10,7 @@
     "dense1_dd2": 250,
     "dense1_top": 500,
     "epochs": 100,
+    "from_logits": true,
     "label_smoothing": 0.05,
     "learning_rate": 0.0005,
     "optimizer": "Adam",
