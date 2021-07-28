@@ -19,9 +19,10 @@ conda install -c conda-forge openpyxl=3.0.5 --yes
 conda install -c conda-forge openslide=3.4.1 --yes
 conda install -c conda-forge pandas=1.1.5 --yes
 conda install -c conda-forge pillow=8.0.1 --yes
-conda install -c conda-forge psutil --yes
-conda install -c conda-forge python-language-server=0.36.2 --yes
-conda install -c conda-forge pyyaml --yes
+conda install -c conda-forge psutil=5.8.0 --yes
+conda install -c conda-forge python-language-server=0.34.1 --yes
+conda install -c conda-forge python-lsp-server=1.1.0 --yes
+conda install -c conda-forge pyyaml=5.4.1 --yes
 conda install -c conda-forge scikit-image=0.17.1 --yes
 conda install -c conda-forge scikit-learn=0.24.0 --yes
 conda install -c conda-forge seaborn=0.11.1 --yes
