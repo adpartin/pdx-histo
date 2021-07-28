@@ -204,12 +204,21 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
         image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
         tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
 
-        base_img_model = ModelDict[base_image_model](
-            include_top=False,
-            weights=pretrain,
-            input_shape=None,
-            input_tensor=None,
-            pooling=pooling)
+        if pretrain == "imagenet":
+            base_img_model = ModelDict[base_image_model](
+                include_top=False,
+                weights=pretrain,
+                input_shape=None,
+                input_tensor=None,
+                pooling=pooling)
+        else:
+            base_img_model = ModelDict[base_image_model](
+                include_top=False,
+                weights=None,
+                input_shape=None,
+                input_tensor=None,
+                pooling=pooling)
+            base_img_model.load_weights(pretrain)
 
         base_img_model.trainable = False  # Freeze the base_img_model
 
@@ -435,7 +444,11 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
     grp_scores["pred_for"] = "Group"
     df_scores = pd.DataFrame([tile_scores, smp_scores, grp_scores])
     # df_scores = df_scores[["pred_for"] + sorted([c for c in df_scores.columns if c != "pred_for"])]
-    df_scores = df_scores[["pred_for", "brier", "f1_score", "mcc", "pr_auc", "precision", "recall", "roc_auc"]]
+    # df_scores = df_scores[["pred_for", "brier", "f1_score", "mcc", "pr_auc", "precision", "recall", "roc_auc"]]
+    df_scores = df_scores[["pred_for",
+                           "ap_macro", "ap_macro", "ap_weighted",
+                           "brier", "f1_score", "mcc", "pr_auc",
+                           "precision", "recall", "roc_auc"]]
     df_scores = df_scores.T.reset_index()
     df_scores.columns = df_scores.iloc[0, :]
     df_scores = df_scores.iloc[1:, :]
