@@ -199,7 +199,7 @@ def run(args):
 
 
     # Create project dir (if it doesn't exist)
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
     prjdir = cfg.MAIN_PRJDIR/args.prjname
     os.makedirs(prjdir, exist_ok=True)
 
@@ -518,9 +518,13 @@ def run(args):
         from_logits = True
         # from_logits = False
         fit_verbose = 1
-        pretrain = params.pretrain
+        pretrain = "imagenet"
         pooling = params.pooling
         n_classes = len(sorted(tr_meta[args.target[0]].unique()))
+
+
+        # def make_model(args, cfg, params, weights="imagenet"):
+        #     """ ... """
 
         model_inputs = []
         merge_inputs = []
@@ -529,12 +533,18 @@ def run(args):
             image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
             tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
 
-            base_img_model = tf.keras.applications.Xception(
-                include_top=False,
-                weights=pretrain,
-                input_shape=None,
-                input_tensor=None,
-                pooling=pooling)
+            if pretrain == "imagenet":
+                base_img_model = tf.keras.applications.Xception(
+                    include_top=False,
+                    weights=pretrain,
+                    input_shape=None,
+                    input_tensor=None,
+                    pooling=pooling)
+                # base_img_model.save_weights(outdir/"../base_img_model_initial_weights")
+            else:
+                # if weights.exists():
+                base_img_model = tf.keras.applications.Xception(pooling=pooling)
+                base_img_model.load_weights(weights)
 
             print_fn(f"\nNumber of layers in the base image model ({params.base_image_model}): {len(base_img_model.layers)}")
             print_fn("Trainable variables: {}".format(len(base_img_model.trainable_variables)))
@@ -591,6 +601,14 @@ def run(args):
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
 
 
+        # model = make_model(args, cfg, params, weights="imagenet")
+        # model2 = make_model(args, cfg, params, weights=outdir/"../base_img_model_initial_weights")
+
+        # The models are not exactly the same (probably due to the other layers)
+        print_fn("\nInitial model  {}:".format(model.evaluate(val_data, steps=vl_steps)))
+        # print_fn("\nInitial model1 {}:".format(model2.evaluate(val_data, steps=vl_steps)))
+
+
         # import ipdb; ipdb.set_trace()
         print_fn("\n{}".format(red("Base model")))
         base_img_model.summary(print_fn=print_fn)
@@ -601,7 +619,6 @@ def run(args):
         print_fn(f"Train steps:      {tr_steps}")
         print_fn(f"Validation steps: {vl_steps}")
 
-        print_fn("\nEval before training {}:".format(model.evaluate(val_data, steps=vl_steps)))
 
         # ------------
         # Train
@@ -629,6 +646,10 @@ def run(args):
         plot_prfrm_metrics(history, title="Train stage", name="tn", outdir=outdir)
         print_fn("\nEval after training {}:".format(model.evaluate(val_data, steps=vl_steps)))
 
+        # Save weights of the trained image base
+        print_fn("\nSave weights of the trained image base.")
+        base_img_model.save_weights(outdir/"best_trained_img_base_weights")
+
         # Save trained model
         # print_fn("\nSave trained model.")
         # model.save(outdir/"best_model_trained")
@@ -640,7 +661,7 @@ def run(args):
         )
 
         # Calc hits
-        import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         te_tile_preds = calc_tile_preds(test_data, model=model, outdir=outdir)
         te_tile_preds = te_tile_preds.sort_values(["image_id", "tile_id"], ascending=True)
         hits_tn = calc_hits(te_tile_preds, te_meta)
@@ -686,7 +707,11 @@ def run(args):
         timer.display_timer(print_fn)
         plot_prfrm_metrics(history_fn, title="Finetune stage", name="fn", outdir=outdir)
         print_fn("\nEval after finetuning {}:".format(model.evaluate(val_data, steps=vl_steps)))
-        base_img_model.save(outdir/"best_finetuned_img_base")
+
+        # Save weights of the finetuned image base
+        # import ipdb; ipdb.set_trace()
+        print_fn("\nSave weights of the finetuned image base.")
+        base_img_model.save_weights(outdir/"best_finetuned_img_base_weights")
 
         # Calc hits
         te_tile_preds = calc_tile_preds(test_data, model=model, outdir=outdir)
@@ -703,19 +728,6 @@ def run(args):
         plot_multiclass_roc_curve(y_true=te_tile_preds["y_true"].values,
                                   y_pred=te_tile_preds["prob"].values,
                                   n_classes=n_classes, outdir=outdir)
-
-        # base_img_model = tf.keras.applications.Xception(
-        #     include_top=False,
-        #     weights=outdir/"best_finetuned_img_base",
-        #     input_shape=None,
-        #     input_tensor=None,
-        #     pooling=pooling)
-
-        # Save trained model
-        # print_fn("\nSave finetuned model.")
-        # model = load_best_model(outdir)  # load best model
-        # model.save(outdir/"best_model_finetuned")
-        # base_img_model.save(outdir/"best_model_img_base_finetuned")
 
         timer.display_timer(print_fn)
 

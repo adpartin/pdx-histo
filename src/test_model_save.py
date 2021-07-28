@@ -29,23 +29,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPla
 fdir = Path(__file__).resolve().parent
 sys.path.append(str(fdir/".."))
 import src
-# from src.config import cfg
-# from src.models import build_model_rsp, build_model_rsp_baseline, keras_callbacks
-# from src.ml.scale import get_scaler
-# from src.ml.evals import calc_scores, calc_preds, dump_preds, save_confusion_matrix
-# from src.ml.keras_utils import plot_prfrm_metrics
-# from src.utils.classlogger import Logger
-# from src.utils.utils import (cast_list, create_outdir, create_outdir_2, dump_dict, get_print_func,
-#                              read_lines, Params, Timer)
-# from src.datasets.tidy import split_data_and_extract_fea, extract_fea, TidyData
-# from src.tf_utils import get_tfr_files, calc_records_in_tfr_files, count_data_items
-# from src.sf_utils import (create_tf_data, calc_class_weights,
-#                           parse_tfrec_fn_rsp, parse_tfrec_fn_rna,
-#                           create_manifest)
-# from src.sf_utils import bold, green, blue, yellow, cyan, red
-
 url = "https://storage.googleapis.com/download.tensorflow.org/data/creditcard.zip"
-# cache_dir = fdir/"cache_test_datasets/"
 
 tf.keras.utils.get_file(
     fname="creditcard.zip",
@@ -64,7 +48,7 @@ print('Examples:\n    Total: {}\n    Positive: {} ({:.2f}% of total)\n'.format(
 
 cleaned_df = raw_df.copy()
 cleaned_df.pop('Time')
-eps = 0.001 # 0 => 0.1¢
+eps = 0.001
 cleaned_df['Log Ammount'] = np.log(cleaned_df.pop('Amount')+eps)
 
 # Use a utility from sklearn to split and shuffle our dataset.
@@ -114,22 +98,23 @@ METRICS = [
       keras.metrics.AUC(name='auc'),
 ]
 
+
 def make_model(metrics=METRICS, output_bias=None):
     if output_bias is not None:
         output_bias = tf.keras.initializers.Constant(output_bias)
-
+    # Define
     model = keras.Sequential([
         keras.layers.Dense(16, activation='relu', input_shape=(train_features.shape[-1],)),
         keras.layers.Dropout(0.5),
         keras.layers.Dense(1, activation='sigmoid', bias_initializer=output_bias),
     ])
-
+    # Compile
     model.compile(
         optimizer=keras.optimizers.Adam(lr=1e-3),
         loss=keras.losses.BinaryCrossentropy(),
         metrics=metrics)
-
     return model
+
 
 EPOCHS = 100
 BATCH_SIZE = 2048
@@ -148,7 +133,7 @@ results = model.evaluate(train_features, train_labels, batch_size=BATCH_SIZE, ve
 print("Loss: {:0.4f}".format(results[0]))
 
 initial_bias = np.log([pos/neg])
-initial_bias
+print(initial_bias)
 
 model = make_model(output_bias=initial_bias)
 model.predict(train_features[:10])
@@ -158,15 +143,29 @@ print("Loss: {:0.4f}".format(results[0]))
 
 import ipdb; ipdb.set_trace()
 
+# Save weights only
 # initial_weights = os.path.join(tempfile.mkdtemp(), 'initial_weights')
 initial_weights = fdir/'../initial_weights'
 model.save_weights(initial_weights)
 
-model.save(fdir/'../saved_model')
-model1 = tf.keras.models.load_model(fdir/'../saved_model')
+# Save weights
+model1 = make_model()
+model1.load_weights(initial_weights)
 
-res  = model.evaluate(train_features, train_labels, batch_size=BATCH_SIZE, verbose=0)
+# Save model
+model.save(fdir/'../saved_model')
+model2 = tf.keras.models.load_model(fdir/'../saved_model')
+
+res  = model.evaluate( train_features, train_labels, batch_size=BATCH_SIZE, verbose=0)
 res1 = model1.evaluate(train_features, train_labels, batch_size=BATCH_SIZE, verbose=0)
+res2 = model2.evaluate(train_features, train_labels, batch_size=BATCH_SIZE, verbose=0)
+print(res)
+print(res1)
+print(res2)
+
+# Create model and load weights
+# epochs = 20
+epochs = 1
 
 model = make_model()
 model.load_weights(initial_weights)
@@ -175,7 +174,7 @@ zero_bias_history = model.fit(
     train_features,
     train_labels,
     batch_size=BATCH_SIZE,
-    epochs=20,
+    epochs=epochs,
     validation_data=(val_features, val_labels),
     verbose=0)
 
@@ -185,8 +184,31 @@ careful_bias_history = model.fit(
     train_features,
     train_labels,
     batch_size=BATCH_SIZE,
-    epochs=20,
+    epochs=epochs,
     validation_data=(val_features, val_labels),
     verbose=0)
 
+# --------------------------------------------------------
+# import ipdb; ipdb.set_trace()
+# model = tf.keras.applications.Xception(weights="imagenet", pooling="avg")
+
+# initial_weights = fdir/'../initial_weights'
+# model.save_weights(initial_weights)
+# # model_loaded_wts = tf.keras.applications.Xception(weights=initial_weights, pooling="avg")
+# model_loaded_wts = tf.keras.applications.Xception(pooling="avg")
+# model_loaded_wts.load_weights(initial_weights)
+# print(type(model_loaded_wts))
+
+# loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+# optimizer = optimizers.Adam(learning_rate=0.1)
+# model.compile(loss=loss, optimizer=optimizer)
+
+# import ipdb; ipdb.set_trace()
+# model.save(fdir/"../saved_model")
+# model_loaded_full = tf.keras.models.load_model(fdir/"../saved_model")
+
+# print("\nOriginal {}:".format(model.evaluate(val_data, steps=vl_steps)))
+# print("\nWeights  {}:".format(model_loaded_wts.evaluate(val_data, steps=vl_steps)))
+# print("\nFull     {}:".format(model_loaded_full.evaluate(val_data, steps=vl_steps)))
+# --------------------------------------------------------
 
