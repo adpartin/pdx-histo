@@ -260,7 +260,7 @@ def main(args):
     print_fn(f"File path: {fdir}")
 
     # ------------------------------------
-    # Multimodal
+    # Multimodal - mm-NN
     # ------------------------------------
     mm = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd",
@@ -269,7 +269,15 @@ def main(args):
     mm["model"] = "mm-NN"  # Create "model" column
     
     # ------------------------------------
-    # Unimodal - gene expression
+    # Unimodal images - umh-NN
+    # ------------------------------------
+    umh = agg_scores_from_splits(
+        datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_tile_dd",
+        fname="test_scores.csv", prfx="split_", print_fn=print_fn)
+    umh["model"] = "umh-NN"  # Create "model" column
+
+    # ------------------------------------
+    # Unimodal gene expression - ume-NN
     # ------------------------------------
     ume = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd",
@@ -277,7 +285,7 @@ def main(args):
     ume["model"] = "ume-NN"  # Create "model" column
 
     # ------------------------------------
-    # Unimodal - gene expression (drop aug)
+    # Unimodal gene expression - ume-NN drop aug
     # ------------------------------------
     ume_drop_aug = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd_drop_aug",
@@ -285,7 +293,7 @@ def main(args):
     ume_drop_aug["model"] = "ume-NN-drop-aug"  # Create "model" column
     
     # ------------------------------------
-    # Unimodal - gene expression (drop pairs)
+    # Unimodal gene expression - ume-NN only pairs
     # ------------------------------------
     ume_only_pairs = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd_only_pairs",
@@ -309,12 +317,15 @@ def main(args):
                            axis=0).reset_index(drop=True)
 
     # Keep common metrics
-    s1 = set(mm["metric"].values)
-    s2 = set(ume["metric"].values)
-    s3 = set(lgbm["metric"].values)
-    s4 = set(ume_drop_aug["metric"].values)
-    s5 = set(ume_only_pairs["metric"].values)
-    common_metrics = list(reduce(set.intersection, [s1, s2, s3, s4, s5]))
+    # s1 = set(mm["metric"].values)
+    # s2 = set(ume["metric"].values)
+    # s3 = set(lgbm["metric"].values)
+    # s4 = set(ume_drop_aug["metric"].values)
+    # s5 = set(ume_only_pairs["metric"].values)
+    # common_metrics = list(reduce(set.intersection, [s1, s2, s3, s4, s5]))
+    df_list = [mm, umh, ume, lgbm, ume_drop_aug, ume_only_pairs]
+    ll = [df["metric"].values for df in df_list]
+    common_metrics = list(reduce(set.intersection, ll))
     all_scores = all_scores[all_scores["metric"].isin(common_metrics)].reset_index(drop=True)
 
     # Rename metric names
@@ -339,7 +350,7 @@ def main(args):
 
     # Analysis for mm-comp
     name = "mm-comp"
-    model_names = ["mm-NN", "ume-NN", "ume-LGBM"]
+    model_names = ["mm-NN", "umh-NN", "ume-NN", "ume-LGBM"]
     scores = all_scores[all_scores["model"].isin(model_names)].reset_index(drop=True)
     make_plots(scores, outdir, plot_name=name)
     smp_scores, grp_scores = get_agg_scores(scores, agg_method="mean")
