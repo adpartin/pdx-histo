@@ -250,7 +250,6 @@ def t_test_all_metrics(scores, splits: Optional[List[int]]=None, agg_by: str="sm
 
 
 def main(args):
-
     # import ipdb; ipdb.set_trace()
     outdir = fdir/"../projects/bin_rsp_drug_pairs_all_samples"
 
@@ -267,14 +266,15 @@ def main(args):
         fname="test_scores.csv", prfx="split_", print_fn=print_fn)
     mm = mm.rename(columns={"pred_for": "metric"})
     mm["model"] = "mm-NN"  # Create "model" column
-    
+
     # ------------------------------------
     # Unimodal images - umh-NN
     # ------------------------------------
     umh = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_tile_dd",
         fname="test_scores.csv", prfx="split_", print_fn=print_fn)
-    umh["model"] = "umh-NN"  # Create "model" column
+    umh = umh.rename(columns={"pred_for": "metric"})
+    umh["model"] = "umh-NN"
 
     # ------------------------------------
     # Unimodal gene expression - ume-NN
@@ -282,7 +282,7 @@ def main(args):
     ume = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd",
         fname="test_keras_scores.csv", prfx="split_", print_fn=print_fn)
-    ume["model"] = "ume-NN"  # Create "model" column
+    ume["model"] = "ume-NN"
 
     # ------------------------------------
     # Unimodal gene expression - ume-NN drop aug
@@ -290,41 +290,37 @@ def main(args):
     ume_drop_aug = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd_drop_aug",
         fname="test_keras_scores.csv", prfx="split_", print_fn=print_fn)
-    ume_drop_aug["model"] = "ume-NN-drop-aug"  # Create "model" column
-    
+    ume_drop_aug["model"] = "ume-NN-drop-aug"
+
     # ------------------------------------
     # Unimodal gene expression - ume-NN only pairs
     # ------------------------------------
     ume_only_pairs = agg_scores_from_splits(
         datadir=fdir/"../projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd_only_pairs",
         fname="test_keras_scores.csv", prfx="split_", print_fn=print_fn)
-    ume_only_pairs["model"] = "ume-NN-only-pairs"  # Create "model" column
-    
+    ume_only_pairs["model"] = "ume-NN-only-pairs"
+
     # ------------------------------------
     # LGBM
     # ------------------------------------
     lgbm = agg_scores_from_splits(
         datadir=fdir/"../data/PDX_Transfer_Learning_Classification/Results_MultiModal_Learning/1.0_True_False_100_31",
         fname="te_scores.csv", prfx="cv_", print_fn=print_fn)
-    lgbm["model"] = "ume-LGBM"  # Create "model" column
+    lgbm["model"] = "ume-LGBM"
 
     # ------------------------------------
     # Agg scores from all models
     # ------------------------------------
     # Concat scores from all models
-    cols = ["metric", "smp", "Group", "split", "model"]
-    all_scores = pd.concat([mm[cols], ume[cols], lgbm[cols], ume_drop_aug[cols], ume_only_pairs[cols]],
-                           axis=0).reset_index(drop=True)
+    df_list_org = [mm, umh, ume, lgbm, ume_drop_aug, ume_only_pairs]
+    # ll = [set(df.columns) for df in df_list_org]
+    # common_cols = list(reduce(set.intersection, ll))
+    common_cols = ["metric", "smp", "Group", "split", "model"]
+    df_list = [df[common_cols] for df in df_list_org]
+    all_scores = pd.concat(df_list, axis=0).reset_index(drop=True)
 
     # Keep common metrics
-    # s1 = set(mm["metric"].values)
-    # s2 = set(ume["metric"].values)
-    # s3 = set(lgbm["metric"].values)
-    # s4 = set(ume_drop_aug["metric"].values)
-    # s5 = set(ume_only_pairs["metric"].values)
-    # common_metrics = list(reduce(set.intersection, [s1, s2, s3, s4, s5]))
-    df_list = [mm, umh, ume, lgbm, ume_drop_aug, ume_only_pairs]
-    ll = [df["metric"].values for df in df_list]
+    ll = [set(df["metric"].values) for df in df_list]
     common_metrics = list(reduce(set.intersection, ll))
     all_scores = all_scores[all_scores["metric"].isin(common_metrics)].reset_index(drop=True)
 
