@@ -161,10 +161,18 @@ def run(args):
     params = Params(prm_file_path)
 
     if args.rundir is not None:
+        # Inferenve (eval)
         outdir = Path(args.rundir).resolve()
         assert outdir.exists(), f"The {outdir} doen't exist."
-        print_fn = print
+        # print_fn = print
+
+        # Logger
+        lg = Logger(outdir/"logger_infer.log")
+        print_fn = get_print_func(lg.logger)
+        print_fn(f"File path: {fdir}")
+        print_fn(f"\n{pformat(vars(args))}")
     else:
+        # Training
         outdir = create_outdir_2(prjdir, args)
 
         # Save hyper-parameters
@@ -470,7 +478,7 @@ def run(args):
         # -------------------------------
         # Create TF datasets
         # -------------------------------
-        print("\nCreating TF datasets.")
+        print_fn("\nCreating TF datasets.")
 
         # Training
         # import ipdb; ipdb.set_trace()
@@ -506,12 +514,12 @@ def run(args):
 
         # Print keys and dims
         for i, item in enumerate(bb):
-            print(f"\nItem {i}")
+            print_fn(f"\nItem {i}")
             if isinstance(item, dict):
                 for k in item.keys():
-                    print(f"\t{k}: {item[k].numpy().shape}")
+                    print_fn(f"\t{k}: {item[k].numpy().shape}")
             elif isinstance(item.numpy(), np.ndarray):
-                print(item)
+                print_fn(item)
 
         # for i, rec in enumerate(train_data.take(2)):
         #     tf.print(rec[1])
@@ -582,7 +590,7 @@ def run(args):
     # Loss and target
     if args.use_tile:
         # loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
-        loss = losses.BinaryCrossentropy()
+        loss = losses.BinaryCrossentropy(from_logits=params.from_logits)
         # loss = focal_loss(alpha=0.75, gamma=2.0)
 
     else:
@@ -598,7 +606,7 @@ def run(args):
                 yvl = y_onehot.iloc[vl_id, :].reset_index(drop=True)
                 yte = y_onehot.iloc[te_id, :].reset_index(drop=True)
 
-            loss = losses.CategoricalCrossentropy()
+            loss = losses.CategoricalCrossentropy(from_logits=params.from_logits)
 
         elif params.y_encoding == "label":
             if index_col_name in data.columns:
@@ -607,13 +615,13 @@ def run(args):
                 yvl = vl_meta[args.target[0]].values
                 yte = te_meta[args.target[0]].values
                 # loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
-                loss = losses.BinaryCrossentropy()
+                loss = losses.BinaryCrossentropy(from_logits=params.from_logits)
                 # loss = focal_loss(alpha=0.75, gamma=2.0)
             else:
                 ytr = ydata_label[tr_id]
                 yvl = ydata_label[vl_id]
                 yte = ydata_label[te_id]
-                loss = losses.SparseCategoricalCrossentropy()
+                loss = losses.SparseCategoricalCrossentropy(from_logits=params.from_logits)
         else:
             raise ValueError(f"Unknown value for y_encoding ({params.y_encoding}).")
 
@@ -965,7 +973,21 @@ def run(args):
         # Define model
         # ----------------------
         # import ipdb; ipdb.set_trace()
-        if args.target[0] == "Response":
+        # Initial model
+        # TODO: Problem! When we load a saved model that had some params set
+        # to trainable=False, all params appear as trainable. Thus, we always
+        # build the model with build_model_rsp().
+        print_fn("")
+        fea_types_str = fea_types_to_str_name(args)
+        initial_model_path = prjdir/f"initial_model_{fea_types_str}"
+        if False:
+        # if initial_model_path.exists():
+            print_fn("Loading initial model (from the global dir).")
+            model = tf.keras.models.load_model(initial_model_path)
+        else:
+            # import ipdb; ipdb.set_trace()
+            # pretrain = fdir/"../projects/bin_ctype_drug_pairs_all_samples/Xception_finetuned/best_finetuned_img_base_weights"
+            pretrain = "imagenet"
             build_model_kwargs = {"base_image_model": params.base_image_model,
                                   "dense1_dd1": params.dense1_dd1,
                                   "dense1_dd2": params.dense1_dd2,
@@ -973,24 +995,24 @@ def run(args):
                                   "dense1_img": params.dense1_img,
                                   "dense2_img": params.dense2_img,
                                   "dense1_top": params.dense1_top,
+                                  "dropout1_top": params.dropout1_top,
                                   "dd_shape": dd_shape,
                                   "ge_shape": ge_shape,
+                                  "from_logits": params.from_logits,
                                   "learning_rate": params.learning_rate,
                                   "loss": loss,
                                   "optimizer": params.optimizer,
                                   "output_bias": output_bias,
-                                  "dropout1_top": params.dropout1_top,
+                                  "pooling": params.pooling,
+                                  "pretrain": pretrain,
                                   "use_dd1": args.use_dd1,
                                   "use_dd2": args.use_dd2,
                                   "use_ge": args.use_ge,
                                   "use_tile": args.use_tile,
-                                  "from_logits": params.from_logits,
-                                  # "model_type": params.model_type,
             }
             model = build_model_rsp(**build_model_kwargs)
-        else:
-            raise NotImplementedError("Need to check this method")
-            model = build_model_rna()
+            # print_fn("Saving initial model (to the global dir).")
+            # model.save(initial_model_path)
 
         # import ipdb; ipdb.set_trace()
         print_fn("")
@@ -1000,19 +1022,6 @@ def run(args):
         # steps = 40
         # res = model.evaluate(train_data, steps=tr_steps, verbose=1)
         # print("Loss: {:0.4f}".format(res[0]))
-
-
-        # Initial model
-        print_fn("")
-        # initial_model_path = prjdir/f"base_{args.nn_arch}_model"
-        fea_types_str = fea_types_to_str_name(args)
-        initial_model_path = prjdir/f"initial_model_{fea_types_str}"
-        if initial_model_path.exists():
-            print_fn("Loading initial model (from the global dir).")
-            model = tf.keras.models.load_model(initial_model_path)
-        else:
-            print_fn("Saving initial model (to the global dir).")
-            model.save(initial_model_path)
 
         # # Save initial model to the outdir for reference
         # print_fn("Saving initial model (to the current run dir).")
@@ -1037,9 +1046,11 @@ def run(args):
         # aa = model.evaluate(val_data, steps=vl_steps, verbose=1)
         # print_fn("Base model val_loss: {}".format(aa[0]))
 
+        # import ipdb; ipdb.set_trace()
         print_fn("\n{}".format(yellow("Train")))
         timer = Timer()
         if args.use_tile is True:
+            # tr_steps = 10  # for debugging
             print_fn(f"Train steps:      {tr_steps}")
             print_fn(f"Validation steps: {vl_steps}")
 
@@ -1081,7 +1092,8 @@ def run(args):
 
     if args.eval is True:
         if model is None:
-            model = load_best_model(outdir, verbose=True, print_fn=print_fn)
+            ckpt_name = "final_model.ckpt"
+            model = load_best_model(outdir, ckpt_name=ckpt_name, verbose=True, print_fn=print_fn)
 
         # import ipdb; ipdb.set_trace()
         if args.use_tile:
