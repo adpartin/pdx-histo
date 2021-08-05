@@ -275,17 +275,19 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     #     1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
 
     output = Dense(1, name="logits")(merged_model)
-    if from_logits:
+    if from_logits is False:
         output = Activation(tf.nn.sigmoid, name="Response")(output)
 
     # Assemble final model
     model = Model(inputs=model_inputs, outputs=output)
 
+    # These metrics don't work with logits
     metrics = [
+        tf.keras.metrics.BinaryAccuracy(name="BinAcc")
           # keras.metrics.FalsePositives(name="fp"),
           # keras.metrics.TruePositives(name="tp"),
-          keras.metrics.AUC(name="roc-auc", curve="ROC"),
-          keras.metrics.AUC(name="prc-auc", curve="PR"),
+          # keras.metrics.AUC(name="roc-auc", curve="ROC"),
+          # keras.metrics.AUC(name="prc-auc", curve="PR"),
     ]
 
     if optimizer == "SGD":
@@ -320,7 +322,11 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         preds = model.predict(fea)
         # preds = np.around(preds, 3)
         if (np.ndim(np.squeeze(preds)) > 1) and (abs(preds.sum(axis=1).mean() - 1) > 0.05):
+            # multiclass
             preds = tf.nn.softmax(preds, axis=1).numpy()
+        if (np.ndim(np.squeeze(preds)) == 1) and (abs(preds).max() > 1.0) or (abs(preds).max() < 0.0):
+            # binary
+            preds = tf.nn.sigmoid(preds).numpy()
         y_pred_prob.append(preds)
         preds = np.squeeze(preds)
 
@@ -419,7 +425,6 @@ def calc_tf_preds(tf_data, meta, model, outdir, args, name, p=0.5, print_fn=prin
     # timer.display_timer(print_fn)
 
     # Aggregate predictions
-    # import ipdb; ipdb.set_trace()
     agg_method = "mean"
     smp_preds = agg_tile_preds(tile_preds, agg_by="smp", meta=meta, agg_method=agg_method)
     grp_preds = agg_tile_preds(tile_preds, agg_by="Group", meta=meta, agg_method=agg_method)
