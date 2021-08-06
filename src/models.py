@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import time
 from typing import Optional, List
 
 import tensorflow as tf
@@ -12,7 +13,7 @@ from sklearn.metrics import confusion_matrix
 
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
+from tensorflow.keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Concatenate
 from tensorflow.keras import layers
 from tensorflow.keras import losses
 from tensorflow.keras import optimizers
@@ -40,6 +41,341 @@ ModelDict = {
     "EfficientNetB3": tf.keras.applications.EfficientNetB3,
     "EfficientNetB4": tf.keras.applications.EfficientNetB4
 }
+
+
+class MySparseBCE_From_Logits(losses.Loss):
+    """ ... """
+    def __init__(self, class_weight=[1, 1], dtype=tf.float32):
+        super().__init__()
+        self.class_weight = class_weight
+        self.from_logits = True
+        self.dtype = dtype
+
+    def call(self, y_true, y_pred):
+        labels = tf.cast(y_true, self.dtype)
+        logits = tf.cast(y_pred, self.dtype)
+        if self.from_logits:
+            probs = tf.cast(tf.math.sigmoid(logits), self.dtype)
+
+        # # Onehot labels
+        # n_classes = 2
+        # onehot_labels = tf.one_hot(ytr_batch, depth=n_classes, on_value=1)
+
+        # Vector of weights
+        # weight = tf.gather(params=[1, 10], indices=tf.cast(labels, tf.int32))
+        weight = tf.gather(params=list(self.class_weight.values()), indices=tf.cast(labels, tf.int32))
+        weight = tf.cast(weight, self.dtype)
+
+        # Keras BCE loss
+        # keras_bce_loss = tf.keras.losses.BinaryCrossentropy(from_logits=self.from_logits)
+        # print("Keras BCE loss: {}".format(keras_bce_loss(labels, logits)))
+
+        # Manual BCE loss
+        # impl of cross-entropy: https://stackoverflow.com/questions/58159154
+        # nans in loss func: https://stackoverflow.com/questions/33712178/tensorflow-nan-bug
+        # weighted_bce_losses = -(weight*labels*(tf.math.log(probs)) + weight*(1 - labels)*(tf.math.log(1 - probs)))
+        p0 = weight * labels * tf.math.log(tf.clip_by_value(probs, 1e-10, 1.0))
+        p1 = weight * (1 - labels) * tf.math.log(tf.clip_by_value(1 - probs, 1e-10, 1.0))
+        weighted_bce_losses = -(p0 + p1)
+        # weighted_bce_loss = tf.reduce_mean(weighted_bce_losses)  # reduction
+        # print("Manual weigted BCE loss: {}".format(weighted_bce_loss))
+        return weighted_bce_losses
+
+
+# ------------------------------------------------------------------
+class Multimodal():
+    """ ... """
+    def __init__(self, print_fn=print):
+        super(Multimodal, self).__init__()
+        self.model = None
+        self.print_fn = print_fn
+
+    @tf.function
+    def train_step(self, xtr_batch, ytr_batch):
+        """ Training step. """
+        ytr_batch = tf.squeeze(ytr_batch)
+        with tf.GradientTape() as tape:
+            # Forward pass and loss
+            logits = self.model(xtr_batch, training=True)
+            logits = tf.squeeze(logits)
+            loss_value = self.loss_fn(ytr_batch, logits)
+        # Calc the grads and update the params
+        grads = tape.gradient(loss_value, self.model.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
+        # Update training metric
+        probs = tf.math.sigmoid(logits)
+        self.trn_roc_met.update_state(ytr_batch, probs)
+        self.trn_prc_met.update_state(ytr_batch, probs)
+        return loss_value
+
+    @tf.function
+    def val_step(self, xvl_batch, yvl_batch):
+        """ Validation/test step. """
+        yvl_batch = tf.squeeze(yvl_batch)
+        val_logits = self.model(xvl_batch, training=False)
+        val_logits = tf.squeeze(val_logits)
+        val_loss = self.loss_fn(yvl_batch, val_logits)
+        val_probs = tf.math.sigmoid(val_logits)
+        self.val_roc_met.update_state(yvl_batch, val_probs)
+        self.val_prc_met.update_state(yvl_batch, val_probs)
+        return val_loss
+
+    def evaluate(self):
+        """ Run a validation loop and return metrics. """
+        for vl_step, (xvl_batch, yvl_batch) in enumerate(self.validation_data):
+            vl_step += 1
+            if vl_step > self.validation_steps:
+                break
+            val_loss = self.val_step(xvl_batch, yvl_batch)
+
+        # Display metrics at the end of each epoch
+        val_roc = self.val_roc_met.result().numpy()
+        val_prc = self.val_prc_met.result().numpy()
+
+        # Reset metrics at the end of each epoch
+        self.val_roc_met.reset_states()
+        self.val_prc_met.reset_states()
+
+        res = {"val_loss": val_loss.numpy(), "val_roc": val_roc, "val_prc": val_prc}
+        return res
+
+    def print_trn_scores(self):
+        # Display metrics at the end of each epoch
+        trn_roc = self.trn_roc_met.result().numpy()
+        trn_prc = self.trn_prc_met.result().numpy()
+        val_roc = self.val_roc_met.result().numpy()
+        val_prc = self.val_prc_met.result().numpy()
+        self.print_fn("epoch {}, loss: {:.3f}, roc: {:.3f}, "
+                      "prc: {:.3f}, val_loss: {:.3f}, val_roc: {:.3f} val_prc: {:.3f}".format(
+                          epoch, loss_value, trn_roc, trn_prc,
+                          evals["val_loss"], evals["val_roc"], evals["val_prc"]))
+
+    def set_optimizer(self, optimizer_name, learning_rate):
+        if optimizer_name == "SGD":
+            self.optimizer = optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
+        elif optimizer_name == "Adam":
+            self.optimizer = optimizers.Adam(learning_rate=learning_rate)
+
+    def myfit(self, train_data, validation_data, steps_per_epoch, validation_steps, epochs,
+              batch_patience=100, validate_on_batch=250,
+              loss_fn=losses.BinaryCrossentropy(from_logits=True),
+              optimizer_name="Adam", learning_rate=0.0005,
+              outdir=Path("."),
+              verbose=0):
+        """ ... """
+        self.epochs = epochs
+        self.loss_fn = loss_fn
+        self.steps_per_epoch = steps_per_epoch
+        self.batch_patience = batch_patience
+        self.best = np.Inf      # init the best as infinity
+        self.epoch = 0
+        self.outdir = outdir
+        self.stopped_epoch = 0  # epoch the training stops at
+        self.stopped_batch = 0  # batch the training stops at
+        self.validation_data = validation_data
+        self.validation_steps = validation_steps
+        self.val_loss = np.Inf
+        self.validate_on_batch = validate_on_batch
+
+        self.trn_roc_met = keras.metrics.AUC(name="roc-auc", curve="ROC")
+        self.val_roc_met = keras.metrics.AUC(name="roc-auc", curve="ROC")
+        self.trn_prc_met = keras.metrics.AUC(name="prc-auc", curve="PR")
+        self.val_prc_met = keras.metrics.AUC(name="prc-auc", curve="PR")
+
+        assert self.model is not None, "Model is not defined."
+
+        self.set_optimizer(optimizer_name, learning_rate)
+
+        # import ipdb; ipdb.set_trace()
+        for epoch in range(self.epochs):
+            t0 = time()
+            epoch += 1
+            wait = 0
+
+            # import ipdb; ipdb.set_trace()
+            for step, (xtr_batch, ytr_batch) in enumerate(train_data):
+                step += 1
+                if step > steps_per_epoch:
+                    break
+                loss_value = self.train_step(xtr_batch, ytr_batch)
+
+                # print("\repoch {}/{}, step {}/{}, loss: {:.5f}".format(
+                #     epoch, self.epochs, step, steps_per_epoch, loss_value), end="\r")
+
+                if step % self.validate_on_batch == 0:
+                    evals = self.evaluate()
+                    current = evals["val_loss"]
+
+                    if np.less(current, self.best):
+                        self.best = current
+                        wait = 0
+                        self.best_weights = self.model.get_weights()
+                        # import ipdb; ipdb.set_trace()
+                        # Save model
+                    else:
+                        wait += 1
+
+                    # Don't terminate on the first epoch
+                    if (wait >= self.batch_patience) and (epoch > 1):
+                        # import ipdb; ipdb.set_trace()
+                        self.stopped_epoch = epoch
+                        self.stopped_batch = step
+                        self.print_fn("\n{}".format(red(f"Early stop (terminated training at epoch: {epoch}, step: {step}).")))
+                        self.print_fn("Restores model weights from the best epoch-batch set.")
+                        self.model.set_weights(self.best_weights)
+                        evals = self.evaluate()
+                        self.print_fn("epoch {}, loss: {:.5f}, roc: {:.3f}, "
+                                      "prc: {:.3f}, val_loss: {:.5f}, val_roc: {:.3f} val_prc: {:.3f}".format(
+                                          epoch, loss_value, trn_roc, trn_prc,
+                                          evals["val_loss"], evals["val_roc"], evals["val_prc"]))
+                        self.print_fn("Saves best model.")
+                        self.model.save(self.outdir/"best_model.ckpt")
+                        return None
+
+                    # Log metrics after evaluation
+                    print("\repoch {}, step {}/{}, loss: {:.5f}, val_loss: {:.5f}, best_val_loss: {:.5f} (wait: {})".format(
+                        epoch, step, steps_per_epoch, loss_value, evals["val_loss"], self.best, yellow(wait)), end="\r")
+
+            # Display metrics at the end of each epoch
+            trn_roc = self.trn_roc_met.result().numpy()
+            trn_prc = self.trn_prc_met.result().numpy()
+
+            # Reset metrics at the end of each epoch
+            self.trn_roc_met.reset_states()
+            self.trn_prc_met.reset_states()
+
+            # Run a validation loop at the end of each epoch
+            # import ipdb; ipdb.set_trace()
+            evals = self.evaluate()
+
+            tm = (time() - t0)/60
+            self.print_fn("epoch {} ({:.1f} min), loss: {:.5f}, roc: {:.3f}, "
+                          "prc: {:.3f}, val_loss: {:.5f}, val_roc: {:.3f} val_prc: {:.3f}".format(
+                              epoch, tm, loss_value, trn_roc, trn_prc,
+                              evals["val_loss"], evals["val_roc"], evals["val_prc"]))
+
+        self.print_fn("\n{}".format(red(f"Completed training (finished {epoch} epochs and {step} steps).")))
+        self.print_fn("Restores model weights from the best epoch-batch set.")
+        self.model.set_weights(self.best_weights)
+        self.model.save(self.outdir/"best_model.ckpt")
+        return None
+
+    def build_model_rsp(self,
+                        use_ge=True,
+                        use_dd1=True,
+                        use_dd2=True,
+                        use_tile=True,
+                        ge_shape=None,
+                        dd_shape=None,
+                        dense1_img=1024,
+                        dense2_img=512,
+                        dense1_ge=500,
+                        dense1_dd1=250,
+                        dense1_dd2=250,
+                        dense1_top=1000,
+                        dropout1_top=0.1,
+                        output_bias=None,
+                        base_image_model="Xception",
+                        pooling="avg",
+                        pretrain="imagenet",
+                        loss_fn=losses.BinaryCrossentropy(),
+                        optimizer="SGD",
+                        learning_rate=0.0001,
+                        from_logits=False):
+        """ ...
+        refs:
+            https://github.com/jkjung-avt/keras_imagenet/blob/master/utils/dataset.py
+        """
+        if output_bias is not None:
+            output_bias = tf.keras.initializers.Constant(output_bias)
+            
+        model_inputs = []
+        merge_inputs = []
+
+        if use_tile:
+            image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
+            tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
+
+            if pretrain == "imagenet":
+                base_img_model = ModelDict[base_image_model](
+                    include_top=False,
+                    weights=pretrain,
+                    input_shape=None,
+                    input_tensor=None,
+                    pooling=pooling)
+            else:
+                base_img_model = ModelDict[base_image_model](
+                    include_top=False,
+                    weights=None,
+                    input_shape=None,
+                    input_tensor=None,
+                    pooling=pooling)
+                base_img_model.load_weights(pretrain)
+
+            base_img_model.trainable = False  # Freeze the base_img_model
+
+            # training=False makes the base model to run in inference mode so
+            # that batchnorm layers are not updated during the fine-tuning stage.
+            # x_tile = base_img_model(tile_input_tensor)
+            x_tile = base_img_model(tile_input_tensor, training=False)
+            model_inputs.append(tile_input_tensor)
+
+            if dense1_img > 0:
+                x_tile = Dense(dense1_img, activation=tf.nn.relu, name="dense1_img")(x_tile)
+            if dense2_img > 0:
+                x_tile = Dense(dense2_img, activation=tf.nn.relu, name="dense2_img")(x_tile)
+            if (dense1_img > 0) or (dense2_img > 0):
+                x_tile = BatchNormalization(name="batchnorm_im")(x_tile)
+            merge_inputs.append(x_tile)
+            del tile_input_tensor, x_tile
+
+        if use_ge:
+            ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
+            x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
+            x_ge = BatchNormalization(name="batchnorm_ge")(x_ge)
+            model_inputs.append(ge_input_tensor)
+            merge_inputs.append(x_ge)
+            del ge_input_tensor, x_ge
+
+        if use_dd1:
+            dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
+            x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
+            x_dd1 = BatchNormalization(name="batchnorm_dd1")(x_dd1)
+            model_inputs.append(dd1_input_tensor)
+            merge_inputs.append(x_dd1)
+            del dd1_input_tensor, x_dd1
+
+        if use_dd2:
+            dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
+            x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
+            x_dd2 = BatchNormalization(name="batchnorm_dd2")(x_dd2)
+            model_inputs.append(dd2_input_tensor)
+            merge_inputs.append(x_dd2)
+            del dd2_input_tensor, x_dd2
+
+        # Dropout for feature type
+        # ModalDropout
+        pass
+
+        # Merge towers
+        merged_model = Concatenate(axis=1, name="merger")(merge_inputs)
+
+        # Dense layers of the top classfier
+        merged_model = Dense(dense1_top, activation=tf.nn.relu, name="dense1_top")(merged_model)
+        merged_model = BatchNormalization(name="batchnorm_top")(merged_model)
+        if dropout1_top > 0:
+            merged_model = Dropout(dropout1_top)(merged_model)
+
+        output = Dense(1, name="logits")(merged_model)
+        if from_logits is False:
+            output = Activation(tf.nn.sigmoid, name="Response")(output)
+
+        # Assemble final model
+        model = Model(inputs=model_inputs, outputs=output)
+
+        self.model = model
+        return None
+    # ------------------------------------------------------------------
 
 
 def keras_callbacks(outdir, monitor="val_loss", save_best_only=True, patience=5, fname=None):
@@ -112,68 +448,6 @@ def load_best_model(models_dir, ckpt_name="best_model.ckpt", verbose=True, print
     return model
 
 
-def build_model_rsp_baseline(use_ge=True, use_dd1=True, use_dd2=True,
-                             ge_shape=None, dd_shape=None, model_type="categorical",
-                             dense1_ge=512, dense1_dd1=256, dense1_dd2=256, dense1_top=500,
-                             dropout1_top=0.1,
-                             # NUM_CLASSES=None,
-                             output_bias=None):
-    """ Doesn't use image data. """
-    if output_bias is not None:
-        output_bias = tf.keras.initializers.Constant(output_bias)
-
-    model_inputs = []
-    merge_inputs = []
-
-    if use_ge:
-        ge_input_tensor = tf.keras.Input(shape=ge_shape, name="ge_data")
-        x_ge = Dense(dense1_ge, activation=tf.nn.relu, name="dense1_ge")(ge_input_tensor)
-        x_ge = BatchNormalization(name="ge_batchnorm")(x_ge)
-        # x_ge = Dropout(0.4)(x_ge)
-        model_inputs.append(ge_input_tensor)
-        merge_inputs.append(x_ge)
-        del ge_input_tensor, x_ge
-
-    if use_dd1:
-        dd1_input_tensor = tf.keras.Input(shape=dd_shape, name="dd1_data")
-        x_dd1 = Dense(dense1_dd1, activation=tf.nn.relu, name="dense1_dd1")(dd1_input_tensor)
-        x_dd1 = BatchNormalization(name="dd1_batchnorm")(x_dd1)
-        # x_dd1 = Dropout(0.4)(x_dd1)
-        model_inputs.append(dd1_input_tensor)
-        merge_inputs.append(x_dd1)
-        del dd1_input_tensor, x_dd1
-
-    if use_dd2:
-        dd2_input_tensor = tf.keras.Input(shape=dd_shape, name="dd2_data")
-        x_dd2 = Dense(dense1_dd2, activation=tf.nn.relu, name="dense1_dd2")(dd2_input_tensor)
-        x_dd2 = BatchNormalization(name="dd2_batchnorm")(x_dd2)
-        # x_dd2 = Dropout(0.4)(x_dd2)
-        model_inputs.append(dd2_input_tensor)
-        merge_inputs.append(x_dd2)
-        del dd2_input_tensor, x_dd2
-
-    # Merge towers
-    merged_model = layers.Concatenate(axis=1, name="merger")(merge_inputs)
-
-    merged_model = tf.keras.layers.Dense(dense1_top, activation=tf.nn.relu,
-                                         name="dense1_top", kernel_regularizer=None)(merged_model)
-    merged_model = BatchNormalization()(merged_model)
-    if dropout1_top > 0:
-        merged_model = Dropout(dropout1_top)(merged_model)
-
-    # Add the softmax prediction layer
-    # activation = "linear" if model_type == "linear" else "softmax"
-    # final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-    # softmax_output = tf.keras.layers.Activation(activation, dtype="float32", name="Response")(final_dense_layer)
-
-    softmax_output = tf.keras.layers.Dense(
-        1, activation="sigmoid", bias_initializer=output_bias, name="Response")(merged_model)
-
-    # Assemble final model
-    model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-    return model
-
-
 def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     ge_shape=None, dd_shape=None,
                     dense1_img=1024, dense2_img=512,
@@ -186,7 +460,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
                     base_image_model="Xception",
                     pooling="max",
                     pretrain="imagenet",
-                    loss=losses.BinaryCrossentropy(),
+                    loss_fn=losses.BinaryCrossentropy(),
                     optimizer="SGD",
                     learning_rate=0.0001,
                     from_logits=False):
@@ -295,7 +569,7 @@ def build_model_rsp(use_ge=True, use_dd1=True, use_dd2=True, use_tile=True,
     elif optimizer == "Adam":
         optimizer = optimizers.Adam(learning_rate=learning_rate)
 
-    model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+    model.compile(loss=loss_fn, optimizer=optimizer, metrics=metrics)
     return model
 
 
@@ -597,34 +871,38 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     return None
 
 
+def focal_loss(gamma=2., alpha=4.):
+    gamma = float(gamma)
+    alpha = float(alpha)
 
-# def build_model_rna(pooling='max', pretrain='imagenet'):
-#     # Image layers
-#     image_shape = (cfg.IMAGE_SIZE, cfg.IMAGE_SIZE, 3)
-#     tile_input_tensor = tf.keras.Input(shape=image_shape, name="tile_image")
-#     base_img_model = tf.keras.applications.Xception(
-#         weights=pretrain, pooling=pooling, include_top=False,
-#         input_shape=None, input_tensor=None)
-#     x_tile = base_img_model(tile_input_tensor)
+    def focal_loss_fixed(y_true, y_pred):
+        """Focal loss for multi-classification
+        FL(p_t)=-alpha(1-p_t)^{gamma}ln(p_t)
+        Notice: y_pred is probability after softmax
+        gradient is d(Fl)/d(p_t) not d(Fl)/d(x) as described in paper
+        d(Fl)/d(p_t) * [p_t(1-p_t)] = d(Fl)/d(x)
+        Focal Loss for Dense Object Detection
+        https://arxiv.org/abs/1708.02002
 
-#     # RNA layers
-#     ge_input_tensor = tf.keras.Input(shape=(976,), name="ge_data")
-#     x_ge = Dense(512, activation=tf.nn.relu)(ge_input_tensor)
+        Arguments:
+            y_true {tensor} -- ground truth labels, shape of [batch_size, num_cls]
+            y_pred {tensor} -- model's output, shape of [batch_size, num_cls]
 
-#     model_inputs = [tile_input_tensor, ge_input_tensor]
+        Keyword Arguments:
+            gamma {float} -- (default: {2.0})
+            alpha {float} -- (default: {4.0})
 
-#     # Merge towers
-#     merged_model = layers.Concatenate(axis=1, name="merger")([x_ge, x_tile])
+        Returns:
+            [tensor] -- loss.
+        """
+        epsilon = 1.e-9
+        y_true = tf.convert_to_tensor(y_true, tf.float32)
+        y_pred = tf.convert_to_tensor(y_pred, tf.float32)
 
-#     hidden_layer_width = 1000
-#     merged_model = tf.keras.layers.Dense(hidden_layer_width, activation=tf.nn.relu,
-#                                          name="hidden_1")(merged_model)
-
-#     # Add the softmax prediction layer
-#     activation = 'linear' if model_type == 'linear' else 'softmax'
-#     final_dense_layer = tf.keras.layers.Dense(NUM_CLASSES, name="prelogits")(merged_model)
-#     softmax_output = tf.keras.layers.Activation(activation, dtype='float32', name='ctype')(final_dense_layer)
-
-#     # Assemble final model
-#     model = tf.keras.Model(inputs=model_inputs, outputs=softmax_output)
-#     return model
+        model_out = tf.add(y_pred, epsilon)
+        ce = tf.multiply(y_true, -tf.log(model_out))
+        weight = tf.multiply(y_true, tf.pow(tf.subtract(1., model_out), gamma))
+        fl = tf.multiply(alpha, tf.multiply(weight, ce))
+        reduced_fl = tf.reduce_max(fl, axis=1)
+        return tf.reduce_mean(reduced_fl)
+    return focal_loss_fixed

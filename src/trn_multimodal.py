@@ -39,8 +39,8 @@ fdir = Path(__file__).resolve().parent
 sys.path.append(str(fdir/".."))
 import src
 from src.config import cfg
-from src.models import (build_model_rsp, build_model_rsp_baseline, keras_callbacks, load_best_model,
-                        calc_tf_preds, calc_smp_preds)
+from src.models import (build_model_rsp, keras_callbacks, load_best_model,
+                        calc_tf_preds, calc_smp_preds, MySparseBCE_From_Logits, Multimodal)
 from src.ml.scale import get_scaler
 from src.ml.evals import calc_scores, save_confusion_matrix
 from src.ml.keras_utils import plot_prfrm_metrics
@@ -550,43 +550,6 @@ def run(args):
     # ----------------------
     # import ipdb; ipdb.set_trace()
 
-    def focal_loss(gamma=2., alpha=4.):
-        gamma = float(gamma)
-        alpha = float(alpha)
-
-        def focal_loss_fixed(y_true, y_pred):
-            """Focal loss for multi-classification
-            FL(p_t)=-alpha(1-p_t)^{gamma}ln(p_t)
-            Notice: y_pred is probability after softmax
-            gradient is d(Fl)/d(p_t) not d(Fl)/d(x) as described in paper
-            d(Fl)/d(p_t) * [p_t(1-p_t)] = d(Fl)/d(x)
-            Focal Loss for Dense Object Detection
-            https://arxiv.org/abs/1708.02002
-
-            Arguments:
-                y_true {tensor} -- ground truth labels, shape of [batch_size, num_cls]
-                y_pred {tensor} -- model's output, shape of [batch_size, num_cls]
-
-            Keyword Arguments:
-                gamma {float} -- (default: {2.0})
-                alpha {float} -- (default: {4.0})
-
-            Returns:
-                [tensor] -- loss.
-            """
-            epsilon = 1.e-9
-            y_true = tf.convert_to_tensor(y_true, tf.float32)
-            y_pred = tf.convert_to_tensor(y_pred, tf.float32)
-
-            model_out = tf.add(y_pred, epsilon)
-            ce = tf.multiply(y_true, -tf.log(model_out))
-            weight = tf.multiply(y_true, tf.pow(tf.subtract(1., model_out), gamma))
-            fl = tf.multiply(alpha, tf.multiply(weight, ce))
-            reduced_fl = tf.reduce_max(fl, axis=1)
-            return tf.reduce_mean(reduced_fl)
-        return focal_loss_fixed
-
-
     # Loss and target
     if args.use_tile:
         # loss = losses.BinaryCrossentropy(label_smoothing=params.label_smoothing)
@@ -786,7 +749,7 @@ def run(args):
             def on_train_begin(self, logs=None):
                 # self.wait = 0           # number of batches it has waited when loss is no longer minimum
                 self.stopped_epoch = 0  # epoch the training stops at
-                self.stopped_batch = 0  # epoch the training stops at
+                self.stopped_batch = 0  # batch the training stops at
                 self.best = np.Inf      # init the best as infinity
                 self.val_loss = np.Inf
                 self.epoch = 0
@@ -877,35 +840,8 @@ def run(args):
                 if self.stopped_batch > 0:
                     self.print_fn("Early stop on epoch {} and batch {}.".format(self.stopped_epoch, self.stopped_batch))
 
-        def get_lr_callback(batch_size=8):
-            """
-            https://www.kaggle.com/cdeotte/triple-stratified-kfold-with-tfrecords
-            """
-            lr_start   = 0.000005
-            lr_max     = 0.00000125 * batch_size
-            lr_min     = 0.000001
-            lr_ramp_ep = 5
-            lr_sus_ep  = 0
-            lr_decay   = 0.8
-
-            def lrfn(epoch):
-                if epoch < lr_ramp_ep:
-                    lr = (lr_max - lr_start) / lr_ramp_ep * epoch + lr_start
-
-                elif epoch < lr_ramp_ep + lr_sus_ep:
-                    lr = lr_max
-
-                else:
-                    lr = (lr_max - lr_min) * lr_decay**(epoch - lr_ramp_ep - lr_sus_ep) + lr_min
-
-                return lr
-
-            lr_callback = tf.keras.callbacks.LearningRateScheduler(lrfn, verbose=False)
-            return lr_callback
-
         # Callbacks list
         monitor = "val_loss"
-        # monitor = "val_pr-auc"
         save_best_only = False
         callbacks = keras_callbacks(outdir, monitor=monitor,
                                     save_best_only=params.save_best_only,
@@ -1000,7 +936,7 @@ def run(args):
                                   "ge_shape": ge_shape,
                                   "from_logits": params.from_logits,
                                   "learning_rate": params.learning_rate,
-                                  "loss": loss,
+                                  "loss_fn": loss,
                                   "optimizer": params.optimizer,
                                   "output_bias": output_bias,
                                   "pooling": params.pooling,
@@ -1054,19 +990,41 @@ def run(args):
             print_fn(f"Train steps:      {tr_steps}")
             print_fn(f"Validation steps: {vl_steps}")
 
-            history = model.fit(x=train_data,
-                                validation_data=val_data,
-                                steps_per_epoch=tr_steps,
-                                validation_steps=vl_steps,
-                                class_weight=class_weight,
-                                epochs=params.epochs,
-                                verbose=fit_verbose,
-                                callbacks=callbacks)
-            del train_data, val_data
+            # history = model.fit(x=train_data,
+            #                     validation_data=val_data,
+            #                     steps_per_epoch=tr_steps,
+            #                     validation_steps=vl_steps,
+            #                     class_weight=class_weight,
+            #                     epochs=params.epochs,
+            #                     verbose=fit_verbose,
+            #                     callbacks=callbacks)
+            # del train_data, val_data
 
+            # ------------------------------------------------------------
+            # Custom model
+            # --------------
             # import ipdb; ipdb.set_trace()
-            # res = pd.DataFrame(results)
-            # res.to_csv(outdir/"results.csv", index=False)
+            del model
+            mm = Multimodal()
+            mm.build_model_rsp(**build_model_kwargs)
+            loss_fn = MySparseBCE_From_Logits(class_weight=class_weight)
+            mm.myfit(train_data=train_data,
+                     validation_data=val_data,
+                     steps_per_epoch=tr_steps,
+                     validation_steps=vl_steps,
+                     epochs=params.epochs,
+                     loss_fn=loss_fn,
+                     optimizer_name=params.optimizer,
+                     learning_rate=params.learning_rate,
+                     batch_patience=params.batch_patience,
+                     validate_on_batch=params.validate_on_batch,
+                     outdir=outdir,
+                     verbose=fit_verbose
+            )
+            model = mm.model
+            # import ipdb; ipdb.set_trace()
+            # ------------------------------------------------------------
+
         else:
             xtr = {"ge_data": tr_ge.values, "dd1_data": tr_dd1.values, "dd2_data": tr_dd2.values}
             xvl = {"ge_data": vl_ge.values, "dd1_data": vl_dd2.values, "dd2_data": vl_dd2.values}
@@ -1089,6 +1047,7 @@ def run(args):
         # Save final model
         final_model_fpath = outdir/f"final_model.ckpt"
         model.save(final_model_fpath)
+
 
     if args.eval is True:
         if model is None:

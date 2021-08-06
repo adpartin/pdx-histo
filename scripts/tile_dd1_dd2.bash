@@ -38,21 +38,19 @@ pred_tfr_dir_name=PDX_FIXED_RSP_DRUG_PAIR
 DEVICE=$1
 echo "CUDA device: $DEVICE"
 
-# split_id=0
-split_id=9
-# split_id=81
-# split_id=$2
-
-# -----------
-# Train
-# -----------
+# ----------------
+# Number of splits
+# ----------------
 # n_splits=4
 # n_splits=20
 # n_splits=99
 # splits_arr=($(seq 0 1 $n_splits))
 
-# split_start=0
-# split_end=20
+# ----------------
+# Specific range
+# ----------------
+split_start=0
+split_end=20
 # split_start=21
 # split_end=40
 # split_start=41
@@ -61,20 +59,19 @@ split_id=9
 # split_end=80
 # split_start=81
 # split_end=99
+splits_arr=($(seq $split_start 1 $split_end))
 
-# split_start=9
-# split_end=20
-# split_start=32
-# split_end=40
-# split_start=50
-# split_end=60
-# split_start=89
-# split_end=99
-# splits_arr=($(seq $split_start 1 $split_end))
+# ----------------
+# Specific split
+# ----------------
+# split_id=0
+# split_id=9
+# split_id=81
+# split_id=$2
+# splits_arr=($split_id)
 
-splits_arr=($split_id)
-# echo -e "\nList of splits:"
-# echo -e "${splits_arr[@]}\n"
+echo -e "\nList of splits:"
+echo -e "${splits_arr[@]}\n"
 
 # -----------
 # Train
@@ -93,8 +90,11 @@ splits_arr=($split_id)
 #     --pred_tfr_dir_name $pred_tfr_dir_name \
 #     --use_tile --use_dd1 --use_dd2
 
-# for ii in {0..${n_splits}}; do
-# for ii in {0..99}; do
+# for split_id in {0..99}; do
+# for split_id in {0..${n_splits}}; do
+#     echo -e "Split ${split_id}"
+# done
+
 for split_id in ${splits_arr[@]}; do
     echo -e "Split ${split_id}"
 

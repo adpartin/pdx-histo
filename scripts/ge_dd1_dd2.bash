@@ -43,9 +43,10 @@ echo "CUDA device: $DEVICE"
 #     --n_samples $n_samples \
 #     --use_ge --use_dd1 --use_dd2
 
-# split_id=81
 # split_id=0
-split_id=$2
+split_id=9
+# split_id=81
+# split_id=$2
 
 # -----------
 # Train
@@ -57,8 +58,11 @@ splits_arr=($split_id)
 # echo -e "\nList of splits:"
 # echo -e "${splits_arr[@]}\n"
 
-# for ii in {0..${n_splits}}; do
-# for ii in {0..99}; do
+# for split_id in {0..99}; do
+# for split_id in ${splits_arr[@]}; do
+#     echo -e "Split ${split_id}"
+# done
+
 for split_id in ${splits_arr[@]}; do
     echo -e "Split ${split_id}"
 
