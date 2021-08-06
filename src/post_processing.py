@@ -20,6 +20,7 @@ from src.config import cfg
 from src.utils.classlogger import Logger
 from src.utils.utils import get_print_func
 
+FLOAT_DECIMALS = 4
 
 # ------------------------------------
 # Util funcs
@@ -354,13 +355,15 @@ def main(args):
     # Perform paired t-test between scores (of different splits) of different models
     # and create table that summarises the mean of scores across splits and p-values
     smp_pmat = t_test_all_metrics(scores, agg_by="smp")
-    smp_res = smp_scores.merge(smp_pmat, on="metric", how="inner")
+    smp_res = smp_scores.merge(smp_pmat, on="metric", how="inner").round(FLOAT_DECIMALS)
 
     grp_pmat = t_test_all_metrics(scores, agg_by="Group")
-    grp_res = grp_scores.merge(grp_pmat, on="metric", how="inner")
+    grp_res = grp_scores.merge(grp_pmat, on="metric", how="inner").round(FLOAT_DECIMALS)
 
     smp_res.to_csv(outdir/f"smp_res_{name}.csv", index=False)
     grp_res.to_csv(outdir/f"grp_res_{name}.csv", index=False)
+    smp_res.set_index("metric").T.to_csv(outdir/f"smp_res_{name}_transpose.csv")
+    grp_res.set_index("metric").T.to_csv(outdir/f"grp_res_{name}_transpose.csv")
 
 
     # Analysis for ume-NN
@@ -373,14 +376,13 @@ def main(args):
     # Perform paired t-test between scores (of different splits) of different models
     # and create table that summarises the mean of scores across splits and p-values
     smp_pmat = t_test_all_metrics(scores, agg_by="smp")
-    smp_res = smp_scores.merge(smp_pmat, on="metric", how="inner")
+    smp_res = smp_scores.merge(smp_pmat, on="metric", how="inner").round(FLOAT_DECIMALS)
 
     grp_pmat = t_test_all_metrics(scores, agg_by="Group")
-    grp_res = grp_scores.merge(grp_pmat, on="metric", how="inner")
+    grp_res = grp_scores.merge(grp_pmat, on="metric", how="inner").round(FLOAT_DECIMALS)
 
     smp_res.to_csv(outdir/f"smp_res_{name}.csv", index=False)
     grp_res.to_csv(outdir/f"grp_res_{name}.csv", index=False)
-
 
     print_fn("\nDone.")
 
