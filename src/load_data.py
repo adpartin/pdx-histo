@@ -153,7 +153,7 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
 
         # Augment drug-pair treatments
         # TODO: consider to modify this (here I abuse "aug" to call all drug-pair treatments,
-        # and not just the augmented treatments)
+        # and not just the augmented treatments --> instead I pair_aug col to signify augmented samples)
         rsp["aug"] = [True if d1 != d2 else False for (d1, d2) in zip(rsp["Drug1"], rsp["Drug2"])]
 
     # Add bool whether it's single-drug
@@ -469,13 +469,6 @@ def load_tidy_dataset_rsp(single_drug: bool=False, add_type_labels: bool=True):
     # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
     print(rsp_rna_dd.shape)
     del dd, dd1, dd2, tmp
-
-    # Merge with pdx meta
-    print("Merge with pdx meta")
-    print(pdx.shape)
-    print(rsp_rna_dd.shape)
-    rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
-    print(rsp_rna_dd_pdx.shape)
 
     # Merge with pdx meta
     print("Merge with pdx meta")

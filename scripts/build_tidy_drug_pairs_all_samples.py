@@ -35,61 +35,60 @@ target = "Response"
 
 # Load data
 data = load_data.load_tidy_dataset_rsp(single_drug=False, add_type_labels=True)
-# rsp = load_data.load_rsp(single_drug=False)
-# rna = load_data.load_rna()
-# dd = load_data.load_dd()
-# cref = load_data.load_crossref()
-# pdx = load_data.load_pdx_meta2(add_type_labels=True)
 
-# # Merge rsp with rna
-# print("\nMerge rsp and rna")
-# print(rsp.shape)
-# print(rna.shape)
-# rsp_rna = rsp.merge(rna, on="Sample", how="inner")
-# print(rsp_rna.shape)
+# ----------------------
+# Data summary
+sm = {}
 
-# # Merge with dd
-# print("Merge with descriptors")
-# print(rsp_rna.shape)
-# print(dd.shape)
+# Number of patients and specimens
+df = data.groupby("patient_id").agg({"specimen_id": "nunique"}).reset_index()
+sm["Patients"] = df.patient_id.nunique()
+sm["Primary tumor specimens"] = df.specimen_id.sum()
 
-# dd1 = dd.copy()
-# dd2 = dd.copy()
-# dd1 = dd1.rename(columns={"ID": "Drug1"})
-# dd2 = dd2.rename(columns={"ID": "Drug2"})
-# fea_id0 = 1
-# fea_pfx = "dd_"
-# dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
-# dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
+# Single drug treatments
+df = data[data["Drug1"] == data["Drug2"]]
+sm["Single-drug treatments"] = df.trt.nunique()
 
-# tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
-# rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
-# # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
-# print(rsp_rna_dd.shape)
-# del dd, dd1, dd2, tmp
+# Drug-pair treatments
+df = data[data["Drug1"] != data["Drug2"]]
+df = df[df["pair_aug"] == False]
+sm["Drug-pair treatments"] = df.trt.nunique()
 
-# # Merge with pdx meta
-# print("Merge with pdx meta")
-# print(pdx.shape)
-# print(rsp_rna_dd.shape)
-# rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
-# print(rsp_rna_dd_pdx.shape)
+# Group treatments
+sm["Treatment groups"] = data.Group.nunique()
 
-# # Merge cref
-# print("Merge with cref")
-# # (we loose some samples because we filter the bad slides)
-# print(cref.shape)
-# print(rsp_rna_dd_pdx.shape)
-# data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
-# print(data.shape)
+# Gene expression profiles
+ge = data[[c for c in data.columns if c.startswith("ge_")]]
+ge = ge.drop_duplicates()
+# print(ge.shape[0] - ge.duplicated().sum())
+# print(ge.shape)
+sm["Gene expression profiles"] = ge.shape[0]
 
-# # Add 'slide' column
-# data.insert(loc=5, column="slide", value=data["image_id"], allow_duplicates=True)
+# Hisgology slides
+sm["Histology slides"] = data.image_id.nunique()
 
-# if "index" in data.columns:
-#     cols = data.columns.tolist()
-#     cols.remove("index")
-#     data = data[["index"] + cols]
+# Histology tiles
+tfr_dir = cfg.DATADIR/"PDX_FIXED_RSP_DRUG_PAIR"/"299px_302um"
+tile_cnts = pd.read_csv(tfr_dir/"tile_counts_per_slide.csv")
+df = data.drop_duplicates(subset=["image_id"])
+df = df[["smp", "image_id", "slide", "Response"]].astype({"image_id": int, "slide": int})
+df = df.merge(tile_cnts, on=["smp", "slide", "Response"], how="inner")
+sm["Histology tiles"] = df["max_tiles"].sum()
+
+# Single-drug response samples in the ML dataset
+sm["Single-drug response samples"] = data[data.single==True].shape[0]
+
+# Single-drug response samples in the ML dataset
+sm["Drug-pair response samples"] = data[data.single==False].shape[0]
+
+# Drug response samples in the ML dataset
+sm["Drug response samples"] = data.shape[0]
+
+pd.Series(sm)
+summary = pd.Series(sm)
+print(summary)
+del df
+# ----------------------
 
 df = data; del data
 pprint(df.groupby(["ctype", "Response"]).agg({"Group": "nunique", "smp": "nunique"}).reset_index().rename(
