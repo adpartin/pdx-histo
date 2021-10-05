@@ -22,6 +22,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from PIL import Image
 from pprint import pprint
 from typing import Optional
 
@@ -57,11 +58,22 @@ parser.add_argument("--n_samples",
                     help="Total samples to process.")
 parser.add_argument("--frac_tiles",
                     type=float,
-                    default=1.0,
+                    # default=1.0,
+                    default=None,
                     help="Fraction of tiles to use from each slide for creating TFRecords.")
 parser.add_argument("--single_drug",
                     action="store_true",
                     help="Use only single-drug drug responses.")
+parser.add_argument("--random",
+                    action="store_true",
+                    help="Take random tiles.")
+# parser.add_argument("--max_tiles",
+#                     type=int,
+#                     default=None,
+#                     help="Max tiles (if None, use the global min across all slides).")
+parser.add_argument("--take_glob_min",
+                    action="store_true",
+                    help="Take same number of tiles from each slide which is the global min across slides.")
 args, other_args = parser.parse_known_args()
 pprint(args)
 
@@ -76,9 +88,29 @@ directory = cfg.PDX_FIXED/LABEL
 timer = Timer()
 
 
+def np_to_pil(np_img):
+    """
+    Convert a NumPy array to a PIL Image.
+
+    Args:
+        np_img: The image represented as a NumPy array.
+
+    Returns:
+        The NumPy array converted to a PIL Image.
+    """
+    if np_img.dtype == "bool":
+        np_img = np_img.astype("uint8") * 255
+    elif np_img.dtype == "float64" or np_img.dtype == "float32":
+        np_img = (np_img * 255).astype("uint8")
+    return Image.fromarray(np_img)
+
+
 def update_tfrecords_for_drug_rsp(n_samples: int=-1,
                                   single_drug: bool=False,
-                                  frac_tiles: float=1.0) -> None:
+                                  frac_tiles: Optional[float]=None,
+                                  # min_tiles: Optional[int]=None,
+                                  take_glob_min: bool=False,
+                                  random: bool=False) -> None:
     """
     Takes original tfrecords that we got from A. Pearson and updates them
     by addting more data including metadata of PDX samples, RNA-Seq, drug
@@ -100,102 +132,17 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     else:
         # base_outdir = cfg.SF_TFR_DIR_RSP_DRUG_PAIR
         base_outdir = cfg.PDX_FIXED_RSP_DRUG_PAIR
-    if frac_tiles < 1.0:
+    if frac_tiles and frac_tiles < 1.0:
         base_outdir = str(base_outdir) + "_" + str(frac_tiles) + "_of_tiles"
+    if random:
+        base_outdir = str(base_outdir) + "_rnd"
+    if args.take_glob_min:
+        base_outdir = str(base_outdir) + "_glob_min"
     outpath = Path(base_outdir)/LABEL
     os.makedirs(outpath, exist_ok=True)
 
     # Load data
     data = load_data.load_tidy_dataset_rsp(single_drug=single_drug, add_type_labels=True)
-    # rsp = load_data.load_rsp(single_drug=single_drug)
-    # rna = load_data.load_rna()
-    # dd = load_data.load_dd()
-    # cref = load_data.load_crossref()
-    # pdx = load_data.load_pdx_meta2(add_type_labels=True)
-
-    # # Merge rsp with rna
-    # print("\nMerge rsp and rna")
-    # print(rsp.shape)
-    # print(rna.shape)
-    # rsp_rna = rsp.merge(rna, on="Sample", how="inner")
-    # print(rsp_rna.shape)
-
-    # # Merge with dd
-    # print("Merge with descriptors")
-    # print(rsp_rna.shape)
-    # print(dd.shape)
-
-    # dd1 = dd.copy()
-    # dd2 = dd.copy()
-    # dd1 = dd1.rename(columns={"ID": "Drug1"})
-    # dd2 = dd2.rename(columns={"ID": "Drug2"})
-    # fea_id0 = 1
-    # fea_pfx = "dd_"
-    # dd1 = dd1.rename(columns={c: "dd1_" + c.split(fea_pfx)[1] for c in dd1.columns[fea_id0:] if ~c.startswith(fea_pfx)})
-    # dd2 = dd2.rename(columns={c: "dd2_" + c.split(fea_pfx)[1] for c in dd2.columns[fea_id0:] if ~c.startswith(fea_pfx)})
-
-    # tmp = rsp_rna.merge(dd1, left_on="Drug1", right_on="Drug1", how="inner")
-    # rsp_rna_dd = tmp.merge(dd2, left_on="Drug2", right_on="Drug2", how="inner")
-    # # print(rsp_rna_dd[["dd1_Uc", "dd2_Uc", "aug", "grp_name"]])
-    # print(rsp_rna_dd.shape)
-    # del dd, dd1, dd2, tmp
-
-    # # Merge with pdx meta
-    # print("Merge with pdx meta")
-    # print(pdx.shape)
-    # print(rsp_rna_dd.shape)
-    # rsp_rna_dd_pdx = pdx.merge(rsp_rna_dd, on=["patient_id", "specimen_id"], how="inner")
-    # print(rsp_rna_dd_pdx.shape)
-
-    # # Merge cref
-    # print("Merge with cref")
-    # # (we loose some samples because we filter the bad slides)
-    # print(cref.shape)
-    # print(rsp_rna_dd_pdx.shape)
-    # data = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how="inner").reset_index(drop=True)
-    # print(data.shape)
-
-    # # -------------------
-    # # Explore (merge and identify from which df the items are coming from)
-    # # https://kanoki.org/2019/07/04/pandas-difference-between-two-dataframes/
-    # # --------
-    # # mrg_outer = cref.merge(rsp_rna_dd_pdx, on=PDX_SAMPLE_COLS, how='outer', indicator=True)
-    # # print('Outer merge', mrg_outer.shape)
-    # # print(mrg_outer['_merge'].value_counts())
-
-    # # miss_r = mrg_outer.loc[lambda x: x['_merge']=='right_only']
-    # # miss_r = miss_r.sort_values(PDX_SAMPLE_COLS, ascending=True)
-    # # print('Missing right items', miss_r.shape)
-
-    # # miss_l = mrg_outer.loc[lambda x: x['_merge']=='left_only']
-    # # miss_l = miss_l.sort_values(PDX_SAMPLE_COLS, ascending=True)
-    # # print('Missing left items', miss_l.shape)
-
-    # # print(miss_r.patient_id.unique())
-    # # jj = load_data.load_pdx_meta_jc()
-    # # miss_found = jj[ jj.patient_id.isin(miss_r.patient_id.unique()) ]
-    # # print(miss_r.Response.value_counts())
-    # # print(miss_found)
-
-    # # print(miss_r[miss_r.Response==1])
-    # # -------------------
-
-    # # Re-org cols
-    # dim = data.shape[1]
-    # # meta_cols = ['smp', 'Sample', 'Drug1', 'Response',
-    # #              'model', 'patient_id', 'specimen_id', 'sample_id', 'image_id', 
-    # #              'csite_src', 'ctype_src', 'csite', 'ctype', 'stage_or_grade',
-    # #              'NAME', 'CLEAN_NAME', 'SMILES', 'ID']
-    # meta_cols = ["index", "smp", "Sample",
-    #              "model", "patient_id", "specimen_id", "sample_id", "image_id", 
-    #              "csite_src", "ctype_src", "csite", "ctype", "stage_or_grade",
-    #              "Drug1", "Drug2", "trt", "aug", "Group", "grp_name", "Response"]
-    # ge_cols = [c for c in data.columns if str(c).startswith('ge_')]
-    # # dd_cols = [c for c in data.columns if str(c).startswith('dd_')]
-    # dd1_cols = [c for c in data.columns if str(c).startswith("dd1_")]
-    # dd2_cols = [c for c in data.columns if str(c).startswith("dd2_")]
-    # data = data[meta_cols + ge_cols + dd1_cols + dd2_cols]
-    # assert data.shape[1] == dim, "There are missing cols after re-organizing the cols."
 
     if n_samples > 0:
         data = data.sample(n=n_samples, random_state=cfg.seed).reset_index(drop=True)
@@ -249,6 +196,19 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     # import ipdb; ipdb.set_trace()
     tile_cnts = []
 
+    # Obtain tile count per slide
+    dct = {}
+    for i, slide_name in enumerate(sorted(c_slides)):
+        rel_tfr = str(slide_name) + ".tfrecords"
+        tfr = str(directory/rel_tfr)
+        max_tiles = calc_examples_in_tfrecord(tfr)
+        dct[slide_name] = max_tiles
+    aa = pd.DataFrame([dct]).T.reset_index()
+    aa.columns = ["slide_name", "max_tiles"]
+
+    # Specify number of tiles to take from each slide
+    min_tiles_global = aa["max_tiles"].min()
+
     # Create a tfrecord for each sample (iter over samples)
     for i, slide_name in enumerate(sorted(c_slides)):
         # Name of original tfrecord to load that contains tiles for a single
@@ -257,12 +217,26 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
         tfr = str(directory/rel_tfr)
 
         max_tiles = calc_examples_in_tfrecord(tfr)
-        n_tiles = int(frac_tiles * max_tiles)  # num to use from the current tfrecord (slide)
+        # n_tiles = int(frac_tiles * max_tiles)  # num to use from the current tfrecord (slide)
+        if frac_tiles and frac_tiles < 1.0:
+            n_tiles = int(frac_tiles * max_tiles)  # num to use from the current tfrecord (slide)
+        elif args.take_glob_min:
+            n_tiles = min_tiles_global
+        else:
+            n_tiles = max_tiles
 
         print(f"\r\033[K Creating drug response tfrecords using {green(rel_tfr)} (slide {i+1} out of {len(c_slides)} slides) ...", end="") 
         
         raw_dataset = tf.data.TFRecordDataset(tfr)
+
+        # Draw random tiles (and not sequentially)
+        if random:
+            rnd_tile_ids = sorted(np.random.choice(range(max_tiles), size=n_tiles, replace=False))
             
+        # Create folder to write tile images (png)
+        img_dir = outpath/f"slide_{slide_name}"
+        os.makedirs(img_dir, exist_ok=True)
+
         # Iter over drug response samples that use the current slide
         samples = data[data["image_id"] == slide_name][id_name].values.tolist()
         for smp in samples:
@@ -272,9 +246,16 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
             writer = tf.io.TFRecordWriter(tfr_fname)
 
             # Iter over tiles of the current slide
+            tile_counter = 0
             for tile_id, rec in enumerate(raw_dataset):
 
-                if tile_id + 1 > n_tiles:
+                # Check if the tile_id is one of those drawn at random
+                if random and (tile_id not in rnd_tile_ids):
+                    continue
+                else:
+                    tile_counter += 1
+
+                if tile_counter > n_tiles:
                     break
 
                 # Features of the current rec from old tfrecord
@@ -285,6 +266,11 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
                 # to be added to the new tfrecord
                 slide = features["slide"].numpy().decode("utf-8")
                 slide_meta = mm[smp]
+
+                # Write image file (png) into folder
+                np_img = tf.image.decode_jpeg(features['image_raw'], channels=3).numpy()
+                pil_img = np_to_pil(np_img)
+                pil_img.save(img_dir/f"tile_{tile_id}.png", "PNG")
 
                 ex = tf.train.Example(features=tf.train.Features(
                     feature={
@@ -545,5 +531,6 @@ def update_tfrecords_with_rna(n_samples: int=-1) -> None:
 
 
 # update_tfrecords_with_rna(args.n_samples)
-update_tfrecords_for_drug_rsp(args.n_samples, args.single_drug, args.frac_tiles)
+update_tfrecords_for_drug_rsp(args.n_samples, args.single_drug,
+                              args.frac_tiles, args.take_glob_min, args.random)
 timer.display_timer()
