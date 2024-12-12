@@ -1,49 +1,34 @@
 Multimodal neural network for drug response prediction in PDX with histology images and gene expressions.
 
-## Create master dataframe (meta, tabular features, and response)
-Extract metadata from wsi slides and save the summary in `data/meta/meta_from_wsi_slides.csv`.
+## Build tidy dataframe of drug response samples for binary classification
+The dataframe will be stored in `data/processed`.
 ```
-$ python src/get_meta_from_slides.py
-```
-
-Merge 3 metadata files to create `data/meta/meta_merged.csv`:
-1. _ImageID_PDMRID_CrossRef.xlsx:  meta comes with PDX slides; crossref
-2. PDX_Meta_Information.csv:       meta from Yitan; pdx_meta
-3. meta_from_wsi_slides.csv:       meta extracted from SVS slides using openslide; slides_meta
-```
-$ python src/merge_meta_files.py
+$ python scripts/build_tidy_drug_pairs_all_samples.py
 ```
 
-Finally, build master df and save in `data/data_merged.csv`.
+## Generate TFRecords for drug response from TFRecords of WSIs
+The TFRecords will be stored in `data/PDX_FIXED_RSP_DRUG_PAIR*`.
+Depending on the input args, the designated folder will be created.
+For example, the following command will create `data/PDX_FIXED_RSP_DRUG_PAIR_rnd_glob_min`.
 ```
-$ python src/build_df.py
-```
-
-## Tiling
-Generate image tiles from WSI slides and save to `data/tiles_png`.
-```
-$ python src/tiling.py
+$ python scripts/update_tfrecords.py --random --take_glob_min
 ```
 
-## Build TFRecords
-Build tfrecords to use with TensorFlow2 for all the samples in the master dataframe
-and save in `data/data_merged.csv`.
+## Specify Hyperparameters (HPs)
+You can specify the HPs in ...
+
+
+## Train baselines (analysis of data augmentation)
 ```
-$ python src/build_tfrec.py
+$ ./ge_dd1_dd2_drop_aug.bash
+```
+```
+$ ./ge_dd1_dd2_only_pairs.bash
 ```
 
-## Generate dataset for an application
-Using the master dataframe as the strating point, generate a subset of samples for
-further processing. For example, in build_mm_01.py, we create a balanced dataset
-(in terms responders and non-responders). For the non-responders, we extract
-samples of the same ctype as the responders. The created subset dataframe is stored
-in an appropriate foler such as `apps/mm_01/annotations.csv` (we name the file
-`annotations.csv` to conform with the naming convention that is used in SlideFlow.
+## Train multimodal deep learning model
+Specify the parameters in the bash script as necessary.
 ```
-$ python src/apps/build_mm_01.py
+./scripts/tile_ge_dd1_dd2.bash
 ```
-
-## Generate data splits
-```python
-$ python src/cv_splits.py --appname mm_01
-```
+The results will be bumped into `projects/bin_rsp_drug_pairs_all_samples`.

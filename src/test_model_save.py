@@ -189,26 +189,26 @@ careful_bias_history = model.fit(
     verbose=0)
 
 # --------------------------------------------------------
-# import ipdb; ipdb.set_trace()
-# model = tf.keras.applications.Xception(weights="imagenet", pooling="avg")
+import ipdb; ipdb.set_trace()
+model = tf.keras.applications.Xception(weights="imagenet", pooling="avg")
 
-# initial_weights = fdir/'../initial_weights'
-# model.save_weights(initial_weights)
-# # model_loaded_wts = tf.keras.applications.Xception(weights=initial_weights, pooling="avg")
-# model_loaded_wts = tf.keras.applications.Xception(pooling="avg")
-# model_loaded_wts.load_weights(initial_weights)
-# print(type(model_loaded_wts))
+initial_weights = fdir/'../initial_weights'
+model.save_weights(initial_weights)
+# model_loaded_wts = tf.keras.applications.Xception(weights=initial_weights, pooling="avg")
+model_loaded_wts = tf.keras.applications.Xception(pooling="avg")
+model_loaded_wts.load_weights(initial_weights)
+print(type(model_loaded_wts))
 
-# loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-# optimizer = optimizers.Adam(learning_rate=0.1)
-# model.compile(loss=loss, optimizer=optimizer)
+loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+optimizer = optimizers.Adam(learning_rate=0.1)
+model.compile(loss=loss, optimizer=optimizer)
 
-# import ipdb; ipdb.set_trace()
-# model.save(fdir/"../saved_model")
-# model_loaded_full = tf.keras.models.load_model(fdir/"../saved_model")
+import ipdb; ipdb.set_trace()
+model.save(fdir/"../saved_model")
+model_loaded_full = tf.keras.models.load_model(fdir/"../saved_model")
 
-# print("\nOriginal {}:".format(model.evaluate(val_data, steps=vl_steps)))
-# print("\nWeights  {}:".format(model_loaded_wts.evaluate(val_data, steps=vl_steps)))
-# print("\nFull     {}:".format(model_loaded_full.evaluate(val_data, steps=vl_steps)))
+print("\nOriginal {}:".format(model.evaluate(val_data, steps=vl_steps)))
+print("\nWeights  {}:".format(model_loaded_wts.evaluate(val_data, steps=vl_steps)))
+print("\nFull     {}:".format(model_loaded_full.evaluate(val_data, steps=vl_steps)))
 # --------------------------------------------------------
 
