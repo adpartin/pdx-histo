@@ -156,19 +156,32 @@ class Multimodal():
         elif optimizer_name == "Adam":
             self.optimizer = optimizers.Adam(learning_rate=learning_rate)
 
-    def myfit(self, train_data, validation_data, steps_per_epoch, validation_steps, epochs,
-              batch_patience=100, validate_on_batch=250,
+    def myfit(self,
+              train_data,
+              validation_data, 
+              steps_per_epoch, 
+              validation_steps, 
+              epochs,
+              batch_patience: int=100, 
+              validate_on_batch=250, 
+              min_epochs: int=4,
               loss_fn=losses.BinaryCrossentropy(from_logits=True),
-              optimizer_name="Adam", learning_rate=0.0005,
+              optimizer_name="Adam", 
+              learning_rate=0.0005,
               outdir=Path("."),
               verbose=0):
-        """ ... """
+        """ 
+        Args:
+            batch_patience : number of batches with no improvement after which training will be stopped
+            min_epochs : min number of epochs to train the model
+        """
         self.epochs = epochs
         self.loss_fn = loss_fn
         self.steps_per_epoch = steps_per_epoch
         self.batch_patience = batch_patience
         self.best = np.Inf      # init the best as infinity
         self.epoch = 0
+        self.min_epochs = min_epochs
         self.outdir = outdir
         self.stopped_epoch = 0  # epoch the training stops at
         self.stopped_batch = 0  # batch the training stops at
@@ -186,15 +199,17 @@ class Multimodal():
 
         self.set_optimizer(optimizer_name, learning_rate)
 
+        # Iter over epochs
         # import ipdb; ipdb.set_trace()
         for epoch in range(self.epochs):
             t0 = time()
-            epoch += 1
+            epoch += 1  # inc epoch counter
             wait = 0
 
+            # Iter over steps (batches)
             # import ipdb; ipdb.set_trace()
             for step, (xtr_batch, ytr_batch) in enumerate(train_data):
-                step += 1
+                step += 1  # inc step counter
                 if step > steps_per_epoch:
                     break
                 loss_value = self.train_step(xtr_batch, ytr_batch)
@@ -206,6 +221,7 @@ class Multimodal():
                     evals = self.evaluate()
                     current = evals["val_loss"]
 
+                    # Here we consider only error metrics (the lower the better)
                     if np.less(current, self.best):
                         self.best = current
                         wait = 0
@@ -216,12 +232,12 @@ class Multimodal():
                         wait += 1
 
                     # Don't terminate on the first epoch
-                    if (wait >= self.batch_patience) and (epoch > 1):
+                    if (wait >= self.batch_patience) and (epoch > self.min_epochs):
                         # import ipdb; ipdb.set_trace()
                         self.stopped_epoch = epoch
                         self.stopped_batch = step
                         self.print_fn("\n{}".format(red(f"Early stop (terminated training at epoch: {epoch}, step: {step}).")))
-                        self.print_fn("Restores model weights from the best epoch-batch set.")
+                        self.print_fn("Restores model weights from the best [epoch, batch] combination.")
                         self.model.set_weights(self.best_weights)
                         evals = self.evaluate()
                         self.print_fn("epoch {}, loss: {:.5f}, roc: {:.3f}, "
@@ -604,7 +620,7 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
         y_pred_prob.append(preds)
         preds = np.squeeze(preds)
 
-        # If batch size is 1, np.squeeze will create an array of dim [0, 0]
+        # If batch size is 1, np.squeeze will create an array of dim [0, 0]. Fixed with this.
         if np.ndim(preds) == 0:
             preds = [np.asscalar(preds)]
 

@@ -144,7 +144,7 @@ def run(args):
     split_on = "none" if args.split_on is (None or "none") else args.split_on
 
 
-    # Create project dir (if it doesn't exist)
+    # Create project dir (if doesn't exist)
     # import ipdb; ipdb.set_trace()
     prjdir = cfg.MAIN_PRJDIR/args.prjname
     os.makedirs(prjdir, exist_ok=True)
@@ -161,10 +161,9 @@ def run(args):
     params = Params(prm_file_path)
 
     if args.rundir is not None:
-        # Inferenve (eval)
+        # Inference (eval)
         outdir = Path(args.rundir).resolve()
         assert outdir.exists(), f"The {outdir} doen't exist."
-        # print_fn = print
 
         # Logger
         lg = Logger(outdir/"logger_infer.log")
@@ -201,18 +200,11 @@ def run(args):
 
 
     # Determine tfr_dir (the path to TFRecords)
-    tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()
-    pred_tfr_dir = (cfg.DATADIR/args.pred_tfr_dir_name).resolve()
+    tfr_dir = (cfg.DATADIR/args.tfr_dir_name).resolve()  # Dir with train TFRecords
+    pred_tfr_dir = (cfg.DATADIR/args.pred_tfr_dir_name).resolve()  # Dir with test TFRecords
     label = f"{params.tile_px}px_{params.tile_um}um"
     tfr_dir = tfr_dir/label
     pred_tfr_dir = pred_tfr_dir/label
-
-    # Create outcomes (for drug response)
-    # outcomes = {}
-    # unique_outcomes = list(set(data[args.target[0]].values))
-    # unique_outcomes.sort()
-    # for smp, o in zip(data[args.id_name], data[args.target[0]]):
-    #     outcomes[smp] = {"outcome": unique_outcomes.index(o)}
 
 
     # Scalers for each feature set
@@ -230,13 +222,6 @@ def run(args):
             dd1_scaler = get_scaler(data[dd1_cols])
         if args.use_dd2 and len(dd2_cols) > 0:
             dd2_scaler = get_scaler(data[dd2_cols])
-
-
-    # Create manifest
-    # print_fn("\nCreate/load manifest ...")
-    # timer = Timer()
-    # manifest = create_manifest(directory=tfr_dir, n_files=None)
-    # timer.display_timer(print_fn)
 
 
     # -----------------------------------------------
@@ -327,10 +312,6 @@ def run(args):
               "index_col_name": index_col_name,
               "split_on": split_on
               }
-    # trn_kwargs = kwargs.copy()
-    # trn_kwargs.update({"drop_drug_pair_aug": args.drop_drug_pair_aug,
-    #                    "drop_single_drug": args.drop_single_drug})
-    # tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **trn_kwargs)
     tr_ge, tr_dd1, tr_dd2, tr_meta = split_data_and_extract_fea(data, ids=tr_id, **kwargs)
     vl_ge, vl_dd1, vl_dd2, vl_meta = split_data_and_extract_fea(data, ids=vl_id, **kwargs)
     te_ge, te_dd1, te_dd2, te_meta = split_data_and_extract_fea(data, ids=te_id, **kwargs)
@@ -560,7 +541,6 @@ def run(args):
         if params.y_encoding == "onehot":
             if index_col_name in data.columns:
                 # Using Yitan's T/V/E splits
-                # print(te_meta[["index", "Group", "grp_name", "Response"]])
                 ytr = pd.get_dummies(tr_meta[args.target[0]].values)
                 yvl = pd.get_dummies(vl_meta[args.target[0]].values)
                 yte = pd.get_dummies(te_meta[args.target[0]].values)
@@ -1056,18 +1036,22 @@ def run(args):
 
         # import ipdb; ipdb.set_trace()
         if args.use_tile:
+
+            # Test set
             create_tf_data_eval_kwargs.update({"tfrecords": test_tfr_files, "include_meta": True})
             test_data = create_tf_data(
                 **create_tf_data_eval_kwargs,
                 **parse_fn_non_train_kwargs
             )
 
+            # Eval set
             # create_tf_data_eval_kwargs.update({"tfrecords": val_tfr_files, "include_meta": True})
             # eval_val_data = create_tf_data(
             #     **create_tf_data_eval_kwargs,
             #     **parse_fn_non_train_kwargs
             # )
 
+            # Train set
             # create_tf_data_eval_kwargs.update({"tfrecords": train_tfr_files, "include_meta": True})
             # eval_train_data = create_tf_data(
             #     **create_tf_data_eval_kwargs,
