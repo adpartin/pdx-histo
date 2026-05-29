@@ -359,7 +359,6 @@ if args.nn_arch == "multimodal":
     print("\nCreate TF datasets ...")
 
     # Training
-    import ipdb; ipdb.set_trace()
     train_data = create_tf_data(
         deterministic=True,
         batch_size=params.batch_size,

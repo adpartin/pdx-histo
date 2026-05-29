@@ -415,7 +415,10 @@ def create_tf_data(tfrecords,
                    **parse_fn_kwargs):
     """ Create tf.data datasets.
     Args:
-        deterministic : True for determinstic flow of batches (TODO: this doesn't work)
+        deterministic : if True, calls `tf.random.set_seed(seed)` before
+            pipeline construction. Note this does not by itself guarantee
+            byte-identical batches across runs — full TF determinism also
+            requires `TF_DETERMINISTIC_OPS=1` and op-level seeds.
 
     https://cs230.stanford.edu/blog/datapipeline/
     https://docs.google.com/presentation/d/16kHNtQslt-yuJ3w8GIx-eEH6t_AvFeQOchqGRFpAD7U/edit

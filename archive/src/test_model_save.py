@@ -141,8 +141,6 @@ model.predict(train_features[:10])
 results = model.evaluate(train_features, train_labels, batch_size=BATCH_SIZE, verbose=0)
 print("Loss: {:0.4f}".format(results[0]))
 
-import ipdb; ipdb.set_trace()
-
 # Save weights only
 # initial_weights = os.path.join(tempfile.mkdtemp(), 'initial_weights')
 initial_weights = fdir/'../initial_weights'
@@ -189,7 +187,6 @@ careful_bias_history = model.fit(
     verbose=0)
 
 # --------------------------------------------------------
-import ipdb; ipdb.set_trace()
 model = tf.keras.applications.Xception(weights="imagenet", pooling="avg")
 
 initial_weights = fdir/'../initial_weights'
@@ -203,7 +200,6 @@ loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 optimizer = optimizers.Adam(learning_rate=0.1)
 model.compile(loss=loss, optimizer=optimizer)
 
-import ipdb; ipdb.set_trace()
 model.save(fdir/"../saved_model")
 model_loaded_full = tf.keras.models.load_model(fdir/"../saved_model")
 

@@ -274,7 +274,6 @@ class BatchCSVLogger(tf.keras.callbacks.Callback):
         self.csv_file.close()
 
 
-import ipdb; ipdb.set_trace()
 callbacks = []
 outdir = fdir/"../test.out/test_callbacks"
 os.makedirs(outdir, exist_ok=True)

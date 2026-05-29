@@ -1,5 +1,13 @@
 Multimodal neural network for drug response prediction in PDX with histology images and gene expressions.
 
+## Paper
+
+Partin A, Brettin T, Zhu Y, Dolezal JM, Kochanny S, Pearson AT, Shukla M, Evrard YA, Doroshow JH, Stevens RL.
+**Data augmentation and multimodal learning for predicting drug response in patient-derived xenografts from gene expressions and histology images.**
+*Frontiers in Medicine* 10 (2023). [doi:10.3389/fmed.2023.1058919](https://www.frontiersin.org/journals/medicine/articles/10.3389/fmed.2023.1058919/full)
+
+See [`PAPER.md`](PAPER.md) for the exact pipeline (bash scripts, project subdirs, per-run hyperparameters) used to produce each row of the paper's results table. `rerun_paper_aggregation.py` reproduces every paper number from the on-disk runs.
+
 ## Build tidy dataframe of drug response samples for binary classification
 The dataframe will be stored in `data/processed`.
 ```
@@ -15,15 +23,15 @@ $ python scripts/update_tfrecords.py --random --take_glob_min
 ```
 
 ## Specify Hyperparameters (HPs)
-You can specify the HPs in ...
+Defaults live in `default_params/default_params_<feacombo>.json`, one file per modality combination (`tile_ge_dd1_dd2`, `ge_dd1_dd2`, `tile_dd1_dd2`, etc.). On first run for a given project, `src/trn_multimodal.py` copies the matching template into `projects/<prjname>/params_<feacombo>.json` and uses the per-project copy from then on. Edit the project copy to change HPs without affecting the template. The per-split `params.json` saved alongside each trained model is the source of truth for what was actually used in that run — see [`PAPER.md`](PAPER.md) for the exact values that produced the paper.
 
 
 ## Train baselines (analysis of data augmentation)
 ```
-$ ./ge_dd1_dd2_drop_aug.bash
+$ ./scripts/ge_dd1_dd2_drop_aug.bash
 ```
 ```
-$ ./ge_dd1_dd2_only_pairs.bash
+$ ./scripts/ge_dd1_dd2_only_pairs.bash
 ```
 
 ## Train multimodal deep learning model

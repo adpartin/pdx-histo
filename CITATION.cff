@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the following paper."
+title: "pdx-histo: multimodal drug-response prediction in PDX from gene expression and histology"
+type: software
+authors:
+  - family-names: Partin
+    given-names: Alexander
+repository-code: "https://github.com/adpartin/pdx-histo"
+license: Apache-2.0
+preferred-citation:
+  type: article
+  title: "Data augmentation and multimodal learning for predicting drug response in patient-derived xenografts from gene expressions and histology images"
+  doi: "10.3389/fmed.2023.1058919"
+  journal: "Frontiers in Medicine"
+  volume: 10
+  year: 2023
+  authors:
+    - family-names: Partin
+      given-names: Alexander
+    - family-names: Brettin
+      given-names: Thomas
+    - family-names: Zhu
+      given-names: Yitan
+    - family-names: Dolezal
+      given-names: James M.
+    - family-names: Kochanny
+      given-names: Sara
+    - family-names: Pearson
+      given-names: Alexander T.
+    - family-names: Shukla
+      given-names: Maulik
+    - family-names: Evrard
+      given-names: Yvonne A.
+    - family-names: Doroshow
+      given-names: James H.
+    - family-names: Stevens
+      given-names: Rick L.

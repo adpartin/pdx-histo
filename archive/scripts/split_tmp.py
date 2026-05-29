@@ -60,7 +60,6 @@ random_state = 1
 # cv = GroupKFold(n_splits=cv_folds)
 cv = StratifiedKFold(n_splits=cv_folds, shuffle=shuffle, random_state=random_state)
 
-import ipdb; ipdb.set_trace()
 tt = {}
 ee = {}
 for i, (tr_id, te_id) in enumerate(cv.split(X=df, y=df[target_name], groups=df[split_on])):
@@ -74,7 +73,6 @@ for i, (tr_id, te_id) in enumerate(cv.split(X=df, y=df[target_name], groups=df[s
     print(tr_df[target_name].value_counts())
     print(te_df[target_name].value_counts())
 
-import ipdb; ipdb.set_trace()
 print(ee[0])
 print(ee[1])
 print(ee[0] == ee[1])
@@ -90,7 +88,6 @@ random_state = 2
 # cv = GroupKFold(n_splits=cv_folds)
 cv = StratifiedKFold(n_splits=cv_folds, shuffle=shuffle, random_state=random_state)
 
-import ipdb; ipdb.set_trace()
 tt = {}
 ee = {}
 for i, (tr_id, te_id) in enumerate(cv.split(X=df, y=df[target_name], groups=df[split_on])):
@@ -102,7 +99,6 @@ for i, (tr_id, te_id) in enumerate(cv.split(X=df, y=df[target_name], groups=df[s
     te_df = df.loc[te_id]
     print(set(tr_df[split_on]).intersection(set(te_df[split_on])))
 
-import ipdb; ipdb.set_trace()
 print(ee[0])
 print(ee[1])
 print(ee[0] == ee[1])

@@ -78,8 +78,6 @@ parser.add_argument('--dataname',
 args, other_args = parser.parse_known_args()
 pprint(args)
 
-import ipdb; ipdb.set_trace()
-
 # Load dataframe (annotations)
 prjdir = cfg.MAIN_PRJDIR/args.prjname
 annotations_file = cfg.DATA_PROCESSED_DIR/args.dataname/cfg.SF_ANNOTATIONS_FILENAME
@@ -343,7 +341,6 @@ print(output_bias)
 # Scaling by total/2 helps keep the loss to a similar magnitude.
 # The sum of the weights of all examples stays the same.
 weighted = True
-import ipdb; ipdb.set_trace()
 if weighted:
     # y = data["Response"].values
     # weights = compute_class_weight("balanced", classes=np.unique(y), y=y)
