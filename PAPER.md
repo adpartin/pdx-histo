@@ -10,16 +10,55 @@ This document maps each row of the paper's results table to the bash script that
 
 ## Headline results (paper table) → artifacts
 
-| Paper model | MCC / AUPRC / AUROC | Bash entry point | Project subdir (100 splits) | Run dates | HPs |
-|---|---|---|---|---|---|
-| **MM-Net** (tile + GE + DD1 + DD2) | 0.3102 / 0.2974 / 0.7978 | `scripts/tile_ge_dd1_dd2.bash` | `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/split_<0..99>_tile_ge_dd1_dd2_2021-05-11_*` | **May 11, 2021** (paper sweep — verified by re-aggregation) | `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/split_*/params.json` (legacy HPs, not `params_tile_ge_dd1_dd2.json` at the project root) |
-| **UME-Net** (GE + DD1 + DD2; no tiles) | 0.2958 / 0.2996 / 0.8047 | `scripts/ge_dd1_dd2.bash` | `projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd/split_*_ge_dd1_dd2_2021-05-21_*` | May 21, 2021 | `projects/bin_rsp_drug_pairs_all_samples/params_ge_dd1_dd2.json` |
-| **UMH-Net** (tile + DD1 + DD2; no GE) | 0.2124 / 0.2303 / 0.7977 | `scripts/tile_dd1_dd2.bash` | `projects/bin_rsp_drug_pairs_all_samples/runs_tile_dd/split_*_tile_dd1_dd2_2021-07-16/25_*` | Jul 16–25, 2021 | `projects/bin_rsp_drug_pairs_all_samples/params_tile_dd1_dd2.json` |
-| **UME-Net_org** (no augmented drug-pairs) | 0.2391 / 0.2610 / 0.7766 | `scripts/ge_dd1_dd2_drop_aug.bash` (passes `--drop_drug_pair_aug`) | `projects/bin_rsp_drug_pairs_drop_aug/split_*_ge_dd1_dd2_drop_aug_*` | Sep 2021 onwards | `projects/bin_rsp_drug_pairs_drop_aug/params_ge_dd1_dd2.json` |
-| **UME-Net_pairs** (drug-pairs only, no single-drug) | 0.2039 / 0.2355 / 0.7423 | `scripts/ge_dd1_dd2_only_pairs.bash` (passes `--drop_single_drug`; `prjname=bin_rsp_drug_pairs_only_pairs`) | **MISSING** — `projects/bin_rsp_drug_pairs_only_pairs/` is not present on this workstation | N/A | template at `default_params/default_params_ge_dd1_dd2.json` |
-| **LGBM** (GE + DD1 + DD2 baseline) | 0.2594 / 0.2784 / 0.8065 | **Not trained in this repo.** LGBM predictions were produced externally and dropped in as a pre-computed results bundle at `data/PDX_Transfer_Learning_Classification/Results_MultiModal_Learning/1.0_True_False_100_31/cv_<0..99>/` (102 dirs + `AllData.pkl`). Each `cv_<i>/` contains `te_scores.csv`, `test_preds.csv`, plus a `Model/` checkpoint. The repo only **consumes** these scores in the aggregation notebook (see below). | N/A — externally trained | N/A — folder name encodes the upstream HPs (`1.0_True_False_100_31`) |
+Quick reference (full per-model details below):
 
-The earlier MM-Net sweep at `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/` (May 11, 2021) was **superseded** by the Oct 7–8 final sweep after commit `41e157c 2021-10-05 "random tiles with global min"`. Don't use it for paper numbers.
+| Paper model | MCC | AUPRC | AUROC |
+|---|---:|---:|---:|
+| MM-Net (tile + GE + DD1 + DD2) | **0.3102** | 0.2974 | 0.7978 |
+| UME-Net (GE + DD1 + DD2) | 0.2958 | **0.2996** | 0.8047 |
+| UMH-Net (tile + DD1 + DD2) | 0.2124 | 0.2303 | 0.7977 |
+| UME-Net_org (no augmented drug-pairs) | 0.2391 | 0.2610 | 0.7766 |
+| UME-Net_pairs (drug-pairs only) | 0.2039 | 0.2355 | 0.7423 |
+| LGBM (GE + DD1 + DD2) | 0.2594 | 0.2784 | **0.8065** |
+
+### MM-Net (tile + GE + DD1 + DD2)
+
+- **Bash:** `scripts/tile_ge_dd1_dd2.bash`
+- **Run dir (100 splits):** `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/split_<0..99>_tile_ge_dd1_dd2_2021-05-11_*`
+- **Date:** May 11, 2021 (paper sweep — verified by re-aggregation; the top-level Oct 7–8, 2021 sweep is *post-paper* exploration that performed worse, don't use it).
+- **HPs:** per-run `params.json` inside each split dir. Do **not** use `params_tile_ge_dd1_dd2.json` at the project root — that was overwritten by the Oct re-run.
+
+### UME-Net (GE + DD1 + DD2; no tiles)
+
+- **Bash:** `scripts/ge_dd1_dd2.bash`
+- **Run dir (100 splits):** `projects/bin_rsp_drug_pairs_all_samples/runs_ge_dd/split_*_ge_dd1_dd2_2021-05-21_*`
+- **Date:** May 21, 2021
+- **HPs:** `projects/bin_rsp_drug_pairs_all_samples/params_ge_dd1_dd2.json`
+
+### UMH-Net (tile + DD1 + DD2; no GE)
+
+- **Bash:** `scripts/tile_dd1_dd2.bash`
+- **Run dir (100 splits):** `projects/bin_rsp_drug_pairs_all_samples/runs_tile_dd/split_*_tile_dd1_dd2_2021-07-16/25_*`
+- **Date:** Jul 16–25, 2021
+- **HPs:** `projects/bin_rsp_drug_pairs_all_samples/params_tile_dd1_dd2.json`
+
+### UME-Net_org (no augmented drug-pairs)
+
+- **Bash:** `scripts/ge_dd1_dd2_drop_aug.bash` (passes `--drop_drug_pair_aug`)
+- **Run dir:** `projects/bin_rsp_drug_pairs_drop_aug/split_*_ge_dd1_dd2_drop_aug_*`
+- **Date:** Sep 2021 onwards
+- **HPs:** `projects/bin_rsp_drug_pairs_drop_aug/params_ge_dd1_dd2.json`
+
+### UME-Net_pairs (drug-pairs only, no single-drug)
+
+- **Bash:** `scripts/ge_dd1_dd2_only_pairs.bash` (passes `--drop_single_drug`; `prjname=bin_rsp_drug_pairs_only_pairs`)
+- **Run dir:** **MISSING** — `projects/bin_rsp_drug_pairs_only_pairs/` is not present on this workstation; runs were either deleted or stored elsewhere.
+- **HPs:** template at `default_params/default_params_ge_dd1_dd2.json`
+
+### LGBM (GE + DD1 + DD2 baseline)
+
+- **Not trained in this repo.** LGBM predictions were produced externally and dropped in as a pre-computed results bundle at `data/PDX_Transfer_Learning_Classification/Results_MultiModal_Learning/1.0_True_False_100_31/cv_<0..99>/` — 102 dirs + `AllData.pkl`. Each `cv_<i>/` contains `te_scores.csv`, `test_preds.csv`, plus a `Model/` checkpoint.
+- The repo only **consumes** these scores in the aggregation notebook (see "Aggregation" below). The folder name `1.0_True_False_100_31` encodes the upstream HPs.
 
 ---
 
@@ -93,10 +132,9 @@ The dataset shape `(6962, 4954)` reported in the paper is set by `build_tidy_dru
 
 | Concern | File / symbol |
 |---|---|
-| Argument parsing, training/eval orchestration | `src/trn_multimodal.py:parse_args`, `src/trn_multimodal.py:run` (CAVEAT: current `trn_multimodal.py` is post-paper; the May 2021 paper run predates the `Multimodal` class. Use `git log -- src/trn_multimodal.py` and check the state at commit `45385a0 2021-05-27` or earlier to see the paper-era trainer.) |
+| Argument parsing, training/eval orchestration | `src/trn_multimodal.py:parse_args`, `src/trn_multimodal.py:run` |
 | Four-tower architecture builder | `src/models.py:build_model_rsp` |
-| ~~Custom mid-batch training loop & early stop~~ | `src/models.py:Multimodal.train_step`, `Multimodal.fit` — **POST-PAPER**, added in commit `99865dd 2021-08-06`. Paper used vanilla Keras `model.fit`. |
-| Weighted binary cross-entropy from logits | `src/models.py:MySparseBCE_From_Logits` (verify when this was added vs paper sweep date) |
+| Weighted binary cross-entropy from logits | `src/models.py:MySparseBCE_From_Logits` |
 | TFRecord parsing | `src/sf_utils.py:parse_tfrec_fn_rsp`, `src/tfrecords.py:FEA_SPEC_RSP_DRUG_PAIR` |
 | tf.data pipeline assembly | `src/sf_utils.py:create_tf_data`, `create_manifest`, `calc_class_weights` |
 | Image preprocessing (per CNN backbone) | `src/sf_utils.py:preprocess_img_input` |
@@ -105,7 +143,9 @@ The dataset shape `(6962, 4954)` reported in the paper is set by `build_tidy_dru
 | Output directory naming convention `split_<id>_<feacombo>_<ts>/` | `src/utils/utils.py:create_outdir_2` |
 | Path/constant single source of truth | `src/config.py:cfg` |
 
-Everything else under `src/` (trn_baseline, trn_ctype_cls*, trn_tape, batch_*, eda, post_processing, cv_splits, proj/, old/) is **not** part of the MM-Net paper pipeline — see `AUDIT.md` for details.
+**Caveat on the current `trn_multimodal.py`:** the file in `HEAD` is post-paper — the May 2021 paper run predates the `Multimodal` class (added 2021-08-06, commit `99865dd`) and used vanilla Keras `model.fit`. To see the paper-era trainer, use `git log -- src/trn_multimodal.py` and check the state at commit `45385a0 2021-05-27` or earlier.
+
+`src/post_processing.py` and `src/eda.py` are also paper-load-bearing (imported from `nbs/post-processing.ipynb` — the aggregation notebook). Everything else now lives under `archive/`.
 
 ---
 
@@ -134,7 +174,7 @@ The aggregation step that produces the paper's MCC/AUPRC/AUROC table from these 
 - **Cells 50–53** produce per-split ROC-curve plots and calibration curves.
 - **Cells 71–77** are the secondary aggregation used for paper figures (per-sample / per-tile / per-group predictions).
 
-The aggregation library is `src/post_processing.py`, providing `agg_scores_from_splits`, `scores_boxplot`, `scores_barplot`, `t_test`, `t_test_all_metrics`. It is imported only from this notebook — that's why `grep` over `*.py` and `*.bash` missed it. Mark `src/post_processing.py` as paper-relevant (do not delete; see `AUDIT.md` correction).
+The aggregation library is `src/post_processing.py`, providing `agg_scores_from_splits`, `scores_boxplot`, `scores_barplot`, `t_test`, `t_test_all_metrics`. It is imported only from this notebook — that's why `grep` over `*.py` and `*.bash` would miss it. Treat `src/post_processing.py` as paper-load-bearing.
 
 `nbs/04-trn_nn.ipynb` is **not** related — it's an earlier exploratory notebook using a different tf.data + NN setup and references `../apps/` (gitignored, predates the current pipeline). No LGBM in it.
 

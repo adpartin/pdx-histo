@@ -94,15 +94,20 @@ Each training run creates `projects/<prjname>/split_<split_id>_<feacombo>[_drop_
 - `build_model_rsp(...)` (also exposed as a `Multimodal` method) assembles four optional towers: tile (frozen ImageNet backbone → Dense → BN), ge (Dense → BN), dd1 (Dense → BN), dd2 (Dense → BN). `Concatenate` → dense top → 1-logit head. The base image backbone is always `trainable=False` and runs with `training=False`.
 - `MySparseBCE_From_Logits` implements weighted binary cross-entropy from logits for class imbalance.
 
-**Splits:** `--split_on Group` (treatment group) is the hard-split unit; `--split_id` is an integer 0–99 indexing precomputed splits. `src/cv_splits.py` and `src/datasplit/splitter.py` generate them.
+**Splits:** `--split_on Group` (treatment group) is the hard-split unit; `--split_id` is an integer 0–99 indexing precomputed splits stored as CSVs under `data/processed/<dataname>/`. The splitter code that generated them was archived under `archive/src/datasplit/`; the splits themselves are checked in as artifacts and the live pipeline only consumes them.
 
-**Training entry points (mostly parallel evolutions, not generalizations):**
-- `src/trn_multimodal.py` — primary; the only one all the active bash scripts call.
-- `src/trn_baseline.py` — non-TFRecord baseline using only ge + dd dataframes.
-- `src/trn_ctype_cls.py` / `trn_ctype_cls_gen.py` — tile → cancer-type classifier.
-- `src/trn_tape.py` — TAPE variant.
+**Training entry points:** `src/trn_multimodal.py` is the only one. Earlier parallel variants (`trn_baseline`, `trn_ctype_cls*`, `trn_tape`) were not paper-load-bearing and live under `archive/src/`.
 
-These share helpers but duplicate the argparse/setup boilerplate. When changing CLI flags, check whether other entry points need the same change.
+## Paper-load-bearing files (don't archive in future cleanup passes)
+
+These look unused by `grep` of `.py`/`.bash` files but are consumed elsewhere — don't reflag:
+
+- `src/post_processing.py`, `src/eda.py` — imported by `nbs/post-processing.ipynb` (paper aggregation).
+- `scripts/tile_dd1_dd2.bash` — paper UMH-Net baseline.
+- `scripts/ge_dd1_dd2_drop_aug.bash`, `scripts/ge_dd1_dd2_only_pairs.bash` — paper ablations (UME-Net_org, UME-Net_pairs).
+- `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/`, `runs_ge_dd/`, `runs_tile_dd/` — paper sweeps consumed by `rerun_paper_aggregation.py` (top-level).
+
+See `PAPER.md` for the full paper → code mapping.
 
 ## Gotchas
 
@@ -110,5 +115,5 @@ These share helpers but duplicate the argparse/setup boilerplate. When changing 
 - `cfg.BAD_SLIDES` (poor quality / stain) is filtered out by the loaders — don't reintroduce them.
 - Seeds are set in every entry point (`np.random.seed(cfg.seed); tf.random.set_seed(cfg.seed)`) but exact TF reproducibility is not guaranteed.
 - No test runner is configured (`pytest` is not installed and there are no `def test_*` functions in the live tree). Earlier scratch reproducibility scripts have been moved to `archive/tests/`.
-- `tox.ini` only configures flake8/pycodestyle ignores (`E402,E501,E712,W503`); there is no `tox` test environment.
+- `setup.cfg` only configures flake8/pycodestyle ignores (`E402,E501,E712,W503`); no real test/lint runner is wired up.
 - `data/`, `projects/`, `apps/`, and `nbs/histolab` are gitignored. Anything new under those paths won't be tracked.
