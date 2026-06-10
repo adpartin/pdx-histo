@@ -49,7 +49,6 @@ class TidyData():
         self.meta_cols = [c for c in self.data.columns if c not in fea_cols]
         # self.meta = self.data[self.meta_cols]
 
-        # import ipdb; ipdb.set_trace()
         # Train data
         tr_data = self.split(df=self.data, ids=split_ids["tr_id"])
         tr_ge  = tr_data[self.ge_cols]
@@ -215,7 +214,7 @@ def split_data_and_extract_fea(data, ids, split_on,
     else:
         df = data.iloc[ids, :]
 
-    # df = df.sort_values(split_on, ascending=True)  # TODO: this line makes the model worse! why??
+    # NOTE: do not sort by split_on here — row order changes downstream results; left unsorted intentionally.
     df = df.reset_index(drop=True)
 
     # Extract features

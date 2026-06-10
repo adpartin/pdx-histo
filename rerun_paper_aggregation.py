@@ -1,11 +1,16 @@
 """
-Re-execute the aggregation of nbs/post-processing.ipynb cells 41/46/48 with
-the Oct 2021 MM-Net sweep path (instead of the May 2021 path that's saved in
-the notebook). Compares per-model mean smp-level metrics across 100 splits
-against the published table.
+Reproduce the paper's results table by re-running the aggregation that
+nbs/post-processing.ipynb performs in cells 41/46/48 — the canonical
+configuration is the May 2021 MM-Net sweep at runs_tile_ge_dd/ aggregated at
+Group level (`mm-NN_may` rows here match the published values exactly).
+For comparison the script also reports the post-paper Oct 2021 sweep
+(top-level split_* dirs) and smp-level variants; those are not the paper.
 
-Run with the paper-era env:
-    /homes/apartin/miniconda3/envs/pdx_lamina/bin/python rerun_paper_aggregation.py
+Requires pandas, numpy, scipy and an env that can import this repo's src/
+package.
+
+Usage:
+    python rerun_paper_aggregation.py
 """
 import sys
 from pathlib import Path

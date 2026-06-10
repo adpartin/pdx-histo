@@ -14,8 +14,6 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
-# import pdb; pdb.set_trace()
-# import ipdb; ipdb.set_trace()
 
 fdir = Path(__file__).resolve().parent
 sys.path.append(str(fdir/".."))

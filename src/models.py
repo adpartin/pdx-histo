@@ -200,14 +200,12 @@ class Multimodal():
         self.set_optimizer(optimizer_name, learning_rate)
 
         # Iter over epochs
-        # import ipdb; ipdb.set_trace()
         for epoch in range(self.epochs):
             t0 = time()
             epoch += 1  # inc epoch counter
             wait = 0
 
             # Iter over steps (batches)
-            # import ipdb; ipdb.set_trace()
             for step, (xtr_batch, ytr_batch) in enumerate(train_data):
                 step += 1  # inc step counter
                 if step > steps_per_epoch:
@@ -226,14 +224,12 @@ class Multimodal():
                         self.best = current
                         wait = 0
                         self.best_weights = self.model.get_weights()
-                        # import ipdb; ipdb.set_trace()
                         # Save model
                     else:
                         wait += 1
 
                     # Don't terminate on the first epoch
                     if (wait >= self.batch_patience) and (epoch > self.min_epochs):
-                        # import ipdb; ipdb.set_trace()
                         self.stopped_epoch = epoch
                         self.stopped_batch = step
                         self.print_fn("\n{}".format(red(f"Early stop (terminated training at epoch: {epoch}, step: {step}).")))
@@ -261,7 +257,6 @@ class Multimodal():
             self.trn_prc_met.reset_states()
 
             # Run a validation loop at the end of each epoch
-            # import ipdb; ipdb.set_trace()
             evals = self.evaluate()
 
             tm = (time() - t0)/60
@@ -599,7 +594,6 @@ def calc_tile_preds(tf_data_with_meta, model, outdir, p=0.5, verbose=True):
     meta_agg = {k: None for k in meta_keys}
     y_true, y_pred_prob, y_pred_label = [], [], []
 
-    # import ipdb; ipdb.set_trace()
     for i, batch in enumerate(tf_data_with_meta):
         if (i+1) % 50 == 0:
             print(f"\rbatch {i+1}", end="")
@@ -794,7 +788,6 @@ def calc_smp_preds(xdata, meta, model, outdir, name, p=0.5, print_fn=print):
     # preds = np.around(preds, 3)
     preds = np.squeeze(preds)
 
-    # import ipdb; ipdb.set_trace()
     if np.ndim(preds) > 1:
         # cross-entropy
         y_pred_label = np.argmax(preds, axis=1)

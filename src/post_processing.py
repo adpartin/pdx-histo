@@ -220,7 +220,6 @@ def t_test(scores, splits: Optional[List[int]]=None, met: str="PRC-AUC", agg_by:
     import itertools
     models_combs = itertools.combinations(models, r=2)
 
-    # import ipdb; ipdb.set_trace()
     dd = {}
     for model_pair in models_combs:
         v1 = m_vecs[model_pair[0]]
@@ -251,7 +250,6 @@ def t_test_all_metrics(scores, splits: Optional[List[int]]=None, agg_by: str="sm
 
 
 def main(args):
-    # import ipdb; ipdb.set_trace()
     outdir = fdir/"../projects/bin_rsp_drug_pairs_all_samples"
 
     # Logger

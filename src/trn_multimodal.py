@@ -145,7 +145,6 @@ def run(args):
 
 
     # Create project dir (if doesn't exist)
-    # import ipdb; ipdb.set_trace()
     prjdir = cfg.MAIN_PRJDIR/args.prjname
     os.makedirs(prjdir, exist_ok=True)
 
@@ -208,7 +207,6 @@ def run(args):
 
 
     # Scalers for each feature set
-    # import ipdb; ipdb.set_trace()
     ge_scaler, dd1_scaler, dd2_scaler = None, None, None
 
     ge_cols  = [c for c in data.columns if c.startswith("ge_")]
@@ -231,7 +229,6 @@ def run(args):
     # --------------
     # Yitan's splits
     # --------------
-    # import ipdb; ipdb.set_trace()
     if args.use_dd1 is False and args.use_dd2 is False:
         splitdir = cfg.DATADIR/"PDX_Transfer_Learning_Classification/Processed_Data/Data_For_MultiModal_Learning/Data_Partition_Drug_Specific"
         splitdir = splitdir/params.drug_specific
@@ -271,36 +268,6 @@ def run(args):
         tr_id_tmp = df[index_col_name].values
         tr_id = sorted(set(tr_id_tmp).intersection(set(tr_id)))
 
-    # --------------
-    # TidyData
-    # --------------
-    # TODO: finish and test this class
-    # td = TidyData(data,
-    #               ge_prfx="ge_",
-    #               dd1_prfx="dd1_",
-    #               dd2_prfx="dd2_",
-    #               index_col_name="index",
-    #               split_ids={"tr_id": tr_id, "vl_id": vl_id, "te_id": te_id}
-    # )
-    # ge_scaler = td.ge_scaler
-    # dd1_scaler = td.dd1_scaler
-    # dd2_scaler = td.dd2_scaler
-
-    # tr_meta = td.tr_meta
-    # vl_meta = td.vl_meta
-    # te_meta = td.te_meta
-    # tr_meta.to_csv(outdir/"tr_meta.csv", index=False)
-    # vl_meta.to_csv(outdir/"vl_meta.csv", index=False)
-    # te_meta.to_csv(outdir/"te_meta.csv", index=False)
-
-    # # Variables (dict/dataframes/arrays) that are passed as features to the NN
-    # xtr = {"ge_data": td.tr_ge.values, "dd1_data": td.tr_dd1.values, "dd2_data": td.tr_dd2.values}
-    # xvl = {"ge_data": td.vl_ge.values, "dd1_data": td.vl_dd1.values, "dd2_data": td.vl_dd2.values}
-    # xte = {"ge_data": td.te_ge.values, "dd1_data": td.te_dd1.values, "dd2_data": td.te_dd2.values}
-
-    # --------------
-    # w/o TidyData
-    # --------------
     kwargs = {"ge_cols": ge_cols,
               "dd1_cols": dd1_cols,
               "dd2_cols": dd2_cols,
@@ -384,7 +351,6 @@ def run(args):
     # -------------------------------
     # Class weight
     # -------------------------------
-    # import ipdb; ipdb.set_trace()
     tile_cnts = pd.read_csv(tfr_dir/"tile_counts_per_slide.csv")
     tile_cnts.insert(loc=0, column="tfr_abs_fname", value=tile_cnts["tfr_fname"].map(lambda s: str(tfr_dir/s)))
     cat = tile_cnts[tile_cnts["tfr_abs_fname"].isin(train_tfr_files)]
@@ -405,13 +371,11 @@ def run(args):
     # --------------------------
     tf.keras.backend.clear_session()
 
-    # import ipdb; ipdb.set_trace()
     if args.use_tile:
 
         # -------------------------------
         # Parsing funcs
         # -------------------------------
-        # import ipdb; ipdb.set_trace()
         if args.target[0] == "Response":
             # Response
             parse_fn = parse_tfrec_fn_rsp
@@ -446,7 +410,6 @@ def run(args):
         # ----------------------------------------
         # Number of tiles/examples in each dataset
         # ----------------------------------------
-        # import ipdb; ipdb.set_trace()
         tr_tiles = tile_cnts[tile_cnts[args.id_name].isin(tr_smp_names)]["n_tiles"].sum()
         vl_tiles = tile_cnts[tile_cnts[args.id_name].isin(vl_smp_names)]["n_tiles"].sum()
         te_tiles = tile_cnts[tile_cnts[args.id_name].isin(te_smp_names)]["n_tiles"].sum()
@@ -462,7 +425,6 @@ def run(args):
         print_fn("\nCreating TF datasets.")
 
         # Training
-        # import ipdb; ipdb.set_trace()
         train_data = create_tf_data(
             batch_size=params.batch_size,
             deterministic=False,
@@ -482,7 +444,6 @@ def run(args):
         bb = next(train_data.__iter__())
 
         # Infer dims of features from the data
-        # import ipdb; ipdb.set_trace()
         if args.use_ge:
             ge_shape = bb[0]["ge_data"].numpy().shape[1:]
         else:
@@ -518,7 +479,6 @@ def run(args):
             "shuffle_size": None,
         }
 
-        # import ipdb; ipdb.set_trace()
         create_tf_data_eval_kwargs.update({"tfrecords": val_tfr_files, "include_meta": False})
         val_data = create_tf_data(
             **create_tf_data_eval_kwargs,
@@ -529,7 +489,6 @@ def run(args):
     # ----------------------
     # Prep for training
     # ----------------------
-    # import ipdb; ipdb.set_trace()
 
     # Loss and target
     if args.use_tile:
@@ -574,7 +533,6 @@ def run(args):
     # -------------
     model = None
 
-    # import ipdb; ipdb.set_trace()
     if args.train is True:
 
         # ----------------------
@@ -867,7 +825,6 @@ def run(args):
         # ----------------------
         # Output bias
         # ----------------------
-        # import ipdb; ipdb.set_trace()
         print_fn("\nCompute the bias of the NN output.")
 
         # Calc output bias
@@ -888,7 +845,6 @@ def run(args):
         # ----------------------
         # Define model
         # ----------------------
-        # import ipdb; ipdb.set_trace()
         # Initial model
         # TODO: Problem! When we load a saved model that had some params set
         # to trainable=False, all params appear as trainable. Thus, we always
@@ -901,7 +857,6 @@ def run(args):
             print_fn("Loading initial model (from the global dir).")
             model = tf.keras.models.load_model(initial_model_path)
         else:
-            # import ipdb; ipdb.set_trace()
             # pretrain = fdir/"../projects/bin_ctype_drug_pairs_all_samples/Xception_finetuned/best_finetuned_img_base_weights"
             pretrain = "imagenet"
             build_model_kwargs = {"base_image_model": params.base_image_model,
@@ -930,11 +885,9 @@ def run(args):
             # print_fn("Saving initial model (to the global dir).")
             # model.save(initial_model_path)
 
-        # import ipdb; ipdb.set_trace()
         print_fn("")
         model.summary(print_fn=print_fn)
 
-        # import ipdb; ipdb.set_trace()
         # steps = 40
         # res = model.evaluate(train_data, steps=tr_steps, verbose=1)
         # print("Loss: {:0.4f}".format(res[0]))
@@ -962,7 +915,6 @@ def run(args):
         # aa = model.evaluate(val_data, steps=vl_steps, verbose=1)
         # print_fn("Base model val_loss: {}".format(aa[0]))
 
-        # import ipdb; ipdb.set_trace()
         print_fn("\n{}".format(yellow("Train")))
         timer = Timer()
         if args.use_tile is True:
@@ -983,7 +935,6 @@ def run(args):
             # ------------------------------------------------------------
             # Custom model
             # --------------
-            # import ipdb; ipdb.set_trace()
             del model
             mm = Multimodal()
             mm.build_model_rsp(**build_model_kwargs)
@@ -1002,7 +953,6 @@ def run(args):
                      verbose=fit_verbose
             )
             model = mm.model
-            # import ipdb; ipdb.set_trace()
             # ------------------------------------------------------------
 
         else:
@@ -1034,7 +984,6 @@ def run(args):
             ckpt_name = "final_model.ckpt"
             model = load_best_model(outdir, ckpt_name=ckpt_name, verbose=True, print_fn=print_fn)
 
-        # import ipdb; ipdb.set_trace()
         if args.use_tile:
 
             # Test set
@@ -1075,7 +1024,6 @@ def run(args):
             timer.display_timer(print_fn)
 
         else:
-            # import ipdb; ipdb.set_trace()
             print_fn("\n{}".format(bold("Keras NN.")))
             print_fn("\n{}".format(red("Test:")))
             calc_smp_preds(xdata=xte, meta=te_meta, model=model, outdir=outdir, name="test_keras", print_fn=print_fn)

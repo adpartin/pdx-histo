@@ -121,7 +121,6 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
             (primarily used for debugging)
     """
     # Create path for the updated tfrecords
-    # import ipdb; ipdb.set_trace()
     # if single_drug:
     #     outpath = cfg.SF_TFR_DIR_RSP/LABEL
     # else:
@@ -157,7 +156,6 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     mm = {}  # dict to store all metadata
     id_name = "smp"  # col name that contains the IDs for the samples 
 
-    # import ipdb; ipdb.set_trace()
 
     # Iterate over rows and collect data into dict
     for i, row_data in data.iterrows():
@@ -193,7 +191,6 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     c_slides = set(slides).intersection(set(all_slides))
     print(f"A total of {len(c_slides)} slides that are relevant for our drug response samples.")
 
-    # import ipdb; ipdb.set_trace()
     tile_cnts = []
 
     # Obtain tile count per slide
@@ -344,7 +341,6 @@ def update_tfrecords_for_drug_rsp(n_samples: int=-1,
     # ------------------
     # Inspect a TFRecord
     # ------------------
-    # import ipdb; ipdb.set_trace()
 
     smp = samples[0]
     tfr_path = str(outpath/(smp + ".tfrecords"))
@@ -437,7 +433,6 @@ def update_tfrecords_with_rna(n_samples: int=-1) -> None:
         for c in meta_cols:
             sample_dct[c] = str(row_data[c])
 
-        # import ipdb; ipdb.set_trace()
 
         # Features cols
         #ge_data = list(row_data[ge_cols].values.astype(cfg.GE_DTYPE))
@@ -515,7 +510,6 @@ def update_tfrecords_with_rna(n_samples: int=-1) -> None:
     # Inspect a TFRecord
     # ------------------
 
-    # import ipdb; ipdb.set_trace()
 
     smp = list(c_slides)[0]
     tfr_path = str(outpath/(str(smp) + '.tfrecords'))

@@ -110,7 +110,6 @@ def resp_dist_dict(data, agg_by: str="Samples", var: str="ctype", target: str="R
 
 
 def main(args):
-    # import ipdb; ipdb.set_trace()
 
     # Load dataframe (annotations)
     dataname = "tidy_drug_pairs_all_samples"

@@ -6,7 +6,7 @@ Partin A, Brettin T, Zhu Y, Dolezal JM, Kochanny S, Pearson AT, Shukla M, Evrard
 **Data augmentation and multimodal learning for predicting drug response in patient-derived xenografts from gene expressions and histology images.**
 *Frontiers in Medicine* 10 (2023). [doi:10.3389/fmed.2023.1058919](https://www.frontiersin.org/journals/medicine/articles/10.3389/fmed.2023.1058919/full)
 
-See [`PAPER.md`](PAPER.md) for the exact pipeline (bash scripts, project subdirs, per-run hyperparameters) used to produce each row of the paper's results table. `rerun_paper_aggregation.py` reproduces every paper number from the on-disk runs.
+See [`PAPER.md`](PAPER.md) for the exact pipeline (bash scripts, project subdirs, per-run hyperparameters) used to produce each row of the paper's results table. `rerun_paper_aggregation.py` reproduces the MM-Net, UME-Net, UMH-Net, and LGBM headline rows from the on-disk runs; the two ablation rows' runs aren't on this workstation — see `PAPER.md`.
 
 ## Build tidy dataframe of drug response samples for binary classification
 The dataframe will be stored in `data/processed`.
@@ -39,4 +39,4 @@ Specify the parameters in the bash script as necessary.
 ```
 ./scripts/tile_ge_dd1_dd2.bash
 ```
-The results will be bumped into `projects/bin_rsp_drug_pairs_all_samples`.
+The results will be written to `projects/bin_rsp_drug_pairs_all_samples`.

@@ -213,7 +213,7 @@ The minimum reading list for the paper artifact:
 1. **The pipeline** — `scripts/build_tidy_drug_pairs_all_samples.py` → `scripts/update_tfrecords.py` → `scripts/tile_ge_dd1_dd2.bash` → `src/trn_multimodal.py` → `src/models.py:build_model_rsp`.
 2. **The HPs** — `projects/bin_rsp_drug_pairs_all_samples/params_tile_ge_dd1_dd2.json` (not the `default_params/` template).
 3. **The runs** — `projects/bin_rsp_drug_pairs_all_samples/runs_tile_ge_dd/split_<0..99>_tile_ge_dd1_dd2_2021-05-11_*/` (verified by re-aggregation). The top-level `split_*_2021-10-*` directories are a post-paper re-run that performed worse and were not used.
-4. **The aggregation** — `nbs/post-processing.ipynb` cells 41/46/48, which call `src/post_processing.py:agg_scores_from_splits` over per-split `test_scores.csv` files. Use **Group-level mean** across 100 splits to match the paper table. Run `rerun_paper_aggregation.py` (untracked, repo root) to reproduce.
+4. **The aggregation** — `nbs/post-processing.ipynb` cells 41/46/48, which call `src/post_processing.py:agg_scores_from_splits` over per-split `test_scores.csv` files. Use **Group-level mean** across 100 splits to match the paper table. Run `rerun_paper_aggregation.py` (repo root) to reproduce.
 5. **The LGBM baseline** — externally produced, sitting in `data/PDX_Transfer_Learning_Classification/Results_MultiModal_Learning/1.0_True_False_100_31/cv_<0..99>/te_scores.csv`. Not trained from this repo.
 
 Everything else is either supporting infrastructure (`load_data.py`, `sf_utils.py`, `tfrecords.py`, `datasets/tidy.py`, `utils/utils.py`, `config.py`) or non-paper code that should not factor into a code-review of the paper.

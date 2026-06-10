@@ -68,7 +68,6 @@ def get_model_from_Sample(Sample):
 
 def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     """ Load drug response data. """
-    # import ipdb; ipdb.set_trace()
     rsp = pd.read_csv(rsp_dpath, sep='\t')
     rsp = rsp.reset_index()
     rsp = drop_dups(rsp)
@@ -129,7 +128,6 @@ def load_rsp(rsp_dpath=cfg.RSP_DPATH, single_drug=True, verbose=False):
     # rsp = rsp.sort_values(["grp", "aug", "Sample"]).reset_index(drop=True)
     # ------------------------------------
 
-    # import ipdb; ipdb.set_trace()
 
     # Single drug or drug pairs
     if single_drug:
