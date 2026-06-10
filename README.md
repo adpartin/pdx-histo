@@ -1,5 +1,9 @@
 Multimodal neural network for drug response prediction in PDX with histology images and gene expressions.
 
+![PDX expansion and profiling workflow](docs/fig1_pdx_workflow.webp)
+
+> **Figure 1** from Partin et al. (2023): expansion of tumor tissue from the source specimen (ORIGINATOR) to mice across multiple passages. Mice originated from the same specimen are divided into a control group and multiple treatment groups. Tumors from certain mice were histologically and molecularly profiled, resulting in whole-slide images and omics profiles. Reproduced under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ## Paper
 
 Partin A, Brettin T, Zhu Y, Dolezal JM, Kochanny S, Pearson AT, Shukla M, Evrard YA, Doroshow JH, Stevens RL.
