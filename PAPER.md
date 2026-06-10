@@ -60,6 +60,10 @@ Quick reference (full per-model details below):
 - **Not trained in this repo.** LGBM predictions were produced externally and dropped in as a pre-computed results bundle at `data/PDX_Transfer_Learning_Classification/Results_MultiModal_Learning/1.0_True_False_100_31/cv_<0..99>/` — 102 dirs + `AllData.pkl`. Each `cv_<i>/` contains `te_scores.csv`, `test_preds.csv`, plus a `Model/` checkpoint.
 - The repo only **consumes** these scores in the aggregation notebook (see "Aggregation" below). The folder name `1.0_True_False_100_31` encodes the upstream HPs.
 
+### Reproduction status — "matches the paper" and "reproduced from runs" are different claims
+
+All six rows are transcribed verbatim from the paper's Table 2. Four of them also reproduce to four decimals when the aggregation is re-run over the on-disk per-split outputs via `rerun_paper_aggregation.py`: **MM-Net, UME-Net, UMH-Net, LGBM**. The other two — **UME-Net_org** (MCC 0.2391) and **UME-Net_pairs** (MCC 0.2039) — are correctly transcribed published values that are *not* re-derivable on this workstation, because their run outputs are missing: `bin_rsp_drug_pairs_drop_aug/` holds only `split_0`, and `bin_rsp_drug_pairs_only_pairs/` is absent (see Known gaps below). Their numbers aren't in doubt — the per-split artifacts just aren't here to recompute them.
+
 ---
 
 ## Confirmed paper run configuration
